@@ -10,6 +10,13 @@ const THUMBNAIL_WIDTH = 440
 const THUMBNAIL_HEIGHT = 320
 const THUMBNAIL_CONCURRENCY = 4
 
+// Cache files are named after the image's path and mtime, so edited, moved or
+// deleted images leave orphans. Files are touched when used (at most daily)
+// and pruned once unused for PRUNE_AFTER_DAYS.
+const PRUNE_AFTER_DAYS = 90
+const TOUCH_AFTER_SECONDS = 24 * 60 * 60
+const CACHE_FILE = /^[0-9a-f]{32}\.jpg$/
+
 const THUMBNAIL_CACHE = GLib.build_filenamev([
   GLib.get_user_cache_dir(),
   APP_NAME,
@@ -37,6 +44,35 @@ GLib.mkdir_with_parents(THUMBNAIL_CACHE, 0o755)
 const textures = new Map<string, Gdk.Texture>()
 const loads = new Map<string, Promise<Gdk.Texture>>()
 const imageInfo = new Map<string, { filename: string; resolution: string }>()
+const touched = new Set<string>()
+
+function nowSeconds() {
+  return Math.floor(GLib.get_real_time() / 1_000_000)
+}
+
+// Marks a cache file as used so pruning keeps it.
+function touchIfStale(path: string) {
+  if (touched.has(path)) return
+  touched.add(path)
+  try {
+    const file = Gio.File.new_for_path(path)
+    const info = file.query_info(
+      "time::modified",
+      Gio.FileQueryInfoFlags.NONE,
+      null,
+    )
+    const modified = info.get_modification_date_time()?.to_unix() ?? 0
+    if (nowSeconds() - modified < TOUCH_AFTER_SECONDS) return
+    file.set_attribute_uint64(
+      "time::modified",
+      nowSeconds(),
+      Gio.FileQueryInfoFlags.NONE,
+      null,
+    )
+  } catch (error) {
+    console.error(`Could not touch cached thumbnail ${path}:`, error)
+  }
+}
 
 let activeLoads = 0
 const queue: Array<() => void> = []
@@ -119,7 +155,11 @@ export function loadThumbnail(file: string, mtime: number) {
 
     if (GLib.file_test(path, GLib.FileTest.EXISTS)) {
       try {
-        return Gdk.Texture.new_for_pixbuf(await decodeImage(path, false))
+        const texture = Gdk.Texture.new_for_pixbuf(
+          await decodeImage(path, false),
+        )
+        touchIfStale(path)
+        return texture
       } catch (error) {
         console.error(`Could not load cached thumbnail ${file}:`, error)
       }
@@ -159,4 +199,67 @@ export function getImageInfo(file: string) {
 export function evictThumbnail(file: string) {
   textures.delete(file)
   imageInfo.delete(file)
+}
+
+// Deletes cache files unused for PRUNE_AFTER_DAYS; resolves to how many.
+export async function pruneThumbnailCache() {
+  const cutoff = nowSeconds() - PRUNE_AFTER_DAYS * 24 * 60 * 60
+  const directory = Gio.File.new_for_path(THUMBNAIL_CACHE)
+  let pruned = 0
+  try {
+    const enumerator = await new Promise<Gio.FileEnumerator>(
+      (resolve, reject) =>
+        directory.enumerate_children_async(
+          "standard::name,time::modified",
+          Gio.FileQueryInfoFlags.NONE,
+          GLib.PRIORITY_LOW,
+          null,
+          (_source, result) => {
+            try {
+              resolve(directory.enumerate_children_finish(result))
+            } catch (error) {
+              reject(error)
+            }
+          },
+        ),
+    )
+    let infos: Gio.FileInfo[]
+    while (
+      (infos = await new Promise<Gio.FileInfo[]>((resolve, reject) =>
+        enumerator.next_files_async(
+          200,
+          GLib.PRIORITY_LOW,
+          null,
+          (_source, result) => {
+            try {
+              resolve(enumerator.next_files_finish(result))
+            } catch (error) {
+              reject(error)
+            }
+          },
+        ),
+      )).length > 0
+    ) {
+      for (const info of infos) {
+        const name = info.get_name()
+        const modified = info.get_modification_date_time()?.to_unix() ?? 0
+        if (!CACHE_FILE.test(name) || modified >= cutoff) continue
+        try {
+          directory.get_child(name).delete(null)
+          pruned++
+        } catch (error) {
+          // Another Vitrine process may be pruning at the same time.
+          if (
+            !(error instanceof GLib.Error) ||
+            !error.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.NOT_FOUND)
+          )
+            console.error(`Could not prune ${name}:`, error)
+        }
+      }
+    }
+    enumerator.close(null)
+  } catch (error) {
+    console.error("Could not prune the thumbnail cache:", error)
+  }
+  return pruned
 }

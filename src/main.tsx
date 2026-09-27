@@ -6,8 +6,11 @@ import Gtk from "gi://Gtk?version=4.0"
 import { createRoot } from "gnim"
 import { programArgs, programInvocationName } from "system"
 import css from "./style.css"
+import { pruneThumbnailCache } from "./Thumbnails"
 import { APP_ID, APP_NAME, isDirectory } from "./util"
 import ViewerWindow from "./Window"
+
+const PRUNE_DELAY_SECONDS = 5
 
 GLib.set_prgname(APP_NAME)
 GLib.set_application_name(APP_NAME)
@@ -43,6 +46,14 @@ app.connect("startup", () => {
     Gtk.STYLE_PROVIDER_PRIORITY_USER,
   )
   Gtk.IconTheme.get_for_display(display).add_search_path(ICONS_DIR)
+
+  // After the first thumbnails, at low priority.
+  GLib.timeout_add_seconds(GLib.PRIORITY_LOW, PRUNE_DELAY_SECONDS, () => {
+    pruneThumbnailCache().then((pruned) => {
+      if (pruned > 0) console.log(`Pruned ${pruned} unused thumbnails`)
+    })
+    return GLib.SOURCE_REMOVE
+  })
 })
 
 // Each window gets its own gnim scope, disposed when the window goes away.
