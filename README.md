@@ -8,9 +8,10 @@ your wallpaper with a command of your choice.
 ## Features
 
 - **Thumbnail grid** with an on-disk thumbnail cache and lazy,
-  concurrency-limited loading. Folders are scanned in the background (4 folders
-  at a time), so the window opens immediately and the grid fills in as images
-  are found, even for large folders over NFS.
+  concurrency-limited loading; at most 300 decoded thumbnails stay in memory,
+  so memory stays bounded in huge folders. Folders are scanned in the
+  background (4 folders at a time), so the window opens immediately and the
+  grid fills in as images are found, even for large folders over NFS.
 - **Top bar**: a folder entry (`~` works) with a history of the last 10
   folders; a sort pill with Name (full path), Date modified, Size and Random
   (click again to reshuffle), and ↑/↓ to flip the direction (Date and Size
@@ -185,6 +186,13 @@ Things that broke and look like harmless cleanups:
 - **While a scan is running, keep the auto-selection on the first image**
   (`onLibraryChanged` in `Window.tsx`): batches insert images ahead of it, and
   GTK would otherwise keep it selected and scroll the grid down after it.
+- **Keep the `System.gc()` nudge in `Thumbnails.ts`.** At most 300 thumbnails
+  are kept in memory, but dropped textures (and every decode's pixbuf) are only
+  freed when GJS collects their wrappers, and its GC doesn't see their native
+  memory. Without the nudge, memory kept growing past the cap: 526 MB after
+  1,000 cached thumbnails versus a flat ~230 MB with it (~405 MB once
+  full-size originals are being decoded, a high-water mark that then stays
+  flat).
 - **Test decoding headless**: bundle a small entry that imports the module with
   esbuild and run it with the package's own `gjs` and `GI_TYPELIB_PATH` (from
   the wrapper); a different gjs mismatches the typelibs.

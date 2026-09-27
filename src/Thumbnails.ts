@@ -2,6 +2,7 @@ import Gdk from "gi://Gdk?version=4.0"
 import GdkPixbuf from "gi://GdkPixbuf"
 import Gio from "gi://Gio"
 import GLib from "gi://GLib"
+import System from "system"
 import { APP_NAME, basename, cached, OLD_APP_NAME } from "./util"
 
 // Decoded size of cached thumbnails (the cache keeps these dimensions so
@@ -16,6 +17,15 @@ const THUMBNAIL_CONCURRENCY = 4
 const PRUNE_AFTER_DAYS = 90
 const TOUCH_AFTER_SECONDS = 24 * 60 * 60
 const CACHE_FILE = /^[0-9a-f]{32}\.jpg$/
+
+// Decoded thumbnails kept in memory (~0.5 MB each), least recently used
+// dropped first; a dropped tile that scrolls back into view reloads from disk.
+const MAX_TEXTURES = 300
+// Dropped textures (and each decode's pixbuf) are only freed when GJS collects
+// their wrappers, and its GC doesn't see their native memory, so without a
+// nudge memory kept growing past the cap (526 MB vs 271 MB after 1,000
+// thumbnails). Collect after this many evictions (~50 MB).
+const GC_AFTER_EVICTIONS = 100
 
 const THUMBNAIL_CACHE = GLib.build_filenamev([
   GLib.get_user_cache_dir(),
@@ -45,6 +55,39 @@ const textures = new Map<string, Gdk.Texture>()
 const loads = new Map<string, Promise<Gdk.Texture>>()
 const imageInfo = new Map<string, { filename: string; resolution: string }>()
 const touched = new Set<string>()
+
+// Map keeps insertion order, so re-inserting on use keeps the least recently
+// used texture first.
+function getTexture(file: string) {
+  const texture = textures.get(file)
+  if (texture) {
+    textures.delete(file)
+    textures.set(file, texture)
+  }
+  return texture
+}
+
+let evictions = 0
+
+function rememberTexture(file: string, texture: Gdk.Texture) {
+  textures.delete(file)
+  textures.set(file, texture)
+  while (textures.size > MAX_TEXTURES) {
+    textures.delete(textures.keys().next().value!)
+    if (++evictions === GC_AFTER_EVICTIONS) {
+      evictions = 0
+      GLib.idle_add(GLib.PRIORITY_LOW, () => {
+        System.gc()
+        return GLib.SOURCE_REMOVE
+      })
+    }
+  }
+}
+
+// For diagnostics and headless tests.
+export function texturesInMemory() {
+  return textures.size
+}
 
 function nowSeconds() {
   return Math.floor(GLib.get_real_time() / 1_000_000)
@@ -144,7 +187,7 @@ function decodeImage(path: string, scale: boolean): Promise<GdkPixbuf.Pixbuf> {
 }
 
 export function loadThumbnail(file: string, mtime: number) {
-  const existing = textures.get(file)
+  const existing = getTexture(file)
   if (existing) return Promise.resolve(existing)
 
   const inFlight = loads.get(file)
@@ -176,7 +219,7 @@ export function loadThumbnail(file: string, mtime: number) {
     })
   })()
     .then((texture) => {
-      textures.set(file, texture)
+      rememberTexture(file, texture)
       return texture
     })
     .catch((error) => {
