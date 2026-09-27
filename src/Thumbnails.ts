@@ -2,7 +2,7 @@ import Gdk from "gi://Gdk?version=4.0"
 import GdkPixbuf from "gi://GdkPixbuf"
 import Gio from "gi://Gio"
 import GLib from "gi://GLib"
-import { basename, cached } from "./util"
+import { APP_NAME, basename, cached } from "./util"
 
 // Decoded size of cached thumbnails (the cache keeps these dimensions so
 // existing thumbnails stay valid).
@@ -10,12 +10,28 @@ const THUMBNAIL_WIDTH = 440
 const THUMBNAIL_HEIGHT = 320
 const THUMBNAIL_CONCURRENCY = 4
 
-// Shared with the ags-shell picker until the cache moves (phase 3).
 const THUMBNAIL_CACHE = GLib.build_filenamev([
+  GLib.get_user_cache_dir(),
+  APP_NAME,
+  "thumbnails",
+])
+// The ags-shell wallpaper picker's cache uses the same naming; move it over
+// once instead of regenerating it.
+const OLD_THUMBNAIL_CACHE = GLib.build_filenamev([
   GLib.get_user_cache_dir(),
   "ags",
   "wallpapers",
 ])
+
+if (
+  !GLib.file_test(THUMBNAIL_CACHE, GLib.FileTest.EXISTS) &&
+  GLib.file_test(OLD_THUMBNAIL_CACHE, GLib.FileTest.IS_DIR)
+) {
+  GLib.mkdir_with_parents(GLib.path_get_dirname(THUMBNAIL_CACHE), 0o755)
+  if (GLib.rename(OLD_THUMBNAIL_CACHE, THUMBNAIL_CACHE) !== 0) {
+    console.error("Could not move the old thumbnail cache; starting fresh")
+  }
+}
 GLib.mkdir_with_parents(THUMBNAIL_CACHE, 0o755)
 
 const textures = new Map<string, Gdk.Texture>()

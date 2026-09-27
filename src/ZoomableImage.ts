@@ -19,6 +19,7 @@ const ZoomableImage = GObject.registerClass(
     declare private dragStartX: number
     declare private dragStartY: number
     declare private sharp: boolean
+    declare private path: string | null
 
     constructor(params?: Partial<Gtk.Widget.ConstructorProps>) {
       super(params)
@@ -31,6 +32,7 @@ const ZoomableImage = GObject.registerClass(
       this.dragStartX = 0
       this.dragStartY = 0
       this.sharp = false
+      this.path = null
       this.overflow = Gtk.Overflow.HIDDEN
 
       let pointerX = 0
@@ -75,6 +77,8 @@ const ZoomableImage = GObject.registerClass(
     }
 
     setFile(path: string | null) {
+      if (path !== null && path === this.path) return
+      this.path = path
       const id = ++this.loadId
       if (!path) {
         this.texture = null

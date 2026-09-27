@@ -32,6 +32,8 @@ export default function ViewerWindow(
   let toast: Gtk.Label
   let toastTimeout = 0
   let emptyLabel: Gtk.Label
+  let pendingSelection: string | null = null
+  let autoSelected: string | null = null
   let directionButton: Gtk.Button
   const sortButtons = new Map<SortKey, Gtk.Button>()
   const filenameLabels: Gtk.Label[] = []
@@ -142,9 +144,11 @@ export default function ViewerWindow(
       label.label = info?.resolution ?? "0 × 0"
     win.title = info ? `${info.filename} — shard-view` : "shard-view"
     emptyLabel.visible = library.paths.length === 0
-    emptyLabel.label = library.recursive
-      ? "No images in this folder or its subfolders"
-      : "No images in this folder — turn on Subfolders to include them"
+    emptyLabel.label = library.loading
+      ? "Scanning…"
+      : library.recursive
+        ? "No images in this folder or its subfolders"
+        : "No images in this folder — turn on Subfolders to include them"
   }
 
   // --- actions -------------------------------------------------------------
@@ -178,10 +182,10 @@ export default function ViewerWindow(
   }
 
   function rescan() {
-    library.rescan()
-    if (selection.selected === Gtk.INVALID_LIST_POSITION) select(0)
-    refreshPreviewIfOpen()
-    syncInfoLabels()
+    if (library.loading) return
+    library.rescan().then((done) => {
+      if (done) refreshPreviewIfOpen()
+    })
   }
 
   // --- folder --------------------------------------------------------------
@@ -199,29 +203,56 @@ export default function ViewerWindow(
     )
   }
 
+  // Runs after each scan batch: selects `pendingSelection` once it turns up,
+  // otherwise the first image (after the scan when waiting for a file, so the
+  // full-screen view doesn't jump to another image).
+  function onLibraryChanged() {
+    if (pendingSelection) {
+      const index = library.paths.indexOf(pendingSelection)
+      if (index !== -1) {
+        pendingSelection = null
+        select(index, stack.visibleChildName === "grid")
+      } else if (!library.loading) {
+        pendingSelection = null
+      }
+    }
+    // Batches can insert images ahead of the auto-selected one; keep the
+    // selection on the first image until the user picks something else.
+    const autoSelectionKept =
+      autoSelected !== null && getSelectedPath() === autoSelected
+    if (
+      library.paths.length > 0 &&
+      !pendingSelection &&
+      (selection.selected === Gtk.INVALID_LIST_POSITION || autoSelectionKept)
+    ) {
+      select(0, stack.visibleChildName === "grid")
+      autoSelected = library.loading ? getSelectedPath() : null
+    } else if (!autoSelectionKept) {
+      autoSelected = null
+    }
+    syncInfoLabels()
+  }
+  library.onChanged = onLibraryChanged
+
   function openDirectory(input: string, selectFile: string | null = null) {
     const path = normalizeDirectory(input)
     if (!isDirectory(path)) {
       directoryEntry.add_css_class("error")
       return false
     }
+    pendingSelection = selectFile
     library.load(path)
     resetDirectoryEntry()
     history.remember(path)
     renderHistory()
-    const index = selectFile ? library.paths.indexOf(selectFile) : 0
-    select(index === -1 ? 0 : index, true)
     grid.grab_focus()
-    syncInfoLabels()
     return true
   }
 
   function setRecursive(recursive: boolean) {
     library.recursive = recursive
-    const selected = getSelectedPath()
+    pendingSelection = getSelectedPath()
     library.load(library.directory)
-    select(selected ? library.paths.indexOf(selected) : 0)
-    syncInfoLabels()
   }
 
   // --- history panel -------------------------------------------------------
@@ -666,12 +697,13 @@ export default function ViewerWindow(
 
   renderHistory()
   syncSortButtons()
-  if (!openDirectory(directory, file)) {
-    library.load(GLib.get_home_dir())
-    resetDirectoryEntry()
-    syncInfoLabels()
+  // A file opens in the full-screen view straight away; the scan selects it
+  // in the grid when it turns up.
+  if (file) {
+    preview.setFile(file)
+    stack.visibleChildName = "preview"
   }
-  if (file && library.paths.includes(file)) showPreview(file)
+  if (!openDirectory(directory, file)) openDirectory(GLib.get_home_dir())
 
   return win
 }
