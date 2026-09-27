@@ -6,7 +6,7 @@ import Gtk from "gi://Gtk?version=4.0"
 import { createRoot } from "gnim"
 import { programArgs, programInvocationName } from "system"
 import css from "./style.css"
-import { pruneThumbnailCache } from "./Thumbnails"
+import { pruneThumbnailCache, removeOldThumbnailCaches } from "./Thumbnails"
 import { APP_ID, APP_NAME, isDirectory } from "./util"
 import ViewerWindow from "./Window"
 
@@ -49,9 +49,14 @@ app.connect("startup", () => {
 
   // After the first thumbnails, at low priority.
   GLib.timeout_add_seconds(GLib.PRIORITY_LOW, PRUNE_DELAY_SECONDS, () => {
-    pruneThumbnailCache().then((pruned) => {
-      if (pruned > 0) console.log(`Pruned ${pruned} unused thumbnails`)
-    })
+    pruneThumbnailCache()
+      .then((pruned) => {
+        if (pruned > 0) console.log(`Pruned ${pruned} unused thumbnails`)
+      })
+      .then(() => removeOldThumbnailCaches())
+      .then((removed) => {
+        if (removed > 0) console.log(`Removed ${removed} outdated thumbnails`)
+      })
     return GLib.SOURCE_REMOVE
   })
 })

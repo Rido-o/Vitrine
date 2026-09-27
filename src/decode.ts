@@ -5,7 +5,8 @@ import GLib from "gi://GLib"
 // Decodes an image in GdkPixbuf's worker thread, so large images don't freeze
 // the window (Gdk.Texture.new_from_bytes decodes on the main thread: up to
 // ~150 ms for a 12 MP WebP). With `size`, scales to fit within it while
-// decoding. Cancelling `cancellable` stops the read and the decode.
+// decoding. Cancelling `cancellable` stops the read and the decode. The EXIF
+// orientation is applied, so phone photos aren't sideways.
 export function decodeImage(
   path: string,
   size?: { width: number; height: number },
@@ -28,7 +29,7 @@ export function decodeImage(
             const pixbuf = GdkPixbuf.Pixbuf.new_from_stream_finish(res)
             stream.close(null)
             if (!pixbuf) throw new Error("Could not decode image")
-            resolve(pixbuf)
+            resolve(pixbuf.apply_embedded_orientation() ?? pixbuf)
           } catch (error) {
             stream.close(null)
             reject(error)

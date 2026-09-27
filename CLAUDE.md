@@ -33,7 +33,7 @@ There are no tests, so:
 - GTK/GLib come from `gi://` imports; gnim's lowercase JSX tags are registered in `src/jsx.ts` (add new ones there).
 - Keep comments sparse: explain why, not what.
 - Known traps (details in the README): keep `await app.runAsync(…)`, not `app.run(…)`; each window is created inside gnim's `createRoot`; the package builds its own GdkPixbuf `loaders.cache` and wraps by hand (`dontWrapGApps`) so WebP thumbnails work; during a scan the auto-selection is kept on the first image.
-- The app ID is `io.github.Rido_o.Vitrine`; data lives in `~/.cache/vitrine/thumbnails` and `~/.local/state/vitrine/history`. Changing names or paths needs a migration like the existing `OLD_APP_NAME` one.
+- The app ID is `io.github.Rido_o.Vitrine`; data lives in `~/.cache/vitrine/thumbnails-2` and `~/.local/state/vitrine/history`. Changing names or paths needs a migration (history is moved over via `OLD_APP_NAME`; outdated thumbnail caches are deleted by `removeOldThumbnailCaches`, since thumbnails can be regenerated).
 - Nothing may assume the author's setup: machine-specific values (wallpaper command, folders) come from the command line, `VITRINE_WALLPAPER_COMMAND`, or Home Manager options (`hm-module.nix`, `programs.vitrine.*`).
 
 ## Docs

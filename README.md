@@ -34,6 +34,7 @@ your wallpaper with a command of your choice.
   [GVfs](https://gitlab.gnome.org/GNOME/gvfs) (its `trash:///`), which most
   full desktops run; without it they're disabled.
 - JPEG, PNG and WebP; a desktop entry registers Vitrine for those types.
+  Photos are shown upright: the EXIF orientation is applied.
 
 ## Usage
 
@@ -61,12 +62,14 @@ Keys (grid unless noted):
 
 Files:
 
-- Thumbnails: `~/.cache/vitrine/thumbnails`. A thumbnail is refreshed when it's
+- Thumbnails: `~/.cache/vitrine/thumbnails-2`. A thumbnail is refreshed when it's
   used, and a few seconds after launch Vitrine deletes any not used for 90
   days, so thumbnails of edited, moved or deleted images don't pile up.
 - Folder history: `~/.local/state/vitrine/history`
 
-(From the `shard-view` era, both are moved over once on first run.)
+(The shard-view era's folder history is moved over once. Older thumbnail
+caches, `~/.cache/vitrine/thumbnails` and `~/.cache/shard-view`, held unrotated
+thumbnails and are deleted in the background.)
 
 ## Installing
 
@@ -243,13 +246,10 @@ caches expired):
 
 ## Roadmap
 
-- Multi-select, to cycle through several wallpapers.
 - Show file size.
 - More CSS improvements.
 - Clicking the left/right thirds of the full-screen view goes to the
   previous/next image, ideally with a matching cursor.
-- Honour a JPEG's embedded rotation (EXIF orientation) in thumbnails and the
-  full-screen view; neither decoder applies it.
 - Thumbnails at the image's own aspect ratio, and account for margins when
   calculating thumbnail width (they end up too wide).
 - The folder history panel and sort pill could become a `Gtk.Popover` /

@@ -6,8 +6,7 @@ import System from "system"
 import { decodeImage } from "./decode"
 import { APP_NAME, basename, cached, OLD_APP_NAME } from "./util"
 
-// Decoded size of cached thumbnails (the cache keeps these dimensions so
-// existing thumbnails stay valid).
+// Decoded size of cached thumbnails (changing it means a new cache folder).
 const THUMBNAIL_WIDTH = 440
 const THUMBNAIL_HEIGHT = 320
 const THUMBNAIL_CONCURRENCY = 4
@@ -28,28 +27,17 @@ const MAX_TEXTURES = 300
 // thumbnails). Collect after this many evictions (~50 MB).
 const GC_AFTER_EVICTIONS = 100
 
+// "-2": thumbnails since EXIF orientation is applied. Older caches hold
+// unrotated thumbnails that can't be told apart, so they're deleted instead.
 const THUMBNAIL_CACHE = GLib.build_filenamev([
   GLib.get_user_cache_dir(),
   APP_NAME,
-  "thumbnails",
+  "thumbnails-2",
 ])
-// Vitrine was called shard-view; its cache uses the same naming, so move it
-// over once instead of regenerating it.
-const OLD_THUMBNAIL_CACHE = GLib.build_filenamev([
-  GLib.get_user_cache_dir(),
-  OLD_APP_NAME,
-  "thumbnails",
-])
-
-if (
-  !GLib.file_test(THUMBNAIL_CACHE, GLib.FileTest.EXISTS) &&
-  GLib.file_test(OLD_THUMBNAIL_CACHE, GLib.FileTest.IS_DIR)
-) {
-  GLib.mkdir_with_parents(GLib.path_get_dirname(THUMBNAIL_CACHE), 0o755)
-  if (GLib.rename(OLD_THUMBNAIL_CACHE, THUMBNAIL_CACHE) !== 0) {
-    console.error("Could not move the old thumbnail cache; starting fresh")
-  }
-}
+const OLD_THUMBNAIL_CACHES = [
+  GLib.build_filenamev([GLib.get_user_cache_dir(), APP_NAME, "thumbnails"]),
+  GLib.build_filenamev([GLib.get_user_cache_dir(), OLD_APP_NAME]),
+]
 GLib.mkdir_with_parents(THUMBNAIL_CACHE, 0o755)
 
 const textures = new Map<string, Gdk.Texture>()
@@ -210,65 +198,111 @@ export function evictThumbnail(file: string) {
   imageInfo.delete(file)
 }
 
+// Calls `visit` for each entry in `directory`, in batches at low priority so a
+// large cache doesn't hold up the window.
+async function forEachChild(
+  directory: Gio.File,
+  visit: (info: Gio.FileInfo) => void,
+) {
+  const enumerator = await new Promise<Gio.FileEnumerator>((resolve, reject) =>
+    directory.enumerate_children_async(
+      "standard::name,standard::type,time::modified",
+      Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS,
+      GLib.PRIORITY_LOW,
+      null,
+      (_source, result) => {
+        try {
+          resolve(directory.enumerate_children_finish(result))
+        } catch (error) {
+          reject(error)
+        }
+      },
+    ),
+  )
+  let infos: Gio.FileInfo[]
+  while (
+    (infos = await new Promise<Gio.FileInfo[]>((resolve, reject) =>
+      enumerator.next_files_async(
+        200,
+        GLib.PRIORITY_LOW,
+        null,
+        (_source, result) => {
+          try {
+            resolve(enumerator.next_files_finish(result))
+          } catch (error) {
+            reject(error)
+          }
+        },
+      ),
+    )).length > 0
+  ) {
+    infos.forEach(visit)
+  }
+  enumerator.close(null)
+}
+
+// Deletes `file`; false if it failed. Another Vitrine process may be deleting
+// the same files, so one that's already gone isn't an error.
+function remove(file: Gio.File) {
+  try {
+    file.delete(null)
+    return true
+  } catch (error) {
+    if (
+      !(error instanceof GLib.Error) ||
+      !error.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.NOT_FOUND)
+    )
+      console.error(`Could not delete ${file.get_path()}:`, error)
+    return false
+  }
+}
+
 // Deletes cache files unused for PRUNE_AFTER_DAYS; resolves to how many.
 export async function pruneThumbnailCache() {
   const cutoff = nowSeconds() - PRUNE_AFTER_DAYS * 24 * 60 * 60
   const directory = Gio.File.new_for_path(THUMBNAIL_CACHE)
   let pruned = 0
   try {
-    const enumerator = await new Promise<Gio.FileEnumerator>(
-      (resolve, reject) =>
-        directory.enumerate_children_async(
-          "standard::name,time::modified",
-          Gio.FileQueryInfoFlags.NONE,
-          GLib.PRIORITY_LOW,
-          null,
-          (_source, result) => {
-            try {
-              resolve(directory.enumerate_children_finish(result))
-            } catch (error) {
-              reject(error)
-            }
-          },
-        ),
-    )
-    let infos: Gio.FileInfo[]
-    while (
-      (infos = await new Promise<Gio.FileInfo[]>((resolve, reject) =>
-        enumerator.next_files_async(
-          200,
-          GLib.PRIORITY_LOW,
-          null,
-          (_source, result) => {
-            try {
-              resolve(enumerator.next_files_finish(result))
-            } catch (error) {
-              reject(error)
-            }
-          },
-        ),
-      )).length > 0
-    ) {
-      for (const info of infos) {
-        const name = info.get_name()
-        const modified = info.get_modification_date_time()?.to_unix() ?? 0
-        if (!CACHE_FILE.test(name) || modified >= cutoff) continue
-        try {
-          directory.get_child(name).delete(null)
-          pruned++
-        } catch (error) {
-          // Another Vitrine process may be pruning at the same time.
-          if (
-            !(error instanceof GLib.Error) ||
-            !error.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.NOT_FOUND)
-          )
-            console.error(`Could not prune ${name}:`, error)
-        }
+    await forEachChild(directory, (info) => {
+      const name = info.get_name()
+      const modified = info.get_modification_date_time()?.to_unix() ?? 0
+      if (CACHE_FILE.test(name) && modified < cutoff) {
+        if (remove(directory.get_child(name))) pruned++
       }
-    }
-    enumerator.close(null)
+    })
   } catch (error) {
     console.error("Could not prune the thumbnail cache:", error)
   }
   return pruned
+}
+
+async function removeTree(directory: Gio.File): Promise<number> {
+  const subdirectories: Gio.File[] = []
+  let removed = 0
+  await forEachChild(directory, (info) => {
+    const child = directory.get_child(info.get_name())
+    if (info.get_file_type() === Gio.FileType.DIRECTORY)
+      subdirectories.push(child)
+    else if (remove(child)) removed++
+  })
+  for (const subdirectory of subdirectories) {
+    removed += await removeTree(subdirectory)
+  }
+  remove(directory)
+  return removed
+}
+
+// Deletes the caches from before rotation was applied (see THUMBNAIL_CACHE);
+// resolves to how many files that removed.
+export async function removeOldThumbnailCaches() {
+  let removed = 0
+  for (const path of OLD_THUMBNAIL_CACHES) {
+    if (!GLib.file_test(path, GLib.FileTest.IS_DIR)) continue
+    try {
+      removed += await removeTree(Gio.File.new_for_path(path))
+    } catch (error) {
+      console.error(`Could not remove ${path}:`, error)
+    }
+  }
+  return removed
 }
