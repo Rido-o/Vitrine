@@ -1,77 +1,41 @@
-# shard-view
+# Vitrine
 
-A GTK4 image viewer written in TypeScript for GJS, using
-[gnim](https://github.com/aylur/gnim) for JSX. It grew out of the wallpaper
-picker in `ags-shell` and is being turned into a general viewer that doesn't
-depend on AGS: a thumbnail grid for browsing a folder, a full-screen view with
-zoom and pan, and a button to set the current image as the wallpaper.
-
-It lives in this repo for now but is meant to be spun off into its own; see
-[Spinning off](#spinning-off).
-
-## Status
-
-| Phase | State |
-| --- | --- |
-| 1. Scaffold | Done: builds, opens a placeholder window |
-| 2. Port the picker | Done: grid, sorting, history, subfolders, view, set wallpaper |
-| 3. Startup speed | Done: async scanning, cache moved to ~/.cache/shard-view |
-| 4. Integration | Done: installed on rei, default viewer, bar button |
-| 5. Remove the ags picker | Done: picker, its styles and icons removed; docs moved |
-
-## Goals
-
-- A general image viewer: open a folder to browse it, or a file to see it in
-  its folder.
-- Everything the ags picker does, without a background process: each launch is
-  a fresh process that exits when the window closes.
-- A normal application window (not a layer-shell overlay), so standard GTK
-  popovers and dropdowns work.
-- No hard dependency on this repo's setup (see [Spinning off](#spinning-off)).
+A GTK4 image viewer and wallpaper picker for Linux, written in TypeScript for
+GJS with [gnim](https://github.com/aylur/gnim) for JSX. Browse a folder as a
+thumbnail grid, open images full-screen with zoom and pan, and set any image as
+your wallpaper with a command of your choice.
 
 ## Features
 
-Carried over from the ags picker:
-
-- Thumbnail grid with an on-disk thumbnail cache and lazy, concurrency-limited
-  loading.
-- Top bar: folder entry (`~` works) with a history of the last 10 folders
-  (`~/.local/state/…/history`), and a sort pill: Name (full path), Date
-  modified, Size, Random (click again to reshuffle), ↑/↓ direction; Date and
-  Size start descending. The sort resets every launch.
-- Info bar: filename (click to show in the file manager over D-Bus
-  `org.freedesktop.FileManager1`), resolution, rescan, view.
-- Full-screen view (`ZoomableImage`): scroll to zoom around the cursor (fit to
-  8× actual pixels), drag to pan (until an image edge reaches the middle of the
-  screen), double-click toggles fit/100%, `+`/`-`/`0` zoom keys, `s` toggles
-  sharp (nearest-neighbour) pixels, ←/→ previous/next. The image is drawn with
-  GTK's default filter and snapped to whole device pixels.
-- Delete moves the image to the trash.
-
-New:
-
-- Command line: `shard-view [DIR | FILE]`.
-- An "Include subfolders" toggle in the top bar, off by default (the ags picker
-  was always recursive).
-- A "Set wallpaper" button and key, available at all times; setting the
-  wallpaper doesn't close the viewer, it shows a "Wallpaper set" toast.
-- A desktop entry for JPEG, PNG and WebP, the formats the grid scans (the Home
-  Manager module can make it the default viewer for them).
-
-Ideas and leftovers (multi-select, file size, click-thirds navigation, thumbnail
-aspect ratio, popovers, type checking) are tracked in the repo's
-[`docs/TODO.md`](../../../docs/TODO.md#shard-view) while it lives there.
+- **Thumbnail grid** with an on-disk thumbnail cache and lazy,
+  concurrency-limited loading. Folders are scanned in the background (4 folders
+  at a time), so the window opens immediately and the grid fills in as images
+  are found, even for large folders over NFS.
+- **Top bar**: a folder entry (`~` works) with a history of the last 10
+  folders; a sort pill with Name (full path), Date modified, Size and Random
+  (click again to reshuffle), and ↑/↓ to flip the direction (Date and Size
+  start descending); a Subfolders toggle.
+- **Info bar**: the filename (click to show it in your file manager over
+  `org.freedesktop.FileManager1`), resolution, rescan, view and Set wallpaper.
+- **Full-screen view**: scroll to zoom around the cursor (from fit up to 8×
+  actual pixels), drag to pan, double-click to toggle fit/100%, and `s` for
+  sharp (nearest-neighbour) pixels. Images are drawn with GTK's default filter,
+  snapped to whole device pixels.
+- **Set wallpaper** (button or `w`) runs a configurable command with the image
+  path and shows a "Wallpaper set" toast; the viewer stays open.
+- **Delete** moves the image to the trash.
+- JPEG, PNG and WebP; a desktop entry registers Vitrine for those types.
 
 ## Usage
 
 ```sh
-shard-view               # opens ~/Pictures (or the current directory)
-shard-view DIR           # grid on DIR
-shard-view FILE          # FILE's folder, with FILE open in the full-screen view
-shard-view -r DIR        # start with "Subfolders" on (--subfolders)
+vitrine                  # opens ~/Pictures (or the current directory)
+vitrine DIR              # grid on DIR
+vitrine FILE             # FILE's folder, with FILE open in the full-screen view
+vitrine -r DIR           # start with Subfolders on (--subfolders)
 ```
 
-Keys (target; grid unless noted):
+Keys (grid unless noted):
 
 | Key | Does |
 | --- | --- |
@@ -85,185 +49,167 @@ Keys (target; grid unless noted):
 | `+`/`=`, `-`, `0` (view) | Zoom in, out, fit |
 | `s` (view) | Sharp pixels |
 
-## Architecture
+Files:
+
+- Thumbnails: `~/.cache/vitrine/thumbnails`
+- Folder history: `~/.local/state/vitrine/history`
+
+(From the `shard-view` era, both are moved over once on first run.)
+
+## Installing
+
+With Nix flakes:
+
+```sh
+nix run github:Rido-o/vitrine -- DIR
+```
+
+In a Home Manager configuration:
+
+```nix
+{
+  inputs.vitrine.url = "github:Rido-o/vitrine";
+  inputs.vitrine.inputs.nixpkgs.follows = "nixpkgs";
+}
+```
+
+```nix
+{inputs, ...}: {
+  imports = [inputs.vitrine.homeManagerModules.default];
+  programs.vitrine = {
+    enable = true;
+    wallpaperCommand = "swww img"; # anything that takes an image path
+    defaultViewer = true;
+  };
+}
+```
+
+| Option | Does |
+| --- | --- |
+| `programs.vitrine.enable` | Installs Vitrine. |
+| `programs.vitrine.package` | The package to use. |
+| `programs.vitrine.wallpaperCommand` | Command run with the image path appended; sets `VITRINE_WALLPAPER_COMMAND` as a default in a wrapper. Null (the default) hides the Set wallpaper action. |
+| `programs.vitrine.defaultViewer` | Runs `xdg-mime default io.github.Rido_o.Vitrine.desktop` for JPEG, PNG and WebP on each activation. `~/.config/mimeapps.list` stays unmanaged, so other defaults and your file manager's "Open With" keep working. |
+
+Without the module, set `VITRINE_WALLPAPER_COMMAND` yourself; it's parsed like
+a shell command and the image path is appended.
+
+## Development
+
+```sh
+nix run . -- DIR                                   # build and run
+VITRINE_WALLPAPER_COMMAND=set-wallpaper nix run . -- DIR
+nix develop                                        # gjs, esbuild, dart-sass
+nix fmt                                            # alejandra
+```
+
+To try local changes in a NixOS/Home Manager config that uses the flake input,
+override it with the checkout:
+`nixos-rebuild switch --override-input vitrine path:$HOME/Projects/Vitrine`
+(or `nh os switch -- --override-input …`).
+
+Quick check without opening a window: `vitrine --help` loads the whole bundle
+before GApplication prints its help.
+
+### Layout
 
 ```
-shard-view.nix      package (perSystem) + Home Manager module (this repo only)
+flake.nix           packages.default, homeManagerModules.default, devShell
+package.nix         the build
+hm-module.nix       programs.vitrine
 src/
   main.tsx          Gtk.Application: CSS, icon path, command line, windows
   jsx.ts            registers lowercase JSX tags (box, entry, …) with gnim
   Window.tsx        layout: top bar, grid, info bar, full-screen view
-  Library.ts        folder scanning, sorting, list model, mtime/size caches
+  Library.ts        async folder scanning, sorting, list model, mtime/size
   Thumbnails.ts     thumbnail cache (disk + memory), loading, concurrency
   History.ts        folder history file
   ZoomableImage.ts  full-screen image widget (zoom, pan, sharp mode)
-  util.ts           folder helpers, file-manager D-Bus call, wallpaper command
-  style.scss        styles; theme.scss is copied in at build time
-icons/              bundled symbolic icons (Font Awesome Free, CC BY 4.0)
+  util.ts           names, folder helpers, file-manager D-Bus call, wallpaper
+  style.scss        styles
+  theme.scss        colour palette
+icons/              bundled symbolic icons
 ```
 
-- The app is `NON_UNIQUE`: every launch is its own process and window.
-- App ID `dev.shard.View` (used by the desktop entry and Hyprland window rules).
+- App ID `io.github.Rido_o.Vitrine`. The app is `NON_UNIQUE`: every launch is
+  its own process and window; nothing stays running in the background.
 - Everything is plain GTK4/Gio/GdkPixbuf/GLib; the only library is gnim.
 
 ### Build
 
-`nix build .#shard-view` (see `shard-view.nix`):
+`package.nix`:
 
-1. Copies the `gnim` flake input to `node_modules/gnim` and links `dist` to its
-   `src` (gnim's `package.json` exports `./dist`, which its own build copies
-   from `./src`).
-2. Compiles `src/style.scss` with dart-sass (after copying `theme.scss` in).
+1. Copies the `gnim` input to `node_modules/gnim` and links `dist` to its `src`
+   (gnim's `package.json` exports `./dist`, which its own build copies from
+   `./src`).
+2. Compiles `src/style.scss` with dart-sass.
 3. Bundles `src/main.tsx` with esbuild: ESM, `gi://*` and GJS built-ins
    external, JSX via `gnim/gtk4`, CSS loaded as text, `ICONS_DIR` defined as
    the installed icons path.
-4. Installs `share/shard-view/{main.js,icons}` and `bin/shard-view`
-   (`gjs -m main.js`), wrapped with `wrapGAppsHook4`'s arguments by hand
-   (`dontWrapGApps`) so our own GdkPixbuf `loaders.cache` (gdk-pixbuf's
-   loaders plus librsvg and `webp-pixbuf-loader`, built with
-   `gdk-pixbuf-query-loaders`) overrides the hook's.
+4. Installs `share/vitrine/{main.js,icons}`, the desktop entry and
+   `bin/vitrine` (`gjs -m main.js`), wrapped with `wrapGAppsHook4`'s arguments
+   by hand (`dontWrapGApps`) so its own GdkPixbuf `loaders.cache` (gdk-pixbuf's
+   loaders plus librsvg and `webp-pixbuf-loader`) overrides the hook's.
 
-There's no type checking: esbuild strips types. Adding `tsc --noEmit` with
-`@girs` types is a spin-off task.
-
-Quick check without opening a window: `shard-view --help` loads the whole
-bundle before GApplication prints its help.
-
-For a quick run without installing:
-`SHARD_VIEW_WALLPAPER_COMMAND=set-wallpaper nix run .#shard-view -- DIR`.
+There's no type checking: esbuild strips types.
 
 ### Gotchas
 
-Things that broke during the port and look like harmless cleanups:
+Things that broke and look like harmless cleanups:
 
 - **`await app.runAsync(…)`, not `app.run(…)`.** A blocking `run()` at module
   top level stops GJS from resolving promises while the main loop runs:
   thumbnails loaded but their `.then()` never ran, leaving blank tiles.
 - **Each window is created inside gnim's `createRoot`** (`main.tsx`), disposed
-  on `destroy`. AGS's `app.start()` did this implicitly; without it gnim logs
-  "out of tracking context" and can't clean up.
-- **WebP thumbnails need our own `loaders.cache`.** `wrapGAppsHook4` sets
-  `GDK_PIXBUF_MODULE_FILE` to librsvg's cache, which has no WebP, so GdkPixbuf
-  (thumbnails, resolution) failed on `.webp` while the full-screen view (GTK's
-  own loaders) worked. Adding our `--set` to `gappsWrapperArgs` isn't enough:
-  the hook's comes later and wins, hence the manual wrap.
-- **Test decoding headless**: bundle a small entry that imports the module
-  with esbuild and run it with the package's own `gjs` and `GI_TYPELIB_PATH`
-  (from the wrapper); a different gjs mismatches the typelibs.
+  on `destroy`; without it gnim logs "out of tracking context" and can't clean
+  up.
+- **WebP thumbnails need the package's own `loaders.cache`.** `wrapGAppsHook4`
+  sets `GDK_PIXBUF_MODULE_FILE` to librsvg's cache, which has no WebP, so
+  GdkPixbuf (thumbnails, resolution) failed on `.webp` while the full-screen
+  view (GTK's own loaders) worked. Adding a `--set` to `gappsWrapperArgs`
+  isn't enough: the hook's comes later and wins, hence the manual wrap.
+- **While a scan is running, keep the auto-selection on the first image**
+  (`onLibraryChanged` in `Window.tsx`): batches insert images ahead of it, and
+  GTK would otherwise keep it selected and scroll the grid down after it.
+- **Test decoding headless**: bundle a small entry that imports the module with
+  esbuild and run it with the package's own `gjs` and `GI_TYPELIB_PATH` (from
+  the wrapper); a different gjs mismatches the typelibs.
 
-## Plan
-
-### Phase 1: scaffold (done)
-
-- `gnim` flake input, the package and Home Manager module, `main.tsx` with a
-  placeholder window, `jsx.ts`, `style.scss`, one icon.
-
-### Phase 2: port the picker (done)
-
-Source: `modules/desktop/ags-shell/config/widget/wallpapers/` and
-`styles/Wallpapers.scss`.
-
-- Split `Wallpapers.tsx` into `Library.ts`, `Thumbnails.ts`, `History.ts` and
-  `Window.tsx`; move `ZoomableImage.ts` over (imports only).
-- Replace `Astal.Window` (fullscreen layer surface, exclusive keyboard, click
-  outside to close) with a `Gtk.ApplicationWindow`; the grid box becomes the
-  window content. Drop the click-outside handler.
-- `ags/gtk4` imports become `gi://` imports; `app` becomes the
-  `Gtk.Application`.
-- Command line: `HANDLES_COMMAND_LINE` (or `HANDLES_OPEN`) for `DIR`/`FILE`;
-  a file opens its folder with the view on that file.
-- "Include subfolders" toggle (off by default); the scan takes a `recursive`
-  flag, and toggling rescans.
-- "Set wallpaper": button in the info bar and the preview, key `w`; runs the
-  wallpaper command and shows a confirmation in the info bar. It doesn't close
-  the window. The button is hidden when no command is configured (see
-  [Configuration](#configuration)).
-- Esc/`q` in the grid quits (it used to hide the overlay).
-- Copy the icons the picker uses (folder, chevron-down, arrows, arrows-rotate,
-  xmark, image) into `icons/`.
-- Port the styles; the overlay window's transparent background and outer box
-  shadow go away.
-- Keep the history panel and sort pill as they are; they could become a
-  `Gtk.Popover`/`Gtk.DropDown` later now that popups work.
-- Set the program name (`GLib.set_prgname`) so it isn't reported as `gjs`.
-
-### Phase 3: startup speed (done)
-
-Every launch is cold now, and big folders live on NFS (`/mnt/data`).
-
-- Asynchronous, batched scanning (`enumerate_children_async` /
-  `next_files_async`, 200 entries per batch, 4 folders read concurrently since
-  each call is an NFS round trip). The window shows straight away; images are
-  inserted in sort order as batches arrive; opening another folder cancels the
-  scan; the grid says "Scanning…" until the first images arrive.
-- A file on the command line opens in the full-screen view before the scan;
-  the grid selects it when the scan reaches it.
-- The thumbnail cache moved from `~/.cache/ags/wallpapers` to
-  `~/.cache/shard-view/thumbnails` (a one-off rename on first run, same file
-  naming, so existing thumbnails are reused).
-- Thumbnails stay JPEG; the freedesktop thumbnail spec (shared with Thunar) is
-  an option later, but PNG decodes slower.
-
-Scan timings (headless, recursive; "cold" is the first run after NFS
-attribute caches expired, not a guaranteed-cold cache):
+Scan timings (headless, recursive; "cold" is the first run after NFS attribute
+caches expired):
 
 | Folder | Images | Blocking scan | Async, first images | Async, complete |
 | --- | --- | --- | --- | --- |
-| Desktop Wallpapers | 53 | 16–45 ms | 2–3 ms | 10–11 ms |
-| `/mnt/data/Images` | 9,680 | 451 ms warm, 1.9 s cold | 2–3 ms | 244 ms warm, ~1 s cold |
+| Small | 53 | 16–45 ms | 2–3 ms | 10–11 ms |
+| Large, over NFS | 9,680 | 0.45 s warm, 1.9 s cold | 2–3 ms | 0.24 s warm, ~1 s cold |
 
-### Phase 4: integration (done)
+## Roadmap
 
-- rei imports `homeManager.shard-view` instead of `homeManager.nsxiv` (the
-  nsxiv module stays in the repo), with `wallpaperCommand = "set-wallpaper"`
-  and `defaultViewer = true` (see [Configuration](#configuration)).
-- ags-shell's bar button runs `shard-view --subfolders <wallpaper folder>`
-  (the wallpapers are all in subfolders) instead of showing the `wallpapers`
-  window.
-- The package ships `dev.shard.View.desktop` (`Exec=shard-view %f`) for
-  `image/jpeg`, `image/png` and `image/webp`: only the formats the grid scans,
-  so an opened file always appears in its folder's grid.
-- `-r`/`--subfolders` on the command line.
-- No Hyprland window rule; it opens as a normal window.
+- Multi-select, to cycle through several wallpapers.
+- Show file size.
+- More CSS improvements.
+- Clicking the left/right thirds of the full-screen view goes to the
+  previous/next image, ideally with a matching cursor.
+- Thumbnails at the image's own aspect ratio, and account for margins when
+  calculating thumbnail width (they end up too wide).
+- The folder history panel and sort pill could become a `Gtk.Popover` /
+  `Gtk.DropDown` (they're inline because Vitrine started as a layer-shell
+  overlay, where Hyprland dismissed popups on click).
+- A colour theme that isn't hardcoded (`src/theme.scss`).
+- Type checking: `tsc --noEmit` with `@girs` types.
 
-### Phase 5: remove the ags picker (done)
+## History
 
-- Delete `widget/wallpapers/`, `styles/Wallpapers.scss`, the icons only it used,
-  and its registration in `app.tsx`.
-- Remove the wallpaper picker section from `docs/ags-shell.md`; move the
-  picker's items in `docs/TODO.md` here (see [Features](#features)).
-- Add `docs/shard-view.md` (a pointer to this README, per the repo's docs
-  convention) and list it in `docs/README.md`.
+Vitrine started as the wallpaper picker in the author's
+[AGS](https://github.com/aylur/ags) desktop shell, was ported to a standalone
+GJS app called shard-view, and was renamed and moved to its own repo.
 
-## Configuration
+## Credits
 
-Repo-specific values stay out of the code:
+- Icons: [Font Awesome Free](https://fontawesome.com) 6.6.0, licensed
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- [gnim](https://github.com/aylur/gnim) (MIT) for JSX on GJS.
 
-- Wallpaper command: read from the `SHARD_VIEW_WALLPAPER_COMMAND` environment
-  variable (parsed like a shell command; the image path is appended). Unset
-  means no "Set wallpaper" button or `w` key.
-- Default folder: the command-line argument; the bar button passes the
-  wallpaper folder.
+## Licence
 
-Home Manager module options (`homeManager.shard-view`):
-
-| Option | Does |
-| --- | --- |
-| `shard.shard-view.wallpaperCommand` | Wraps the binary with `SHARD_VIEW_WALLPAPER_COMMAND` (as a default, so the environment can still override it). Here `set-wallpaper` from `modules/desktop/awww.nix`. |
-| `shard.shard-view.defaultViewer` | On each activation runs `xdg-mime default dev.shard.View.desktop` for the three image types. `~/.config/mimeapps.list` stays unmanaged, so the other defaults and Thunar's "Open With" keep working; only those three lines change. |
-
-## Spinning off
-
-What ties it to this repo, and what to do about each when it moves:
-
-| Coupling | Now | In its own repo |
-| --- | --- | --- |
-| Colours | `theme.scss` copied from `ags-shell` at build time | Vendor the palette, or read colours from a CSS file / GTK theme |
-| Package | `perSystem` in this flake, `inputs.gnim` | Its own `flake.nix` with a `gnim` input and `packages.default`; this repo takes it as an input |
-| Home Manager module | `flake.modules.homeManager.shard-view` here, options under `shard.shard-view` | Export it as `homeManagerModules.default` from the new flake (options can move to `programs.shard-view`) |
-| Wallpaper command | `set-wallpaper` (awww) | Configuration only (see above); nothing hardcoded |
-| Default folder | wallpaper folder passed by ags-shell | Command-line argument only |
-| Docs and TODOs | `docs/shard-view.md` points here; TODOs in `docs/TODO.md` | This README is the repo README; move the TODOs into it or issues |
-
-Also worth doing then: `tsc --noEmit` with `@girs` types, a `LICENSE`, and
-crediting Font Awesome for the icons.
+Not decided yet. Until a `LICENSE` file is added, all rights are reserved.

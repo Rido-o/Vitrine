@@ -1,0 +1,47 @@
+@use "sass:color";
+
+$background: #101010;
+$dark00: #232323;
+$dark01: #222222;
+$grey00: #333333;
+$grey01: #999999;
+$foreground: #b7b7b7;
+$light00: #c1c1c1;
+$light01: #d5d5d5;
+$red: #de6e6e;
+$orange: #dab083;
+$yellow: #ffc799;
+$green: #5f8787;
+$cyan: #60a592;
+$blue: #8eaaaa;
+$magenta: #d69094;
+$extra: #876c4f;
+
+$bg: $background;
+$bg-surface: color.adjust($background, $lightness: 4%);
+$bg-raised: color.adjust($background, $lightness: 7.5%);
+$bg-elevated: color.adjust($background, $lightness: 13.75%);
+
+$fg: $foreground;
+$fg-muted: color.adjust($foreground, $lightness: -12%);
+$fg-bright: color.adjust($foreground, $lightness: 12%);
+
+$border: rgba($light00, 0.12);
+$border-solid: color.mix($light00, $background, 12%);
+$separator: rgba($light00, 0.22);
+
+$accent: $blue;
+$accent-hover: color.adjust($accent, $lightness: 8%);
+$accent-fg: $background;
+
+$hover: rgba($foreground, 0.12);
+$active: rgba($foreground, 0.2);
+
+$ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+$transition: all 200ms $ease;
+
+$card-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+
+$window-shadow:
+  0 2px 20px rgba(0, 0, 0, 0.4),
+  10px 20px 48px rgba(0, 0, 0, 0.35);

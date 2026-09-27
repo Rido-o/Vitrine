@@ -1,0 +1,44 @@
+{
+  "nodes": {
+    "gnim": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1775687235,
+        "narHash": "sha256-1B1ymLWzZ8WQ2lZw/Lzn+lXoXSkRn2RWiePU5hmlT78=",
+        "owner": "aylur",
+        "repo": "gnim",
+        "rev": "82f155090717b7ab95f26d324698c1be890a28ff",
+        "type": "github"
+      },
+      "original": {
+        "owner": "aylur",
+        "repo": "gnim",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1790463110,
+        "narHash": "sha256-hKlVl12B1dF0Q5vd9dY3lIJM5mFGWYSlXwSLAqHZ1+s=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "e158d9ed9b51c98974c5e66e1ba1c9e0255fecaa",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nixos",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "gnim": "gnim",
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
