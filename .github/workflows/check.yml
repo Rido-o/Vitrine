@@ -1,0 +1,17 @@
+name: Check
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      - name: Type check and flake checks
+        run: nix flake check -L
+      - name: Build
+        run: nix build -L

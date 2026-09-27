@@ -1,5 +1,7 @@
 # Vitrine
 
+[![Check](https://github.com/Rido-o/Vitrine/actions/workflows/check.yml/badge.svg)](https://github.com/Rido-o/Vitrine/actions/workflows/check.yml)
+
 A GTK4 image viewer and wallpaper picker for Linux, written in TypeScript for
 GJS with [gnim](https://github.com/aylur/gnim) for JSX. Browse a folder as a
 thumbnail grid, open images full-screen with zoom and pan, and set any image as
@@ -111,6 +113,9 @@ To try local changes in a NixOS/Home Manager config that uses the flake input,
 override it with the checkout:
 `nixos-rebuild switch --override-input vitrine path:$HOME/Projects/Vitrine`
 (or `nh os switch -- --override-input …`).
+
+CI (`.github/workflows/check.yml`) runs `nix flake check` and `nix build` on
+every push to `master` and on pull requests.
 
 Quick check without opening a window: `vitrine --help` loads the whole bundle
 before GApplication prints its help.

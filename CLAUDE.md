@@ -15,7 +15,7 @@ nix flake check                    # includes checks.typecheck (tsc --noEmit)
 nix develop                        # gjs, esbuild, dart-sass, tsc; links node_modules
 ```
 
-New files must be `git add`ed before the flake can see them.
+New files must be `git add`ed before the flake can see them. CI (`.github/workflows/check.yml`) runs `nix flake check` and `nix build` on pushes to `master` and pull requests; after pushing, check the run passed.
 
 ### Verifying changes
 
