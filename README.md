@@ -17,7 +17,7 @@ It lives in this repo for now but is meant to be spun off into its own; see
 | 2. Port the picker | Done: grid, sorting, history, subfolders, view, set wallpaper |
 | 3. Startup speed | Done: async scanning, cache moved to ~/.cache/shard-view |
 | 4. Integration | Done: installed on rei, default viewer, bar button |
-| 5. Remove the ags picker | Next |
+| 5. Remove the ags picker | Done: picker, its styles and icons removed; docs moved |
 
 ## Goals
 
@@ -54,12 +54,13 @@ New:
 - An "Include subfolders" toggle in the top bar, off by default (the ags picker
   was always recursive).
 - A "Set wallpaper" button and key, available at all times; setting the
-  wallpaper doesn't close the viewer, it confirms in the info bar.
-- Registered as the default viewer for `image/*`.
+  wallpaper doesn't close the viewer, it shows a "Wallpaper set" toast.
+- A desktop entry for JPEG, PNG and WebP, the formats the grid scans (the Home
+  Manager module can make it the default viewer for them).
 
-Not planned yet (carried over from the picker's TODO list): multi-select to
-cycle wallpapers, showing file size, click the left/right thirds of the view to
-go previous/next, thumbnails at the image's own aspect ratio.
+Ideas and leftovers (multi-select, file size, click-thirds navigation, thumbnail
+aspect ratio, popovers, type checking) are tracked in the repo's
+[`docs/TODO.md`](../../../docs/TODO.md#shard-view) while it lives there.
 
 ## Usage
 
@@ -225,7 +226,7 @@ attribute caches expired, not a guaranteed-cold cache):
 - `-r`/`--subfolders` on the command line.
 - No Hyprland window rule; it opens as a normal window.
 
-### Phase 5: remove the ags picker
+### Phase 5: remove the ags picker (done)
 
 - Delete `widget/wallpapers/`, `styles/Wallpapers.scss`, the icons only it used,
   and its registration in `app.tsx`.
@@ -262,7 +263,7 @@ What ties it to this repo, and what to do about each when it moves:
 | Home Manager module | `flake.modules.homeManager.shard-view` here, options under `shard.shard-view` | Export it as `homeManagerModules.default` from the new flake (options can move to `programs.shard-view`) |
 | Wallpaper command | `set-wallpaper` (awww) | Configuration only (see above); nothing hardcoded |
 | Default folder | wallpaper folder passed by ags-shell | Command-line argument only |
-| Docs | `docs/shard-view.md` points here | This README is the repo README |
+| Docs and TODOs | `docs/shard-view.md` points here; TODOs in `docs/TODO.md` | This README is the repo README; move the TODOs into it or issues |
 
 Also worth doing then: `tsc --noEmit` with `@girs` types, a `LICENSE`, and
 crediting Font Awesome for the icons.
