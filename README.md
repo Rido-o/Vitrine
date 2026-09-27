@@ -16,8 +16,8 @@ It lives in this repo for now but is meant to be spun off into its own; see
 | 1. Scaffold | Done: builds, opens a placeholder window |
 | 2. Port the picker | Done: grid, sorting, history, subfolders, view, set wallpaper |
 | 3. Startup speed | Done: async scanning, cache moved to ~/.cache/shard-view |
-| 4. Integration | Next |
-| 5. Remove the ags picker | Planned |
+| 4. Integration | Done: installed on rei, default viewer, bar button |
+| 5. Remove the ags picker | Next |
 
 ## Goals
 
@@ -61,12 +61,13 @@ Not planned yet (carried over from the picker's TODO list): multi-select to
 cycle wallpapers, showing file size, click the left/right thirds of the view to
 go previous/next, thumbnails at the image's own aspect ratio.
 
-## Usage (target)
+## Usage
 
 ```sh
 shard-view               # opens ~/Pictures (or the current directory)
 shard-view DIR           # grid on DIR
 shard-view FILE          # FILE's folder, with FILE open in the full-screen view
+shard-view -r DIR        # start with "Subfolders" on (--subfolders)
 ```
 
 Keys (target; grid unless noted):
@@ -210,16 +211,19 @@ attribute caches expired, not a guaranteed-cold cache):
 | Desktop Wallpapers | 53 | 16–45 ms | 2–3 ms | 10–11 ms |
 | `/mnt/data/Images` | 9,680 | 451 ms warm, 1.9 s cold | 2–3 ms | 244 ms warm, ~1 s cold |
 
-### Phase 4: integration (this repo)
+### Phase 4: integration (done)
 
-- ags-shell's bar button runs `shard-view <wallpaper folder>` instead of
-  showing the `wallpapers` window.
-- Hyprland window rule for `dev.shard.View` (float, ~85%×80%, centred) in
-  `hyprland.lua`.
-- `.desktop` entry (`Exec=shard-view %f`, `MimeType=image/*` list) and
-  `xdg.mimeApps` defaults so it's the default image viewer.
-- Stop importing `homeManager.nsxiv` on rei; keep the module in the repo.
-- Import `homeManager.shard-view` on rei.
+- rei imports `homeManager.shard-view` instead of `homeManager.nsxiv` (the
+  nsxiv module stays in the repo), with `wallpaperCommand = "set-wallpaper"`
+  and `defaultViewer = true` (see [Configuration](#configuration)).
+- ags-shell's bar button runs `shard-view --subfolders <wallpaper folder>`
+  (the wallpapers are all in subfolders) instead of showing the `wallpapers`
+  window.
+- The package ships `dev.shard.View.desktop` (`Exec=shard-view %f`) for
+  `image/jpeg`, `image/png` and `image/webp`: only the formats the grid scans,
+  so an opened file always appears in its folder's grid.
+- `-r`/`--subfolders` on the command line.
+- No Hyprland window rule; it opens as a normal window.
 
 ### Phase 5: remove the ags picker
 
@@ -232,14 +236,20 @@ attribute caches expired, not a guaranteed-cold cache):
 
 ## Configuration
 
-Planned, to keep repo-specific values out of the code:
+Repo-specific values stay out of the code:
 
 - Wallpaper command: read from the `SHARD_VIEW_WALLPAPER_COMMAND` environment
-  variable (the file path is appended as an argument). The Home Manager module
-  sets it (here, to `set-wallpaper` from `modules/desktop/awww.nix`). Unset
-  means no "Set wallpaper" button.
+  variable (parsed like a shell command; the image path is appended). Unset
+  means no "Set wallpaper" button or `w` key.
 - Default folder: the command-line argument; the bar button passes the
   wallpaper folder.
+
+Home Manager module options (`homeManager.shard-view`):
+
+| Option | Does |
+| --- | --- |
+| `shard.shard-view.wallpaperCommand` | Wraps the binary with `SHARD_VIEW_WALLPAPER_COMMAND` (as a default, so the environment can still override it). Here `set-wallpaper` from `modules/desktop/awww.nix`. |
+| `shard.shard-view.defaultViewer` | On each activation runs `xdg-mime default dev.shard.View.desktop` for the three image types. `~/.config/mimeapps.list` stays unmanaged, so the other defaults and Thunar's "Open With" keep working; only those three lines change. |
 
 ## Spinning off
 
@@ -249,7 +259,7 @@ What ties it to this repo, and what to do about each when it moves:
 | --- | --- | --- |
 | Colours | `theme.scss` copied from `ags-shell` at build time | Vendor the palette, or read colours from a CSS file / GTK theme |
 | Package | `perSystem` in this flake, `inputs.gnim` | Its own `flake.nix` with a `gnim` input and `packages.default`; this repo takes it as an input |
-| Home Manager module | `flake.modules.homeManager.shard-view` here | Export `homeManagerModules.default` from the new flake, with options for the wallpaper command and default-viewer registration |
+| Home Manager module | `flake.modules.homeManager.shard-view` here, options under `shard.shard-view` | Export it as `homeManagerModules.default` from the new flake (options can move to `programs.shard-view`) |
 | Wallpaper command | `set-wallpaper` (awww) | Configuration only (see above); nothing hardcoded |
 | Default folder | wallpaper folder passed by ags-shell | Command-line argument only |
 | Docs | `docs/shard-view.md` points here | This README is the repo README |

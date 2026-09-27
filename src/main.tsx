@@ -19,6 +19,22 @@ const app = new Gtk.Application({
   flags: Gio.ApplicationFlags.NON_UNIQUE | Gio.ApplicationFlags.HANDLES_OPEN,
 })
 
+let subfolders = false
+
+app.add_main_option(
+  "subfolders",
+  "r".charCodeAt(0),
+  GLib.OptionFlags.NONE,
+  GLib.OptionArg.NONE,
+  "Include images in subfolders",
+  null,
+)
+
+app.connect("handle-local-options", (_app, options: GLib.VariantDict) => {
+  subfolders = options.contains("subfolders")
+  return -1
+})
+
 app.connect("startup", () => {
   const display = Gdk.Display.get_default()!
   const provider = new Gtk.CssProvider()
@@ -34,7 +50,7 @@ app.connect("startup", () => {
 // Each window gets its own gnim scope, disposed when the window goes away.
 function openWindow(directory: string, file: string | null = null) {
   createRoot((dispose) => {
-    const win = ViewerWindow(app, directory, file)
+    const win = ViewerWindow(app, directory, file, subfolders)
     win.connect("destroy", dispose)
     win.present()
   })

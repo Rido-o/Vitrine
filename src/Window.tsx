@@ -19,12 +19,13 @@ const TILE_WIDTH = 272
 const TILE_HEIGHT = 153
 const TOAST_SECONDS = 2
 
-// A viewer window on `directory`; with `file`, that image opens in the
-// full-screen view.
+// A viewer window on `directory` (and its subfolders with `subfolders`); with
+// `file`, that image opens in the full-screen view.
 export default function ViewerWindow(
   app: Gtk.Application,
   directory: string,
   file: string | null = null,
+  subfolders = false,
 ) {
   let win: Gtk.ApplicationWindow
   let stack: Gtk.Stack
@@ -41,6 +42,7 @@ export default function ViewerWindow(
   const wallpaperArgv = wallpaperCommand()
 
   const library = new Library()
+  library.recursive = subfolders
   const history = new History()
   const preview = new ZoomableImage({ hexpand: true, vexpand: true })
 
@@ -554,6 +556,7 @@ export default function ViewerWindow(
               <box class="viewer-pill">
                 <togglebutton
                   label="Subfolders"
+                  active={subfolders}
                   tooltipText="Include images in subfolders"
                   onToggled={({ active }) => setRecursive(active)}
                 />

@@ -1,5 +1,16 @@
 {inputs, ...}: {
-  perSystem = {pkgs, ...}: {
+  perSystem = {pkgs, ...}: let
+    desktopItem = pkgs.makeDesktopItem {
+      name = "dev.shard.View";
+      desktopName = "shard-view";
+      genericName = "Image Viewer";
+      exec = "shard-view %f";
+      icon = "image-x-generic";
+      categories = ["Graphics" "Viewer"];
+      mimeTypes = ["image/jpeg" "image/png" "image/webp"];
+      startupWMClass = "dev.shard.View";
+    };
+  in {
     packages.shard-view = pkgs.stdenv.mkDerivation {
       pname = "shard-view";
       version = "0.1.0";
@@ -49,6 +60,7 @@
         mkdir -p $out/bin $out/share/shard-view
         cp main.js $out/share/shard-view/
         cp -r icons $out/share/shard-view/
+        cp -r ${desktopItem}/share/applications $out/share/
 
         # wrapGAppsHook points GdkPixbuf at librsvg's loaders.cache, which has
         # no WebP; build one with the webp loader too (used for thumbnails).
@@ -79,7 +91,50 @@
     };
   };
 
-  flake.modules.homeManager.shard-view = {pkgs, ...}: {
-    home.packages = [inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.shard-view];
+  flake.modules.homeManager.shard-view = {
+    config,
+    lib,
+    pkgs,
+    ...
+  }: let
+    cfg = config.shard.shard-view;
+    base = inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.shard-view;
+  in {
+    options.shard.shard-view.wallpaperCommand = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "set-wallpaper";
+      description = "Command run with an image path to set it as the wallpaper; null hides the action.";
+    };
+
+    options.shard.shard-view.defaultViewer = lib.mkEnableOption ''
+      making shard-view the default for the image types it handles. Set with
+      xdg-mime on each activation, so ~/.config/mimeapps.list stays unmanaged
+      (other defaults and Thunar's "Open With" keep working)
+    '';
+
+    config.home.activation.shard-view-default = lib.mkIf cfg.defaultViewer (
+      lib.hm.dag.entryAfter ["writeBoundary"] ''
+        run ${pkgs.xdg-utils}/bin/xdg-mime default dev.shard.View.desktop \
+          image/jpeg image/png image/webp
+      ''
+    );
+
+    config.home.packages = [
+      (
+        if cfg.wallpaperCommand == null
+        then base
+        else
+          pkgs.symlinkJoin {
+            name = "shard-view";
+            paths = [base];
+            nativeBuildInputs = [pkgs.makeBinaryWrapper];
+            postBuild = ''
+              wrapProgram $out/bin/shard-view \
+                --set-default SHARD_VIEW_WALLPAPER_COMMAND ${lib.escapeShellArg cfg.wallpaperCommand}
+            '';
+          }
+      )
+    ];
   };
 }
