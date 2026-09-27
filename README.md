@@ -15,8 +15,8 @@ It lives in this repo for now but is meant to be spun off into its own; see
 | --- | --- |
 | 1. Scaffold | Done: builds, opens a placeholder window |
 | 2. Port the picker | Done: grid, sorting, history, subfolders, view, set wallpaper |
-| 3. Startup speed | Next |
-| 4. Integration | Planned |
+| 3. Startup speed | Done: async scanning, cache moved to ~/.cache/shard-view |
+| 4. Integration | Next |
 | 5. Remove the ags picker | Planned |
 
 ## Goals
@@ -116,8 +116,10 @@ icons/              bundled symbolic icons (Font Awesome Free, CC BY 4.0)
    external, JSX via `gnim/gtk4`, CSS loaded as text, `ICONS_DIR` defined as
    the installed icons path.
 4. Installs `share/shard-view/{main.js,icons}` and `bin/shard-view`
-   (`gjs -m main.js`), wrapped by `wrapGAppsHook4` (typelibs, pixbuf loaders
-   including `webp-pixbuf-loader`).
+   (`gjs -m main.js`), wrapped with `wrapGAppsHook4`'s arguments by hand
+   (`dontWrapGApps`) so our own GdkPixbuf `loaders.cache` (gdk-pixbuf's
+   loaders plus librsvg and `webp-pixbuf-loader`, built with
+   `gdk-pixbuf-query-loaders`) overrides the hook's.
 
 There's no type checking: esbuild strips types. Adding `tsc --noEmit` with
 `@girs` types is a spin-off task.
@@ -138,6 +140,11 @@ Things that broke during the port and look like harmless cleanups:
 - **Each window is created inside gnim's `createRoot`** (`main.tsx`), disposed
   on `destroy`. AGS's `app.start()` did this implicitly; without it gnim logs
   "out of tracking context" and can't clean up.
+- **WebP thumbnails need our own `loaders.cache`.** `wrapGAppsHook4` sets
+  `GDK_PIXBUF_MODULE_FILE` to librsvg's cache, which has no WebP, so GdkPixbuf
+  (thumbnails, resolution) failed on `.webp` while the full-screen view (GTK's
+  own loaders) worked. Adding our `--set` to `gappsWrapperArgs` isn't enough:
+  the hook's comes later and wins, hence the manual wrap.
 - **Test decoding headless**: bundle a small entry that imports the module
   with esbuild and run it with the package's own `gjs` and `GI_TYPELIB_PATH`
   (from the wrapper); a different gjs mismatches the typelibs.
@@ -178,19 +185,30 @@ Source: `modules/desktop/ags-shell/config/widget/wallpapers/` and
   `Gtk.Popover`/`Gtk.DropDown` later now that popups work.
 - Set the program name (`GLib.set_prgname`) so it isn't reported as `gjs`.
 
-### Phase 3: startup speed
+### Phase 3: startup speed (done)
 
 Every launch is cold now, and big folders live on NFS (`/mnt/data`).
 
 - Asynchronous, batched scanning (`enumerate_children_async` /
-  `next_files_async`): show the window straight away and fill the grid as
-  batches arrive.
-- Move the thumbnail cache from `~/.cache/ags/wallpapers` to
-  `~/.cache/shard-view/thumbnails` with a one-off migration (same file naming,
-  so the ~5,600 existing thumbnails are reused).
-- Keep JPEG thumbnails; the freedesktop thumbnail spec (shared with Thunar) is
+  `next_files_async`, 200 entries per batch, 4 folders read concurrently since
+  each call is an NFS round trip). The window shows straight away; images are
+  inserted in sort order as batches arrive; opening another folder cancels the
+  scan; the grid says "Scanning…" until the first images arrive.
+- A file on the command line opens in the full-screen view before the scan;
+  the grid selects it when the scan reaches it.
+- The thumbnail cache moved from `~/.cache/ags/wallpapers` to
+  `~/.cache/shard-view/thumbnails` (a one-off rename on first run, same file
+  naming, so existing thumbnails are reused).
+- Thumbnails stay JPEG; the freedesktop thumbnail spec (shared with Thunar) is
   an option later, but PNG decodes slower.
-- Time a cold launch on a small folder and on the largest one, before and after.
+
+Scan timings (headless, recursive; "cold" is the first run after NFS
+attribute caches expired, not a guaranteed-cold cache):
+
+| Folder | Images | Blocking scan | Async, first images | Async, complete |
+| --- | --- | --- | --- | --- |
+| Desktop Wallpapers | 53 | 16–45 ms | 2–3 ms | 10–11 ms |
+| `/mnt/data/Images` | 9,680 | 451 ms warm, 1.9 s cold | 2–3 ms | 244 ms warm, ~1 s cold |
 
 ### Phase 4: integration (this repo)
 

@@ -49,6 +49,17 @@
         mkdir -p $out/bin $out/share/shard-view
         cp main.js $out/share/shard-view/
         cp -r icons $out/share/shard-view/
+
+        # wrapGAppsHook points GdkPixbuf at librsvg's loaders.cache, which has
+        # no WebP; build one with the webp loader too (used for thumbnails).
+        cache=$out/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
+        mkdir -p $(dirname $cache)
+        ${pkgs.gdk-pixbuf.dev}/bin/gdk-pixbuf-query-loaders \
+          ${pkgs.gdk-pixbuf}/lib/gdk-pixbuf-2.0/2.10.0/loaders/*.so \
+          ${pkgs.librsvg}/lib/gdk-pixbuf-2.0/2.10.0/loaders/*.so \
+          ${pkgs.webp-pixbuf-loader}/lib/gdk-pixbuf-2.0/2.10.0/loaders/*.so \
+          > $cache
+
         cat > $out/bin/shard-view <<EOF
         #!${pkgs.runtimeShell}
         exec ${pkgs.gjs}/bin/gjs -m $out/share/shard-view/main.js "\$@"
@@ -56,6 +67,14 @@
         chmod +x $out/bin/shard-view
 
         runHook postInstall
+      '';
+
+      # Wrap by hand so our loaders.cache comes after (and overrides) the
+      # hook's own GDK_PIXBUF_MODULE_FILE.
+      dontWrapGApps = true;
+      postFixup = ''
+        wrapProgram $out/bin/shard-view "''${gappsWrapperArgs[@]}" \
+          --set GDK_PIXBUF_MODULE_FILE $out/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
       '';
     };
   };
