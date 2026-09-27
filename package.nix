@@ -113,7 +113,7 @@ in
 
     meta = {
       description = "GTK4 image viewer and wallpaper picker";
-      homepage = "https://github.com/Rido-o/vitrine";
+      homepage = "https://github.com/Rido-o/Vitrine";
       mainProgram = "vitrine";
       platforms = lib.platforms.linux;
     };

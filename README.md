@@ -61,14 +61,14 @@ Files:
 With Nix flakes:
 
 ```sh
-nix run github:Rido-o/vitrine -- DIR
+nix run github:Rido-o/Vitrine -- DIR
 ```
 
 In a Home Manager configuration:
 
 ```nix
 {
-  inputs.vitrine.url = "github:Rido-o/vitrine";
+  inputs.vitrine.url = "github:Rido-o/Vitrine";
   inputs.vitrine.inputs.nixpkgs.follows = "nixpkgs";
 }
 ```
