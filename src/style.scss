@@ -1,0 +1,6 @@
+@use "theme" as t;
+
+window {
+  background-color: t.$bg;
+  color: t.$fg;
+}
