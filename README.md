@@ -23,7 +23,10 @@ your wallpaper with a command of your choice.
 - **Full-screen view**: scroll to zoom around the cursor (from fit up to 8×
   actual pixels), drag to pan, double-click to toggle fit/100%, and `s` for
   sharp (nearest-neighbour) pixels. Images are drawn with GTK's default filter,
-  snapped to whole device pixels.
+  snapped to whole device pixels. The two images on each side are decoded in
+  the background, so ←/→ are instant, and decoding never freezes the window.
+  While an image is still decoding (e.g. holding an arrow key) its thumbnail
+  is shown, then swapped for the full image.
 - **Set wallpaper** (button or `w`) runs a configurable command with the image
   path and shows a "Wallpaper set" toast; the viewer stays open.
 - **Delete** moves the image to the trash, and **Ctrl+Z** (or the toast's Undo)
@@ -141,6 +144,8 @@ src/
   Thumbnails.ts     thumbnail cache (disk + memory), loading, concurrency
   History.ts        folder history file
   ZoomableImage.ts  full-screen image widget (zoom, pan, sharp mode)
+  ImageCache.ts     full-size images: the one shown plus ±2 preloaded
+  decode.ts         threaded image decoding (GdkPixbuf), shared with thumbnails
   Trash.ts          trash and exact-item restore through GVfs (trash:///)
   util.ts           names, folder helpers, file-manager D-Bus call, wallpaper
   style.scss        styles
@@ -203,6 +208,18 @@ Things that broke and look like harmless cleanups:
   1,000 cached thumbnails versus a flat ~230 MB with it (~405 MB once
   full-size originals are being decoded, a high-water mark that then stays
   flat).
+- **Decode with GdkPixbuf's async API (`decode.ts`), not
+  `Gdk.Texture.new_from_bytes`.** The latter decodes on the main thread and
+  froze the window for the whole decode (up to ~150 ms for a 12 MP WebP, ~90
+  ms for 8K JPEGs); preloading four neighbours with it would freeze on every
+  keypress. The async API takes the same time in a worker thread (measured
+  stalls ≤ 12 ms). With preloading, the next image shows in ~0 ms instead of
+  ~70 ms.
+- **Preloads are cancelled and queued (`ImageCache.ts`).** Dropping a preload
+  from the cache must cancel its decode, and at most two decodes run with the
+  shown image first: otherwise holding an arrow key (~30 presses/s) piled up
+  decodes of images already passed, and the one stopped on appeared ~925 ms
+  after release instead of ~40 ms.
 - **Undo restores an exact trash item, never "the newest".** GVfs's deletion
   dates have one-second resolution, so two deletes of the same path in a
   second can't be told apart by date (restoring the "newest" picked the wrong
@@ -231,6 +248,8 @@ caches expired):
 - More CSS improvements.
 - Clicking the left/right thirds of the full-screen view goes to the
   previous/next image, ideally with a matching cursor.
+- Honour a JPEG's embedded rotation (EXIF orientation) in thumbnails and the
+  full-screen view; neither decoder applies it.
 - Thumbnails at the image's own aspect ratio, and account for margins when
   calculating thumbnail width (they end up too wide).
 - The folder history panel and sort pill could become a `Gtk.Popover` /

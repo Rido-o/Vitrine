@@ -1,9 +1,9 @@
 import Gdk from "gi://Gdk?version=4.0"
 import Gtk from "gi://Gtk?version=4.0"
 import GObject from "gi://GObject"
-import Gio from "gi://Gio"
 import Graphene from "gi://Graphene"
 import Gsk from "gi://Gsk"
+import ImageCache, { Cancelled } from "./ImageCache"
 
 const ZOOM_STEP = 1.2
 const MAX_ZOOM = 8
@@ -20,6 +20,8 @@ const ZoomableImage = GObject.registerClass(
     declare private dragStartY: number
     declare private sharp: boolean
     declare private path: string | null
+    declare private images: ImageCache
+    declare private showingPlaceholder: boolean
 
     constructor(params?: Partial<Gtk.Widget.ConstructorProps>) {
       super(params)
@@ -33,6 +35,8 @@ const ZoomableImage = GObject.registerClass(
       this.dragStartY = 0
       this.sharp = false
       this.path = null
+      this.images = new ImageCache()
+      this.showingPlaceholder = false
       this.overflow = Gtk.Overflow.HIDDEN
 
       let pointerX = 0
@@ -76,26 +80,54 @@ const ZoomableImage = GObject.registerClass(
       this.add_controller(click)
     }
 
-    setFile(path: string | null) {
+    // Shows `path` (null clears the view and the cache); `neighbours` are
+    // preloaded in order and everything else is dropped. `placeholder` (the
+    // thumbnail) is shown until the full image is decoded.
+    setFile(
+      path: string | null,
+      neighbours: string[] = [],
+      placeholder: Gdk.Texture | null = null,
+    ) {
+      this.images.keep(path ? [path, ...neighbours] : [])
       if (path !== null && path === this.path) return
       this.path = path
       const id = ++this.loadId
+      this.showingPlaceholder = false
       if (!path) {
         this.texture = null
         this.queue_draw()
         return
       }
-      Gio.File.new_for_path(path).load_bytes_async(null, (file, result) => {
-        if (id !== this.loadId) return
-        try {
-          const [bytes] = file!.load_bytes_finish(result)
-          this.texture = Gdk.Texture.new_from_bytes(bytes)
-        } catch (error) {
-          console.error(`Could not load ${path}:`, error)
-          this.texture = null
-        }
+      if (placeholder) {
+        this.texture = placeholder
+        this.showingPlaceholder = true
         this.resetZoom()
-      })
+      }
+      this.images
+        .get(path)
+        .then((texture) => {
+          if (id === this.loadId) this.showTexture(texture)
+        })
+        .catch((error) => {
+          if (error instanceof Cancelled) return
+          console.error(`Could not load ${path}:`, error)
+          if (id === this.loadId) {
+            this.texture = null
+            this.resetZoom()
+          }
+        })
+    }
+
+    // Replacing the placeholder keeps its on-screen size if zoomed.
+    private showTexture(texture: Gdk.Texture) {
+      const previous = this.texture
+      const keepZoom = this.showingPlaceholder && !this.fitted && previous
+      this.texture = texture
+      this.showingPlaceholder = false
+      if (!keepZoom) return this.resetZoom()
+      this.scale *= previous.get_width() / texture.get_width()
+      this.clampOffsets()
+      this.queue_draw()
     }
 
     toggleSharp() {

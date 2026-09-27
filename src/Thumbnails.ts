@@ -3,6 +3,7 @@ import GdkPixbuf from "gi://GdkPixbuf"
 import Gio from "gi://Gio"
 import GLib from "gi://GLib"
 import System from "system"
+import { decodeImage } from "./decode"
 import { APP_NAME, basename, cached, OLD_APP_NAME } from "./util"
 
 // Decoded size of cached thumbnails (the cache keeps these dimensions so
@@ -145,47 +146,6 @@ function cachePath(file: string, mtime: number) {
   return GLib.build_filenamev([THUMBNAIL_CACHE, `${hash}.jpg`])
 }
 
-function decodeImage(path: string, scale: boolean): Promise<GdkPixbuf.Pixbuf> {
-  return new Promise((resolve, reject) => {
-    Gio.File.new_for_path(path).read_async(
-      GLib.PRIORITY_LOW,
-      null,
-      (source, result) => {
-        let stream: Gio.InputStream
-        try {
-          stream = (source as Gio.File).read_finish(result)
-        } catch (error) {
-          reject(error)
-          return
-        }
-        const onDone = (_source: unknown, res: Gio.AsyncResult) => {
-          try {
-            const pixbuf = GdkPixbuf.Pixbuf.new_from_stream_finish(res)
-            stream.close(null)
-            if (!pixbuf) throw new Error("Could not decode image")
-            resolve(pixbuf)
-          } catch (error) {
-            stream.close(null)
-            reject(error)
-          }
-        }
-        if (scale) {
-          GdkPixbuf.Pixbuf.new_from_stream_at_scale_async(
-            stream,
-            THUMBNAIL_WIDTH,
-            THUMBNAIL_HEIGHT,
-            true,
-            null,
-            onDone,
-          )
-        } else {
-          GdkPixbuf.Pixbuf.new_from_stream_async(stream, null, onDone)
-        }
-      },
-    )
-  })
-}
-
 export function loadThumbnail(file: string, mtime: number) {
   const existing = getTexture(file)
   if (existing) return Promise.resolve(existing)
@@ -198,9 +158,7 @@ export function loadThumbnail(file: string, mtime: number) {
 
     if (GLib.file_test(path, GLib.FileTest.EXISTS)) {
       try {
-        const texture = Gdk.Texture.new_for_pixbuf(
-          await decodeImage(path, false),
-        )
+        const texture = Gdk.Texture.new_for_pixbuf(await decodeImage(path))
         touchIfStale(path)
         return texture
       } catch (error) {
@@ -209,7 +167,10 @@ export function loadThumbnail(file: string, mtime: number) {
     }
 
     return withConcurrencyLimit(async () => {
-      const pixbuf = await decodeImage(file, true)
+      const pixbuf = await decodeImage(file, {
+        width: THUMBNAIL_WIDTH,
+        height: THUMBNAIL_HEIGHT,
+      })
       try {
         pixbuf.savev(path, "jpeg", ["quality"], ["85"])
       } catch (error) {
@@ -237,6 +198,11 @@ export function getImageInfo(file: string) {
     const [, width, height] = GdkPixbuf.Pixbuf.get_file_info(file)
     return { filename: basename(file), resolution: `${width} × ${height}` }
   })
+}
+
+// The thumbnail if it's already in memory; never loads.
+export function peekThumbnail(file: string) {
+  return textures.get(file) ?? null
 }
 
 export function evictThumbnail(file: string) {

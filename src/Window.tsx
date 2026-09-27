@@ -5,7 +5,7 @@ import Graphene from "gi://Graphene"
 import Gtk from "gi://Gtk?version=4.0"
 import History from "./History"
 import Library, { type SortKey } from "./Library"
-import { getImageInfo, loadThumbnail } from "./Thumbnails"
+import { getImageInfo, loadThumbnail, peekThumbnail } from "./Thumbnails"
 import { moveToTrash, restore, trashAvailable, type TrashedItem } from "./Trash"
 import ZoomableImage from "./ZoomableImage"
 import {
@@ -22,6 +22,8 @@ const TILE_WIDTH = 272
 const TILE_HEIGHT = 153
 const TOAST_SECONDS = 2
 const UNDO_TOAST_SECONDS = 5
+// Full-size images preloaded on each side of the one in the full-screen view.
+const PRELOAD_EACH_SIDE = 2
 const NO_GVFS = "Moving to the trash needs GVfs, which isn't available"
 
 // A viewer window on `directory` (and its subfolders with `subfolders`); with
@@ -383,8 +385,25 @@ export default function ViewerWindow(
 
   // --- full-screen view ----------------------------------------------------
 
+  // The images ←/→ would reach next, nearest first (wrapping like
+  // movePreview), for the view to preload.
+  function neighbours(index: number) {
+    const count = library.paths.length
+    const paths: string[] = []
+    for (let step = 1; step <= PRELOAD_EACH_SIDE; step++) {
+      for (const offset of [step, -step]) {
+        const path = library.paths[(index + offset + count) % count]
+        if (path && !paths.includes(path)) paths.push(path)
+      }
+    }
+    return paths.filter((path) => path !== library.paths[index])
+  }
+
   function updatePreviewImage() {
-    withSelectedPath((path) => preview.setFile(path))
+    const index = selection.selected
+    withSelectedPath((path) =>
+      preview.setFile(path, neighbours(index), peekThumbnail(path)),
+    )
   }
 
   function refreshPreviewIfOpen() {
