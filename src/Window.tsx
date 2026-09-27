@@ -57,6 +57,7 @@ export default function ViewerWindow(
   library.recursive = subfolders
   const history = new History()
   const preview = new ZoomableImage({ hexpand: true, vexpand: true })
+  preview.onNavigate = (offset) => movePreview(offset)
 
   const historyList = new Gtk.Box({
     orientation: Gtk.Orientation.VERTICAL,

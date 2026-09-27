@@ -7,6 +7,8 @@ import ImageCache, { Cancelled } from "./ImageCache"
 
 const ZOOM_STEP = 1.2
 const MAX_ZOOM = 8
+// Share of the width at each side that navigates when clicked (at fit).
+const NAV_EDGE = 1 / 6
 
 const ZoomableImage = GObject.registerClass(
   class ZoomableImage extends Gtk.Widget {
@@ -22,6 +24,10 @@ const ZoomableImage = GObject.registerClass(
     declare private path: string | null
     declare private images: ImageCache
     declare private showingPlaceholder: boolean
+    declare private pointerX: number
+    declare private pointerY: number
+    // Called with -1/1 when the left/right edge is clicked at fit-to-screen.
+    declare onNavigate: (offset: number) => void
 
     constructor(params?: Partial<Gtk.Widget.ConstructorProps>) {
       super(params)
@@ -37,14 +43,16 @@ const ZoomableImage = GObject.registerClass(
       this.path = null
       this.images = new ImageCache()
       this.showingPlaceholder = false
+      this.pointerX = 0
+      this.pointerY = 0
+      this.onNavigate = () => {}
       this.overflow = Gtk.Overflow.HIDDEN
 
-      let pointerX = 0
-      let pointerY = 0
       const motion = new Gtk.EventControllerMotion()
       motion.connect("motion", (_c, x, y) => {
-        pointerX = x
-        pointerY = y
+        this.pointerX = x
+        this.pointerY = y
+        this.updateCursor()
       })
       this.add_controller(motion)
 
@@ -52,7 +60,7 @@ const ZoomableImage = GObject.registerClass(
         flags: Gtk.EventControllerScrollFlags.VERTICAL,
       })
       scroll.connect("scroll", (_c, _dx, dy) => {
-        this.zoomAt(ZOOM_STEP ** -dy, pointerX, pointerY)
+        this.zoomAt(ZOOM_STEP ** -dy, this.pointerX, this.pointerY)
         return true
       })
       this.add_controller(scroll)
@@ -73,9 +81,15 @@ const ZoomableImage = GObject.registerClass(
       drag.connect("drag-end", () => this.updateCursor())
       this.add_controller(drag)
 
+      // At fit-to-screen, a click in the left/right edge navigates straight
+      // away (fast clicks skip several images), so double-click toggles zoom
+      // only in the middle. Zoomed in, clicks there do nothing and
+      // dragging pans.
       const click = new Gtk.GestureClick({ button: Gdk.BUTTON_PRIMARY })
       click.connect("pressed", (_g, nPress, x, y) => {
-        if (nPress === 2) this.toggleActualSize(x, y)
+        const region = this.region(x)
+        if (region === 0 && nPress === 2) this.toggleActualSize(x, y)
+        else if (region === -1 || region === 1) this.onNavigate(region)
       })
       this.add_controller(click)
     }
@@ -208,8 +222,27 @@ const ZoomableImage = GObject.registerClass(
       )
     }
 
+    // -1/1 for the left/right edge at fit-to-screen, otherwise 0 (so when
+    // zoomed in, double-click works anywhere and single clicks do nothing).
+    private region(x: number) {
+      if (!this.fitted || !this.texture) return 0
+      const width = this.get_width()
+      if (x < width * NAV_EDGE) return -1
+      if (x > width * (1 - NAV_EDGE)) return 1
+      return 0
+    }
+
     private updateCursor() {
-      this.set_cursor_from_name(this.fitted ? null : "grab")
+      const region = this.region(this.pointerX)
+      this.set_cursor_from_name(
+        !this.fitted
+          ? "grab"
+          : region === -1
+            ? "w-resize"
+            : region === 1
+              ? "e-resize"
+              : null,
+      )
     }
 
     vfunc_measure(): [number, number, number, number] {

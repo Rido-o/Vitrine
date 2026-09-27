@@ -21,9 +21,10 @@ your wallpaper with a command of your choice.
 - **Info bar**: the filename (click to show it in your file manager over
   `org.freedesktop.FileManager1`), resolution, rescan, view and Set wallpaper.
 - **Full-screen view**: scroll to zoom around the cursor (from fit up to 8×
-  actual pixels), drag to pan, double-click to toggle fit/100%, and `s` for
-  sharp (nearest-neighbour) pixels. Images are drawn with GTK's default filter,
-  snapped to whole device pixels. The two images on each side are decoded in
+  actual pixels), drag to pan, click the left/right edge (a sixth of the width)
+  for the previous/next image, double-click (the middle) to toggle fit/100%,
+  and `s` for sharp (nearest-neighbour) pixels. Images are drawn with GTK's
+  default filter, snapped to whole device pixels. The two images on each side are decoded in
   the background, so ←/→ are instant, and decoding never freezes the window.
   While an image is still decoding (e.g. holding an arrow key) its thumbnail
   is shown, then swapped for the full image.
@@ -56,7 +57,9 @@ Keys (grid unless noted):
 | Ctrl+Z | Undo the last delete; repeat to go further back (grid and view) |
 | Esc, `q` | Close the view, or quit from the grid |
 | ←/→ (view) | Previous/next image |
-| scroll, drag, double-click (view) | Zoom, pan, fit/100% |
+| click the left/right sixth (view, at fit) | Previous/next image; the cursor shows an arrow there |
+| scroll, drag (view) | Zoom around the cursor, pan when zoomed in |
+| double-click (view) | Toggle fit/100%: the middle at fit, anywhere when zoomed |
 | `+`/`=`, `-`, `0` (view) | Zoom in, out, fit |
 | `s` (view) | Sharp pixels |
 
@@ -248,8 +251,6 @@ caches expired):
 
 - Show file size.
 - More CSS improvements.
-- Clicking the left/right thirds of the full-screen view goes to the
-  previous/next image, ideally with a matching cursor.
 - Thumbnails at the image's own aspect ratio, and account for margins when
   calculating thumbnail width (they end up too wide).
 - The folder history panel and sort pill could become a `Gtk.Popover` /
