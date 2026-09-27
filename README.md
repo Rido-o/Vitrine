@@ -14,8 +14,8 @@ It lives in this repo for now but is meant to be spun off into its own; see
 | Phase | State |
 | --- | --- |
 | 1. Scaffold | Done: builds, opens a placeholder window |
-| 2. Port the picker | Next |
-| 3. Startup speed | Planned |
+| 2. Port the picker | Done: grid, sorting, history, subfolders, view, set wallpaper |
+| 3. Startup speed | Next |
 | 4. Integration | Planned |
 | 5. Remove the ags picker | Planned |
 
@@ -95,6 +95,7 @@ src/
   Thumbnails.ts     thumbnail cache (disk + memory), loading, concurrency
   History.ts        folder history file
   ZoomableImage.ts  full-screen image widget (zoom, pan, sharp mode)
+  util.ts           folder helpers, file-manager D-Bus call, wallpaper command
   style.scss        styles; theme.scss is copied in at build time
 icons/              bundled symbolic icons (Font Awesome Free, CC BY 4.0)
 ```
@@ -124,6 +125,23 @@ There's no type checking: esbuild strips types. Adding `tsc --noEmit` with
 Quick check without opening a window: `shard-view --help` loads the whole
 bundle before GApplication prints its help.
 
+For a quick run without installing:
+`SHARD_VIEW_WALLPAPER_COMMAND=set-wallpaper nix run .#shard-view -- DIR`.
+
+### Gotchas
+
+Things that broke during the port and look like harmless cleanups:
+
+- **`await app.runAsync(…)`, not `app.run(…)`.** A blocking `run()` at module
+  top level stops GJS from resolving promises while the main loop runs:
+  thumbnails loaded but their `.then()` never ran, leaving blank tiles.
+- **Each window is created inside gnim's `createRoot`** (`main.tsx`), disposed
+  on `destroy`. AGS's `app.start()` did this implicitly; without it gnim logs
+  "out of tracking context" and can't clean up.
+- **Test decoding headless**: bundle a small entry that imports the module
+  with esbuild and run it with the package's own `gjs` and `GI_TYPELIB_PATH`
+  (from the wrapper); a different gjs mismatches the typelibs.
+
 ## Plan
 
 ### Phase 1: scaffold (done)
@@ -131,7 +149,7 @@ bundle before GApplication prints its help.
 - `gnim` flake input, the package and Home Manager module, `main.tsx` with a
   placeholder window, `jsx.ts`, `style.scss`, one icon.
 
-### Phase 2: port the picker
+### Phase 2: port the picker (done)
 
 Source: `modules/desktop/ags-shell/config/widget/wallpapers/` and
 `styles/Wallpapers.scss`.

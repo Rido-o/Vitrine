@@ -1,18 +1,25 @@
 import "./jsx"
 import Gdk from "gi://Gdk?version=4.0"
 import Gio from "gi://Gio"
+import GLib from "gi://GLib"
 import Gtk from "gi://Gtk?version=4.0"
+import { createRoot } from "gnim"
 import { programArgs, programInvocationName } from "system"
 import css from "./style.css"
+import { APP_NAME, isDirectory } from "./util"
+import ViewerWindow from "./Window"
 
 declare const ICONS_DIR: string
 
+GLib.set_prgname(APP_NAME)
+GLib.set_application_name(APP_NAME)
+
 const app = new Gtk.Application({
   applicationId: "dev.shard.View",
-  flags: Gio.ApplicationFlags.NON_UNIQUE,
+  flags: Gio.ApplicationFlags.NON_UNIQUE | Gio.ApplicationFlags.HANDLES_OPEN,
 })
 
-app.connect("activate", () => {
+app.connect("startup", () => {
   const display = Gdk.Display.get_default()!
   const provider = new Gtk.CssProvider()
   provider.load_from_string(css)
@@ -22,26 +29,36 @@ app.connect("activate", () => {
     Gtk.STYLE_PROVIDER_PRIORITY_USER,
   )
   Gtk.IconTheme.get_for_display(display).add_search_path(ICONS_DIR)
-
-  const win = (
-    <Gtk.ApplicationWindow
-      application={app}
-      title="shard-view"
-      defaultWidth={1200}
-      defaultHeight={800}
-    >
-      <box
-        class="shard-view"
-        halign={Gtk.Align.CENTER}
-        valign={Gtk.Align.CENTER}
-        spacing={8}
-      >
-        <image iconName="image-awesome-symbolic" pixelSize={24} />
-        <label label="shard-view" />
-      </box>
-    </Gtk.ApplicationWindow>
-  ) as Gtk.ApplicationWindow
-  win.present()
 })
 
-app.run([programInvocationName, ...programArgs])
+// Each window gets its own gnim scope, disposed when the window goes away.
+function openWindow(directory: string, file: string | null = null) {
+  createRoot((dispose) => {
+    const win = ViewerWindow(app, directory, file)
+    win.connect("destroy", dispose)
+    win.present()
+  })
+}
+
+// No argument: ~/Pictures, or the current directory without one.
+app.connect("activate", () => {
+  const pictures = GLib.get_user_special_dir(
+    GLib.UserDirectory.DIRECTORY_PICTURES,
+  )
+  openWindow(
+    pictures && isDirectory(pictures) ? pictures : GLib.get_current_dir(),
+  )
+})
+
+// A folder opens its grid; a file opens its folder with the file in the
+// full-screen view. Only the first argument is used.
+app.connect("open", (_app, files: Gio.File[]) => {
+  const path = files[0]?.get_path()
+  if (!path) return app.activate()
+  if (isDirectory(path)) openWindow(path)
+  else openWindow(GLib.path_get_dirname(path), path)
+})
+
+// runAsync, not run: a blocking run() at module top level stops GJS from
+// resolving promises (thumbnails, wallpaper command) while the loop runs.
+await app.runAsync([programInvocationName, ...programArgs])

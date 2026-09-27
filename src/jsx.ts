@@ -10,4 +10,5 @@ Object.assign(intrinsicElements, {
   overlay: Gtk.Overlay,
   scrolledwindow: Gtk.ScrolledWindow,
   stack: Gtk.Stack,
+  togglebutton: Gtk.ToggleButton,
 })

@@ -4,3 +4,263 @@ window {
   background-color: t.$bg;
   color: t.$fg;
 }
+
+@mixin pill-button {
+  padding: 4px 12px;
+  border: none;
+  border-radius: 6px;
+  background-color: transparent;
+  color: t.$fg-muted;
+  transition: t.$transition;
+
+  &:hover {
+    background-color: t.$bg-raised;
+    color: t.$fg-bright;
+  }
+
+  &.active,
+  &:checked {
+    background-color: t.$bg-elevated;
+    color: t.$fg-bright;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+  }
+}
+
+.viewer-library {
+  padding: 16px 20px 20px;
+
+  .viewer-grid {
+    background-color: transparent;
+
+    > child {
+      padding: 6px;
+      outline: none;
+    }
+
+    > child:selected {
+      outline: 3px solid t.$accent;
+      outline-offset: -7px;
+      border-radius: 12px;
+    }
+  }
+
+  picture {
+    background-color: t.$bg-surface;
+  }
+
+  .viewer-thumbnail {
+    border-radius: 8px;
+    transition: t.$transition;
+
+    &:hover {
+      opacity: 0.8;
+    }
+  }
+
+  scrollbar {
+    background-color: transparent;
+
+    slider {
+      min-width: 6px;
+      min-height: 6px;
+      border-radius: 999px;
+      background-color: t.$hover;
+
+      &:hover {
+        background-color: t.$active;
+      }
+    }
+  }
+
+  separator {
+    min-height: 1px;
+    margin-top: 16px;
+    background-color: t.$separator;
+
+    &.viewer-toolbar-separator {
+      margin-top: 8px;
+      margin-bottom: 10px;
+    }
+  }
+
+  .viewer-toolbar {
+    .viewer-directory {
+      padding: 0 12px;
+      border: 1px solid t.$border;
+      border-radius: 8px;
+      background-color: t.$bg-surface;
+      background-image: none;
+      color: t.$fg;
+      outline: none;
+      transition: t.$transition;
+
+      image {
+        margin-right: 8px;
+        color: t.$fg-muted;
+      }
+
+      &:focus-within {
+        border-color: t.$accent;
+      }
+
+      &.error {
+        border-color: t.$red;
+      }
+    }
+
+    .viewer-pill {
+      padding: 3px;
+      border: 1px solid t.$border;
+      border-radius: 8px;
+      background-color: t.$bg-surface;
+
+      button {
+        @include pill-button;
+      }
+    }
+  }
+
+  .viewer-info {
+    margin-top: 8px;
+
+    label {
+      background-color: t.$bg-surface;
+      border: 1px solid t.$border;
+      border-radius: 8px;
+      padding: 8px 16px;
+      color: t.$fg;
+    }
+
+    button label {
+      padding: 0;
+      border: none;
+      background-color: transparent;
+      color: inherit;
+    }
+
+    button {
+      padding: 8px 14px;
+      border: 1px solid t.$border;
+      border-radius: 8px;
+      background-color: t.$bg-surface;
+      color: t.$fg;
+      transition: t.$transition;
+
+      &:hover {
+        background-color: t.$bg-raised;
+        color: t.$fg-bright;
+      }
+
+      &:active {
+        background-color: t.$bg-elevated;
+      }
+    }
+
+    .viewer-filename-button {
+      padding: 0;
+      border: none;
+      background-color: transparent;
+
+      label {
+        padding: 8px 16px;
+        border: 1px solid t.$border;
+        background-color: t.$bg-surface;
+      }
+
+      &:hover label {
+        background-color: t.$bg-raised;
+        color: t.$fg-bright;
+      }
+    }
+  }
+}
+
+.viewer-history {
+  padding: 6px;
+  border: 1px solid t.$border-solid;
+  border-radius: 12px;
+  background-color: t.$bg;
+  box-shadow: t.$window-shadow;
+  color: t.$fg;
+
+  button {
+    padding: 8px 12px;
+    border: none;
+    border-radius: 8px;
+    background-color: transparent;
+    color: t.$fg;
+    outline: none;
+    transition: t.$transition;
+
+    &:hover {
+      background-color: t.$bg-raised;
+      color: t.$fg-bright;
+    }
+
+    &:focus-visible,
+    &:focus {
+      background-color: t.$bg-elevated;
+      color: t.$fg-bright;
+    }
+  }
+}
+
+.viewer-preview {
+  background: black;
+
+  label,
+  button {
+    min-height: 40px;
+    border: 1px solid t.$border;
+    border-radius: 10px;
+    background-color: rgba(t.$bg, 0.85);
+    color: t.$fg;
+  }
+
+  button {
+    padding: 0 12px;
+    box-shadow: t.$card-shadow;
+    transition: t.$transition;
+
+    &:hover {
+      background-color: rgba(t.$bg-raised, 0.95);
+      border-color: t.$separator;
+      color: t.$fg-bright;
+    }
+
+    &:active {
+      background-color: rgba(t.$bg-elevated, 0.95);
+    }
+  }
+
+  .preview-image-info {
+    button {
+      padding: 0;
+
+      label {
+        background-color: transparent;
+        border: none;
+      }
+    }
+
+    label {
+      padding: 0 12px;
+    }
+  }
+}
+
+.viewer-toast {
+  padding: 8px 16px;
+  border: 1px solid t.$border-solid;
+  border-radius: 10px;
+  background-color: rgba(t.$bg, 0.92);
+  box-shadow: t.$card-shadow;
+  color: t.$fg-bright;
+}
+
+.viewer-empty {
+  color: t.$fg-muted;
+}
