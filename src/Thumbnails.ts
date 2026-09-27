@@ -21,11 +21,14 @@ const CACHE_FILE = /^[0-9a-f]{32}\.jpg$/
 // Decoded thumbnails kept in memory (~0.5 MB each), least recently used
 // dropped first; a dropped tile that scrolls back into view reloads from disk.
 const MAX_TEXTURES = 300
-// Dropped textures (and each decode's pixbuf) are only freed when GJS collects
-// their wrappers, and its GC doesn't see their native memory, so without a
-// nudge memory kept growing past the cap (526 MB vs 271 MB after 1,000
-// thumbnails). Collect after this many evictions (~50 MB).
+// Dropped textures and each decode's native memory are only freed when GJS
+// collects their wrappers, and its GC doesn't see that memory, so it's nudged.
+// Without it, memory kept growing past the cap (526 MB vs 271 MB after 1,000
+// thumbnails), and generating thumbnails of large images kept ~8 MB each
+// alive (a 2.9 GB peak for 348 screenshots vs ~0.33 GB). Collect after this
+// many evictions (~50 MB) or generated thumbnails.
 const GC_AFTER_EVICTIONS = 100
+const GC_AFTER_GENERATED = 5
 
 // "-2": thumbnails since EXIF orientation is applied. Older caches hold
 // unrotated thumbnails that can't be told apart, so they're deleted instead.
@@ -57,6 +60,18 @@ function getTexture(file: string) {
 }
 
 let evictions = 0
+let generated = 0
+let gcPending = false
+
+function requestGc() {
+  if (gcPending) return
+  gcPending = true
+  GLib.idle_add(GLib.PRIORITY_LOW, () => {
+    gcPending = false
+    System.gc()
+    return GLib.SOURCE_REMOVE
+  })
+}
 
 function rememberTexture(file: string, texture: Gdk.Texture) {
   textures.delete(file)
@@ -65,10 +80,7 @@ function rememberTexture(file: string, texture: Gdk.Texture) {
     textures.delete(textures.keys().next().value!)
     if (++evictions === GC_AFTER_EVICTIONS) {
       evictions = 0
-      GLib.idle_add(GLib.PRIORITY_LOW, () => {
-        System.gc()
-        return GLib.SOURCE_REMOVE
-      })
+      requestGc()
     }
   }
 }
@@ -158,6 +170,11 @@ export function loadThumbnail(file: string, mtime: number) {
       const pixbuf = await decodeImage(file, {
         width: THUMBNAIL_WIDTH,
         height: THUMBNAIL_HEIGHT,
+      }).finally(() => {
+        if (++generated === GC_AFTER_GENERATED) {
+          generated = 0
+          requestGc()
+        }
       })
       try {
         pixbuf.savev(path, "jpeg", ["quality"], ["85"])

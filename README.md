@@ -213,7 +213,10 @@ Things that broke and look like harmless cleanups:
   memory. Without the nudge, memory kept growing past the cap: 526 MB after
   1,000 cached thumbnails versus a flat ~230 MB with it (~405 MB once
   full-size originals are being decoded, a high-water mark that then stays
-  flat).
+  flat). Generating thumbnails needs its own nudge (every 5): each decode of a
+  large image kept ~8 MB alive until collected, so generating 348 screenshot
+  thumbnails peaked at 2.9 GB, versus ~0.35 GB with it and no slower; a folder
+  under ~400 images never evicts, so the eviction nudge alone never ran.
 - **Decode with GdkPixbuf's async API (`decode.ts`), not
   `Gdk.Texture.new_from_bytes`.** The latter decodes on the main thread and
   froze the window for the whole decode (up to ~150 ms for a 12 MP WebP, ~90
