@@ -99,7 +99,8 @@ a shell command and the image path is appended.
 ```sh
 nix run . -- DIR                                   # build and run
 VITRINE_WALLPAPER_COMMAND=set-wallpaper nix run . -- DIR
-nix develop                                        # gjs, esbuild, dart-sass
+nix flake check                                    # type check (tsc) and flake checks
+nix develop                                        # gjs, esbuild, dart-sass, tsc; links node_modules
 nix fmt                                            # alejandra
 ```
 
@@ -114,7 +115,10 @@ before GApplication prints its help.
 ### Layout
 
 ```
-flake.nix           packages.default, homeManagerModules.default, devShell
+flake.nix           packages.default, homeManagerModules.default,
+                    checks.typecheck, devShell
+package.json        typescript and @girs types, for type checking only
+tsconfig.json
 package.nix         the build
 hm-module.nix       programs.vitrine
 src/
@@ -128,6 +132,8 @@ src/
   util.ts           names, folder helpers, file-manager D-Bus call, wallpaper
   style.scss        styles
   theme.scss        colour palette
+  env.d.ts          gi:// module and GJS global types (@girs), ICONS_DIR
+  assets.d.ts       the bundled CSS module
 icons/              bundled symbolic icons
 ```
 
@@ -151,7 +157,13 @@ icons/              bundled symbolic icons
    by hand (`dontWrapGApps`) so its own GdkPixbuf `loaders.cache` (gdk-pixbuf's
    loaders plus librsvg and `webp-pixbuf-loader`) overrides the hook's.
 
-There's no type checking: esbuild strips types.
+esbuild strips types without checking them; `checks.typecheck` (run by
+`nix flake check`) does, with `tsc --noEmit` against the `@girs` type packages
+pinned in `package-lock.json` (installed offline with `importNpmLock`). They're
+pinned to the `4.0.0-rc.17` generation, which covers GTK 4.23 and matches what
+gnim is written against; the 5.x packages type signal names more strictly than
+gnim's code allows. gnim's own `.ts` source is marked `@ts-nocheck` in the
+check (`skipLibCheck` only covers `.d.ts`), so only Vitrine is checked.
 
 ### Gotchas
 
@@ -196,7 +208,6 @@ caches expired):
   `Gtk.DropDown` (they're inline because Vitrine started as a layer-shell
   overlay, where Hyprland dismissed popups on click).
 - A colour theme that isn't hardcoded (`src/theme.scss`).
-- Type checking: `tsc --noEmit` with `@girs` types.
 
 ## History
 

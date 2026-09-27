@@ -65,7 +65,7 @@ export function wallpaperCommand(): string[] | null {
   if (!command) return null
   try {
     const [, argv] = GLib.shell_parse_argv(command)
-    return argv.length > 0 ? argv : null
+    return argv && argv.length > 0 ? argv : null
   } catch (error) {
     console.error("Invalid VITRINE_WALLPAPER_COMMAND:", error)
     return null

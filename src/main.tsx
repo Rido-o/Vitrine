@@ -9,8 +9,6 @@ import css from "./style.css"
 import { APP_ID, APP_NAME, isDirectory } from "./util"
 import ViewerWindow from "./Window"
 
-declare const ICONS_DIR: string
-
 GLib.set_prgname(APP_NAME)
 GLib.set_application_name(APP_NAME)
 

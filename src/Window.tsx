@@ -29,7 +29,7 @@ export default function ViewerWindow(
   subfolders = false,
 ) {
   let win: Gtk.ApplicationWindow
-  let stack: Gtk.Stack
+  let stack!: Gtk.Stack
   let directoryEntry: Gtk.Entry
   let toast: Gtk.Label
   let toastTimeout = 0
@@ -365,11 +365,7 @@ export default function ViewerWindow(
     stack.visibleChildName = "grid"
     GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
       if (index !== Gtk.INVALID_LIST_POSITION) {
-        grid.scroll_to(
-          index,
-          Gtk.ListScrollFlags.FOCUS | Gtk.ListScrollFlags.SMOOTH,
-          null,
-        )
+        grid.scroll_to(index, Gtk.ListScrollFlags.FOCUS, null)
       }
       grid.grab_focus()
       return GLib.SOURCE_REMOVE

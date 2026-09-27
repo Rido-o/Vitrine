@@ -11,16 +11,17 @@ nix build                          # build the package
 nix run . -- DIR                   # build and run (add -r for subfolders)
 VITRINE_WALLPAPER_COMMAND=set-wallpaper nix run . -- DIR
 nix fmt                            # alejandra (Nix files)
-nix flake check
-nix develop                        # gjs, esbuild, dart-sass
+nix flake check                    # includes checks.typecheck (tsc --noEmit)
+nix develop                        # gjs, esbuild, dart-sass, tsc; links node_modules
 ```
 
 New files must be `git add`ed before the flake can see them.
 
 ### Verifying changes
 
-There are no tests and no type checking (esbuild strips types), so:
+There are no tests, so:
 
+- `nix flake check` type-checks `src/` with `tsc` (esbuild alone strips types). Keep it passing; don't silence errors with `any` or `@ts-ignore` without a comment saying why. The `@girs` packages are deliberately pinned to the `4.0.0-rc.17` generation (see "Build" in the README).
 - `nix build`, then `$(nix build --print-out-paths)/bin/vitrine --help`: GApplication prints help only after the whole bundle has loaded, so this catches import and load-time errors without opening a window.
 - Logic that doesn't need a window (scanning, sorting, thumbnails) can be tested headless: bundle a small entry that imports the module with esbuild and run it with the package's own `gjs` and `GI_TYPELIB_PATH` (both from the wrapper, `bin/.vitrine-wrapped` and `strings bin/vitrine`); a different gjs mismatches the typelibs. See "Gotchas" in the README.
 - Anything visual needs the user to run it; say what to check.
