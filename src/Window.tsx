@@ -6,9 +6,11 @@ import Gtk from "gi://Gtk?version=4.0"
 import History from "./History"
 import Library, { type SortKey } from "./Library"
 import { getImageInfo, loadThumbnail } from "./Thumbnails"
+import { moveToTrash, restore, trashAvailable, type TrashedItem } from "./Trash"
 import ZoomableImage from "./ZoomableImage"
 import {
   APP_TITLE,
+  basename,
   isDirectory,
   normalizeDirectory,
   setWallpaper,
@@ -19,6 +21,8 @@ import {
 const TILE_WIDTH = 272
 const TILE_HEIGHT = 153
 const TOAST_SECONDS = 2
+const UNDO_TOAST_SECONDS = 5
+const NO_GVFS = "Moving to the trash needs GVfs, which isn't available"
 
 // A viewer window on `directory` (and its subfolders with `subfolders`); with
 // `file`, that image opens in the full-screen view.
@@ -31,8 +35,13 @@ export default function ViewerWindow(
   let win: Gtk.ApplicationWindow
   let stack!: Gtk.Stack
   let directoryEntry: Gtk.Entry
-  let toast: Gtk.Label
+  let toast: Gtk.Box
+  let toastLabel: Gtk.Label
+  let toastUndo: Gtk.Button
   let toastTimeout = 0
+  const canTrash = trashAvailable()
+  const undoStack: TrashedItem[] = []
+  let undoQueue = Promise.resolve()
   let emptyLabel: Gtk.Label
   let pendingSelection: string | null = null
   let autoSelected: string | null = null
@@ -110,7 +119,8 @@ export default function ViewerWindow(
 
   function select(index: number, focus = false) {
     if (index < 0 || index >= library.paths.length) {
-      selection.selected = library.paths.length > 0 ? 0 : Gtk.INVALID_LIST_POSITION
+      selection.selected =
+        library.paths.length > 0 ? 0 : Gtk.INVALID_LIST_POSITION
       return
     }
     selection.selected = index
@@ -121,13 +131,14 @@ export default function ViewerWindow(
     )
   }
 
-  function showToast(text: string) {
-    toast.label = text
+  function showToast(text: string, undoable = false) {
+    toastLabel.label = text
+    toastUndo.visible = undoable
     toast.visible = true
     if (toastTimeout) GLib.source_remove(toastTimeout)
     toastTimeout = GLib.timeout_add_seconds(
       GLib.PRIORITY_DEFAULT,
-      TOAST_SECONDS,
+      undoable ? UNDO_TOAST_SECONDS : TOAST_SECONDS,
       () => {
         toast.visible = false
         toastTimeout = 0
@@ -168,19 +179,58 @@ export default function ViewerWindow(
     })
   }
 
+  // Removes the image from the grid straight away (so repeated Delete keeps
+  // going) and puts it back if trashing fails.
   function deleteSelected() {
+    if (!canTrash) return showToast(NO_GVFS)
     withSelectedPath((path) => {
-      try {
-        Gio.File.new_for_path(path).trash(null)
-      } catch (error) {
-        console.error(`Could not delete ${path}:`, error)
-        showToast("Could not move to trash")
-        return
-      }
       const index = library.remove(path)
       if (index !== -1) select(Math.min(index, library.paths.length - 1), true)
       refreshPreviewIfOpen()
       syncInfoLabels()
+      moveToTrash(path)
+        .then((item) => {
+          if (item) {
+            undoStack.push(item)
+            showToast(`Moved ${basename(path)} to the trash`, true)
+          } else {
+            showToast(`Moved ${basename(path)} to the trash (can't be undone)`)
+          }
+        })
+        .catch((error) => {
+          console.error(`Could not delete ${path}:`, error)
+          showToast(`Could not move ${basename(path)} to the trash`)
+          reinsert(path)
+        })
+    })
+  }
+
+  // Puts `path` back in the grid if it belongs to the current folder.
+  function reinsert(path: string) {
+    const index = library.add(path)
+    if (index !== -1) select(index, stack.visibleChildName === "grid")
+    refreshPreviewIfOpen()
+    syncInfoLabels()
+    return index
+  }
+
+  // Restores the most recent delete; restores run one at a time, so repeated
+  // presses go back through the deletes in order.
+  function undoDelete() {
+    if (!canTrash) return showToast(NO_GVFS)
+    undoQueue = undoQueue.then(async () => {
+      const item = undoStack.pop()
+      if (!item) return showToast("Nothing to undo")
+      const name = basename(item.original)
+      const result = await restore(item)
+      if (!result.ok) {
+        return showToast(`Couldn't restore ${name}: ${result.reason}`)
+      }
+      if (reinsert(item.original) === -1) {
+        showToast(`Restored ${name} to ${GLib.path_get_dirname(item.original)}`)
+      } else {
+        showToast(`Restored ${name}`)
+      }
     })
   }
 
@@ -384,7 +434,12 @@ export default function ViewerWindow(
 
   // --- input ---------------------------------------------------------------
 
-  function onKey(_c: Gtk.EventControllerKey, keyval: number) {
+  function onKey(
+    _c: Gtk.EventControllerKey,
+    keyval: number,
+    _keycode: number,
+    state: Gdk.ModifierType,
+  ) {
     if (historyPanel.visible) {
       if (keyval !== Gdk.KEY_Escape) return false
       hideHistory()
@@ -399,6 +454,11 @@ export default function ViewerWindow(
     }
     if (keyval === Gdk.KEY_Delete || keyval === Gdk.KEY_KP_Delete)
       return (deleteSelected(), true)
+    if (
+      (keyval === Gdk.KEY_z || keyval === Gdk.KEY_Z) &&
+      state & Gdk.ModifierType.CONTROL_MASK
+    )
+      return (undoDelete(), true)
     if (keyval === Gdk.KEY_r || keyval === Gdk.KEY_R) return (rescan(), true)
     if (keyval === Gdk.KEY_w || keyval === Gdk.KEY_W)
       return (setSelectedAsWallpaper(), true)
@@ -462,7 +522,11 @@ export default function ViewerWindow(
     )
   }
 
-  function SortButton({ sort, label, tooltip }: {
+  function SortButton({
+    sort,
+    label,
+    tooltip,
+  }: {
     sort: SortKey
     label: string
     tooltip: string
@@ -536,7 +600,11 @@ export default function ViewerWindow(
                   label="Date"
                   tooltip="Sort by date modified"
                 />
-                <SortButton sort="size" label="Size" tooltip="Sort by file size" />
+                <SortButton
+                  sort="size"
+                  label="Size"
+                  tooltip="Sort by file size"
+                />
                 <SortButton
                   sort="random"
                   label="Random"
@@ -677,15 +745,24 @@ export default function ViewerWindow(
             </Gtk.Overlay>
           </box>
         </stack>
-        <label
+        <box
           $type="overlay"
           $={(self) => (toast = self)}
           class="viewer-toast"
           halign={Gtk.Align.CENTER}
           valign={Gtk.Align.START}
           marginTop={72}
+          spacing={12}
           visible={false}
-        />
+        >
+          <label $={(self) => (toastLabel = self)} />
+          <button
+            $={(self) => (toastUndo = self)}
+            label="Undo"
+            tooltipText="Undo (Ctrl+Z)"
+            onClicked={undoDelete}
+          />
+        </box>
       </overlay>
     </Gtk.ApplicationWindow>
   ) as Gtk.ApplicationWindow

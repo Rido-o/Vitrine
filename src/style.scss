@@ -259,6 +259,21 @@ window {
   background-color: rgba(t.$bg, 0.92);
   box-shadow: t.$card-shadow;
   color: t.$fg-bright;
+
+  button {
+    margin: -4px -8px -4px 0;
+    padding: 4px 12px;
+    border: none;
+    border-radius: 6px;
+    background-color: t.$bg-raised;
+    color: t.$accent;
+    font-weight: bold;
+    transition: t.$transition;
+
+    &:hover {
+      background-color: t.$bg-elevated;
+    }
+  }
 }
 
 .viewer-empty {

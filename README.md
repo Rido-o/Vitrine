@@ -26,7 +26,10 @@ your wallpaper with a command of your choice.
   snapped to whole device pixels.
 - **Set wallpaper** (button or `w`) runs a configurable command with the image
   path and shows a "Wallpaper set" toast; the viewer stays open.
-- **Delete** moves the image to the trash.
+- **Delete** moves the image to the trash, and **Ctrl+Z** (or the toast's Undo)
+  restores it, repeatedly back through every delete in the window. Both need
+  [GVfs](https://gitlab.gnome.org/GNOME/gvfs) (its `trash:///`), which most
+  full desktops run; without it they're disabled.
 - JPEG, PNG and WebP; a desktop entry registers Vitrine for those types.
 
 ## Usage
@@ -45,7 +48,8 @@ Keys (grid unless noted):
 | Enter, double-click | Open in the full-screen view |
 | `w` | Set as wallpaper (grid and view) |
 | `r` | Rescan |
-| Delete | Move to trash |
+| Delete | Move to trash (needs GVfs) |
+| Ctrl+Z | Undo the last delete; repeat to go further back (grid and view) |
 | Esc, `q` | Close the view, or quit from the grid |
 | ←/→ (view) | Previous/next image |
 | scroll, drag, double-click (view) | Zoom, pan, fit/100% |
@@ -137,6 +141,7 @@ src/
   Thumbnails.ts     thumbnail cache (disk + memory), loading, concurrency
   History.ts        folder history file
   ZoomableImage.ts  full-screen image widget (zoom, pan, sharp mode)
+  Trash.ts          trash and exact-item restore through GVfs (trash:///)
   util.ts           names, folder helpers, file-manager D-Bus call, wallpaper
   style.scss        styles
   theme.scss        colour palette
@@ -198,6 +203,15 @@ Things that broke and look like harmless cleanups:
   1,000 cached thumbnails versus a flat ~230 MB with it (~405 MB once
   full-size originals are being decoded, a high-water mark that then stays
   flat).
+- **Undo restores an exact trash item, never "the newest".** GVfs's deletion
+  dates have one-second resolution, so two deletes of the same path in a
+  second can't be told apart by date (restoring the "newest" picked the wrong
+  one in testing). `Trash.ts` lists the path's `trash:///` items just before
+  and after trashing; the one new item is recorded and undo moves exactly that
+  back.
+- **Testing trash code headless needs GVfs on a private bus**:
+  `dbus-run-session`, `GIO_EXTRA_MODULES=<gvfs>/lib/gio/modules` and
+  `<gvfs>/libexec/gvfsd --replace &` before running the test.
 - **Test decoding headless**: bundle a small entry that imports the module with
   esbuild and run it with the package's own `gjs` and `GI_TYPELIB_PATH` (from
   the wrapper); a different gjs mismatches the typelibs.

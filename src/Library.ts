@@ -120,7 +120,10 @@ export default class Library {
     let active = 0
     await new Promise<void>((resolve) => {
       const pump = () => {
-        if (cancellable.is_cancelled() || (pending.length === 0 && active === 0))
+        if (
+          cancellable.is_cancelled() ||
+          (pending.length === 0 && active === 0)
+        )
           return resolve()
         while (active < SCAN_WORKERS && pending.length > 0) {
           const directory = pending.shift()!
@@ -272,6 +275,39 @@ export default class Library {
   toggleDirection() {
     this.descending = !this.descending
     this.sort()
+  }
+
+  // Whether `path` belongs in this list (the folder, or below it when
+  // recursive).
+  contains(path: string) {
+    const parent = GLib.path_get_dirname(path)
+    return (
+      isImage(path) &&
+      (parent === this.directory ||
+        (this.recursive && path.startsWith(this.directory + "/")))
+    )
+  }
+
+  // Inserts a file that appeared outside a scan (e.g. restored from the
+  // trash); returns its index, or -1 if it doesn't belong here.
+  add(path: string) {
+    if (!this.contains(path) || this.paths.includes(path)) {
+      return this.paths.indexOf(path)
+    }
+    try {
+      const info = Gio.File.new_for_path(path).query_info(
+        ATTRIBUTES,
+        Gio.FileQueryInfoFlags.NONE,
+        null,
+      )
+      this.mtimes.set(path, info.get_modification_date_time()?.to_unix() ?? 0)
+      this.sizes.set(path, info.get_size())
+    } catch (error) {
+      console.error(`Could not read ${path}:`, error)
+      return -1
+    }
+    this.insert(path)
+    return this.paths.indexOf(path)
   }
 
   remove(path: string) {
