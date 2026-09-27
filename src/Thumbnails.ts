@@ -2,7 +2,7 @@ import Gdk from "gi://Gdk?version=4.0"
 import GdkPixbuf from "gi://GdkPixbuf"
 import Gio from "gi://Gio"
 import GLib from "gi://GLib"
-import { APP_NAME, basename, cached } from "./util"
+import { APP_NAME, basename, cached, OLD_APP_NAME } from "./util"
 
 // Decoded size of cached thumbnails (the cache keeps these dimensions so
 // existing thumbnails stay valid).
@@ -15,12 +15,12 @@ const THUMBNAIL_CACHE = GLib.build_filenamev([
   APP_NAME,
   "thumbnails",
 ])
-// The ags-shell wallpaper picker's cache uses the same naming; move it over
-// once instead of regenerating it.
+// Vitrine was called shard-view; its cache uses the same naming, so move it
+// over once instead of regenerating it.
 const OLD_THUMBNAIL_CACHE = GLib.build_filenamev([
   GLib.get_user_cache_dir(),
-  "ags",
-  "wallpapers",
+  OLD_APP_NAME,
+  "thumbnails",
 ])
 
 if (

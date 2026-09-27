@@ -1,5 +1,5 @@
 import GLib from "gi://GLib"
-import { APP_NAME, isDirectory } from "./util"
+import { APP_NAME, isDirectory, OLD_APP_NAME } from "./util"
 
 const LIMIT = 10
 const FILE = GLib.build_filenamev([
@@ -7,11 +7,12 @@ const FILE = GLib.build_filenamev([
   APP_NAME,
   "history",
 ])
-// Read once if the new file doesn't exist yet.
+// Read once if the new file doesn't exist yet (Vitrine was called
+// shard-view).
 const OLD_FILE = GLib.build_filenamev([
   GLib.get_user_state_dir(),
-  "ags",
-  "wallpaper-history",
+  OLD_APP_NAME,
+  "history",
 ])
 
 function read(path: string) {

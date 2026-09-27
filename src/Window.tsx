@@ -8,6 +8,7 @@ import Library, { type SortKey } from "./Library"
 import { getImageInfo, loadThumbnail } from "./Thumbnails"
 import ZoomableImage from "./ZoomableImage"
 import {
+  APP_TITLE,
   isDirectory,
   normalizeDirectory,
   setWallpaper,
@@ -144,7 +145,7 @@ export default function ViewerWindow(
       label.label = info?.filename ?? "No image selected"
     for (const label of resolutionLabels)
       label.label = info?.resolution ?? "0 × 0"
-    win.title = info ? `${info.filename} — shard-view` : "shard-view"
+    win.title = info ? `${info.filename} — ${APP_TITLE}` : APP_TITLE
     emptyLabel.visible = library.paths.length === 0
     emptyLabel.label = library.loading
       ? "Scanning…"
@@ -485,7 +486,7 @@ export default function ViewerWindow(
   win = (
     <Gtk.ApplicationWindow
       application={app}
-      title="shard-view"
+      title={APP_TITLE}
       defaultWidth={1600}
       defaultHeight={1000}
     >

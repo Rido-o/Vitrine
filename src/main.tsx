@@ -6,7 +6,7 @@ import Gtk from "gi://Gtk?version=4.0"
 import { createRoot } from "gnim"
 import { programArgs, programInvocationName } from "system"
 import css from "./style.css"
-import { APP_NAME, isDirectory } from "./util"
+import { APP_ID, APP_NAME, isDirectory } from "./util"
 import ViewerWindow from "./Window"
 
 declare const ICONS_DIR: string
@@ -15,7 +15,7 @@ GLib.set_prgname(APP_NAME)
 GLib.set_application_name(APP_NAME)
 
 const app = new Gtk.Application({
-  applicationId: "dev.shard.View",
+  applicationId: APP_ID,
   flags: Gio.ApplicationFlags.NON_UNIQUE | Gio.ApplicationFlags.HANDLES_OPEN,
 })
 

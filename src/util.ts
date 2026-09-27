@@ -1,7 +1,11 @@
 import Gio from "gi://Gio"
 import GLib from "gi://GLib"
 
-export const APP_NAME = "shard-view"
+export const APP_NAME = "vitrine"
+export const APP_TITLE = "Vitrine"
+export const APP_ID = "io.github.Rido_o.Vitrine"
+// Name before the rename; its cache and history are moved over once.
+export const OLD_APP_NAME = "shard-view"
 
 export function cached<T>(
   map: Map<string, T>,
@@ -54,16 +58,16 @@ export function showInFileManager(file: string) {
   )
 }
 
-// SHARD_VIEW_WALLPAPER_COMMAND, e.g. "set-wallpaper"; the image path is
+// VITRINE_WALLPAPER_COMMAND, e.g. "set-wallpaper"; the image path is
 // appended as the last argument. Unset hides the "Set wallpaper" action.
 export function wallpaperCommand(): string[] | null {
-  const command = GLib.getenv("SHARD_VIEW_WALLPAPER_COMMAND")?.trim()
+  const command = GLib.getenv("VITRINE_WALLPAPER_COMMAND")?.trim()
   if (!command) return null
   try {
     const [, argv] = GLib.shell_parse_argv(command)
     return argv.length > 0 ? argv : null
   } catch (error) {
-    console.error("Invalid SHARD_VIEW_WALLPAPER_COMMAND:", error)
+    console.error("Invalid VITRINE_WALLPAPER_COMMAND:", error)
     return null
   }
 }
