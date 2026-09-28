@@ -29,7 +29,9 @@ your wallpaper with a command of your choice.
   actual pixels), drag to pan, click the left/right edge (a sixth of the width)
   for the previous/next image, double-click (the middle) to toggle fit/100%,
   `s` for sharp (nearest-neighbour) pixels, and a button (or `f`) to make the
-  window fullscreen; leaving the view restores it. Images are drawn with GTK's
+  window fullscreen; leaving the view restores it. When fullscreen, the buttons,
+  info and cursor fade out after 2 s without mouse movement (not while the
+  pointer is on them or a menu is open). Images are drawn with GTK's
   default filter, snapped to whole device pixels. The two images on each side are decoded in
   the background, so ←/→ are instant, and decoding never freezes the window.
   While an image is still decoding (e.g. holding an arrow key) its thumbnail

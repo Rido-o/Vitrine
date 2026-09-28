@@ -27,6 +27,8 @@ const TILE_WIDTH = 272
 const TILE_HEIGHT = 153
 const TOAST_SECONDS = 2
 const UNDO_TOAST_SECONDS = 5
+// Idle time before the full-screen view's controls hide (when fullscreen).
+const HIDE_CONTROLS_SECONDS = 2
 // Full-size images preloaded on each side of the one in the full-screen view.
 const PRELOAD_EACH_SIDE = 2
 const NO_GVFS = "Moving to the trash needs GVfs, which isn't available"
@@ -57,6 +59,14 @@ export default function ViewerWindow(
   let fullscreenIcon: Gtk.Image
   // Set when the view made the window fullscreen, so leaving it restores it.
   let fullscreenedByPreview = false
+  let previewMoreButton: Gtk.MenuButton
+  const previewControls: Array<{
+    box: Gtk.Box
+    motion: Gtk.EventControllerMotion
+  }> = []
+  let hideControlsTimeout = 0
+  let lastPointerX = -1
+  let lastPointerY = -1
   const sortButtons = new Map<SortKey, Gtk.Button>()
   let gridPropertiesButton: Gtk.MenuButton
   let previewPropertiesButton: Gtk.MenuButton
@@ -547,6 +557,64 @@ export default function ViewerWindow(
     }
   }
 
+  // --- auto-hiding controls (full-screen view, fullscreen window) ------------
+
+  function addPreviewControls(box: Gtk.Box) {
+    const motion = new Gtk.EventControllerMotion()
+    box.add_controller(motion)
+    previewControls.push({ box, motion })
+  }
+
+  function controlsAutoHide() {
+    return win.fullscreened && stack.visibleChildName === "preview"
+  }
+
+  // Shows the controls and cursor, and (when they auto-hide) hides them again
+  // after HIDE_CONTROLS_SECONDS without the mouse moving.
+  function showControls() {
+    for (const { box } of previewControls) {
+      box.remove_css_class("hidden")
+      box.canTarget = true
+    }
+    preview.setCursorHidden(false)
+    if (hideControlsTimeout) GLib.source_remove(hideControlsTimeout)
+    hideControlsTimeout = 0
+    if (!controlsAutoHide()) return
+    hideControlsTimeout = GLib.timeout_add_seconds(
+      GLib.PRIORITY_DEFAULT,
+      HIDE_CONTROLS_SECONDS,
+      () => {
+        hideControlsTimeout = 0
+        hideControls()
+        return GLib.SOURCE_REMOVE
+      },
+    )
+  }
+
+  // Waits while a menu is open or the pointer is on the controls.
+  function hideControls() {
+    if (!controlsAutoHide()) return
+    const busy =
+      previewPropertiesButton.active ||
+      previewMoreButton.active ||
+      previewControls.some(({ motion }) => motion.containsPointer)
+    if (busy) return showControls()
+    for (const { box } of previewControls) {
+      box.add_css_class("hidden")
+      box.canTarget = false
+    }
+    preview.setCursorHidden(true)
+  }
+
+  // GTK also reports motion when widgets change under a still pointer (as
+  // when the controls stop taking input), so only a real move counts.
+  function onPreviewMotion(x: number, y: number) {
+    if (x === lastPointerX && y === lastPointerY) return
+    lastPointerX = x
+    lastPointerY = y
+    showControls()
+  }
+
   function hidePreview() {
     const index = selection.selected
     if (fullscreenedByPreview) win.unfullscreen()
@@ -718,19 +786,22 @@ export default function ViewerWindow(
   )
 
   function MoreButton({
+    ref,
     cssClass,
     pixelSize,
   }: {
+    ref?: (button: Gtk.MenuButton) => void
     cssClass?: string
     pixelSize: number
   }) {
     return (
       <Gtk.MenuButton
-        $={(self) =>
+        $={(self) => {
+          ref?.(self)
           self.set_child(
             new Gtk.Image({ iconName: "ellipsis-awesome-symbolic", pixelSize }),
           )
-        }
+        }}
         class={cssClass}
         tooltipText="More actions"
         menuModel={actionsMenu}
@@ -954,10 +1025,20 @@ export default function ViewerWindow(
             hexpand
             vexpand
           >
-            <Gtk.Overlay hexpand vexpand>
+            <Gtk.Overlay
+              $={(self) => {
+                const motion = new Gtk.EventControllerMotion()
+                motion.connect("motion", (_c, x, y) => onPreviewMotion(x, y))
+                self.add_controller(motion)
+              }}
+              hexpand
+              vexpand
+            >
               {preview}
               <box
                 $type="overlay"
+                $={addPreviewControls}
+                class="preview-controls"
                 halign={Gtk.Align.END}
                 valign={Gtk.Align.START}
                 marginTop={16}
@@ -968,7 +1049,10 @@ export default function ViewerWindow(
                   ref={(self) => (previewPropertiesButton = self)}
                   pixelSize={20}
                 />
-                <MoreButton pixelSize={20} />
+                <MoreButton
+                  ref={(self) => (previewMoreButton = self)}
+                  pixelSize={20}
+                />
                 <button
                   $={(self) => (fullscreenButton = self)}
                   onClicked={toggleFullscreen}
@@ -988,7 +1072,8 @@ export default function ViewerWindow(
               </box>
               <box
                 $type="overlay"
-                class="preview-image-info"
+                $={addPreviewControls}
+                class="preview-image-info preview-controls"
                 halign={Gtk.Align.CENTER}
                 valign={Gtk.Align.END}
                 marginBottom={24}
@@ -1033,11 +1118,16 @@ export default function ViewerWindow(
     win.add_action(action)
   }
 
-  win.connect("notify::fullscreened", syncFullscreenButton)
+  win.connect("notify::fullscreened", () => {
+    syncFullscreenButton()
+    showControls()
+  })
+  stack.connect("notify::visible-child-name", showControls)
   syncFullscreenButton()
 
   win.connect("close-request", () => {
     if (toastTimeout) GLib.source_remove(toastTimeout)
+    if (hideControlsTimeout) GLib.source_remove(hideControlsTimeout)
     library.dispose()
     return false
   })

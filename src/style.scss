@@ -400,3 +400,11 @@ popover.menu {
     font-family: monospace;
   }
 }
+
+.viewer-preview .preview-controls {
+  transition: opacity 300ms t.$ease;
+
+  &.hidden {
+    opacity: 0;
+  }
+}

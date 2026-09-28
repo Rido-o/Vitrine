@@ -32,6 +32,7 @@ const ZoomableImage = GObject.registerClass(
     declare private showingPlaceholder: boolean
     declare private pointerX: number
     declare private pointerY: number
+    declare private cursorHidden: boolean
     declare private frames: GdkPixbuf.PixbufAnimationIter | null
     declare private tickId: number
     declare private frameBytes: number
@@ -54,6 +55,7 @@ const ZoomableImage = GObject.registerClass(
       this.showingPlaceholder = false
       this.pointerX = 0
       this.pointerY = 0
+      this.cursorHidden = false
       this.frames = null
       this.tickId = 0
       this.frameBytes = 0
@@ -276,7 +278,14 @@ const ZoomableImage = GObject.registerClass(
       return 0
     }
 
+    // Hides the cursor over the image (while controls auto-hide in fullscreen).
+    setCursorHidden(hidden: boolean) {
+      this.cursorHidden = hidden
+      this.updateCursor()
+    }
+
     private updateCursor() {
+      if (this.cursorHidden) return this.set_cursor_from_name("none")
       const region = this.region(this.pointerX)
       this.set_cursor_from_name(
         !this.fitted
