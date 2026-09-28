@@ -1,0 +1,13 @@
+this derivation will be built:
+  /nix/store/8wfvpx70wz3wcp4yd0h6z1v175g782aj-vitrine-bench-0.1.0.drv
+building '/nix/store/8wfvpx70wz3wcp4yd0h6z1v175g782aj-vitrine-bench-0.1.0.drv'...
+# ts warm 3840x2160@144Hz scale 1.5 2026-09-28T21:57:46+10:00 0090366
+scan frames=11 p50=33.3 p95=213.4 p99=213.4 max=213.4 over25=5 late=10 stalls=16 stall_sum=430 stall_max=78 first_ms=499 done_ms=900 items=3000
+fill_first fill_ms=377
+scroll frames=2210 p50=6.7 p95=7.8 p99=13.9 max=135.2 over25=3 late=63 stalls=5 stall_sum=185 stall_max=131 scroll_ms=15164 fill_after_ms=2
+jump frames=2 p50=208.3 p95=208.3 p99=208.3 max=208.3 over25=1 late=1 stalls=5 stall_sum=239 stall_max=151 fill_ms=225
+open frames=90 p50=16.7 p95=16.7 p99=16.7 max=41.7 over25=1 late=87 stalls=4 stall_sum=71 stall_max=30 placeholder_ms=0 sharp_ms=143
+hold frames=190 p50=13.6 p95=16.7 p99=33.3 max=33.3 over25=6 late=97 stalls=15 stall_sum=182 stall_max=25 presses=60 last_sharp_ms=105
+close frames=115 p50=7.1 p95=16.7 p99=16.7 max=16.7 over25=0 late=32 stalls=0 stall_sum=0 stall_max=0 
+idle frames=219 p50=6.9 p95=16.7 p99=16.7 max=16.7 over25=0 late=78 stalls=0 stall_sum=0 stall_max=0 
+memory rss_mb=1736 hwm_mb=1803

@@ -11,11 +11,18 @@ bench/run.sh ts            # the TypeScript app, cold cache
 bench/run.sh rs            # the spike, cold cache
 bench/run.sh rs warm       # again, with the thumbnails already on disk
 BENCH_DISPLAY=$WAYLAND_DISPLAY bench/run.sh rs   # watch it in a real window
+BENCH_OUTPUT=3840x2160@144Hz BENCH_SCALE=1.5 bench/run.sh rs warm
 ```
 
-Raw runs are kept in `results/` (`<app>-<mode>.txt`, and `-ngl` for GTK's GL
-renderer; overwritten by the next run of the same kind; the header line has
-the date and commit).
+`BENCH_OUTPUT` and `BENCH_SCALE` set the headless display (default
+1920×1080 at 60 Hz, scale 1). Match the real monitor where it matters: at
+60 Hz a frame has 16.7 ms, so 8–15 ms stalls don't show as late frames that
+are obvious at 144 Hz (6.9 ms).
+
+Raw runs are kept in `results/` (`<app>-<mode>.txt`, `-ngl` or `-gl` for
+GTK's GL renderer, `-4k` for 3840×2160 at 144 Hz, scale 1.5; overwritten by
+the next run of the same kind; the header line has the display, date and
+commit).
 
 Run both renderers: on NVIDIA's driver, GTK's default Vulkan renderer costs
 several ms of main-thread time per new texture (~12 ms per row of new
@@ -69,7 +76,11 @@ Each timed scenario also reports:
 - `frames`, `p50`/`p95`/`p99`/`max`: frame-clock intervals in ms (16.7 at
   60 Hz). A tick callback keeps the clock running, so a blocked main loop shows
   as a long interval.
-- `over25`: intervals over 25 ms (visibly dropped frames).
+- `over25`: intervals over 25 ms (visibly dropped frames at 60 Hz).
+- `late`: intervals over 1.5 refresh intervals of the headless display
+  (10.4 ms at 144 Hz). Only meaningful while frames are drawn continuously
+  (`scroll`); when nothing changes GTK draws less often, so idle scenarios
+  count most frames as late.
 - `stalls`, `stall_sum`, `stall_max`: main-loop iterations over 8 ms, from a
   2 ms high-priority timer.
 

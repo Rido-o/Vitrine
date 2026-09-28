@@ -14,6 +14,8 @@ import css from "../src/style.css"
 import ViewerWindow from "../src/Window"
 
 const STALL_US = 8_000
+// A frame is late when it takes over 1.5 refresh intervals.
+const LATE_MS = (1.5 * 1000) / Number(GLib.getenv("VITRINE_PROBE_HZ") ?? 60)
 const SCROLL_PX_PER_S = 4000
 const SCAN_SETTLE_MS = 1000
 const FILL_TIMEOUT_MS = 60_000
@@ -52,6 +54,7 @@ function recorder(widget: Gtk.Widget) {
         `p95=${pct(0.95).toFixed(1)} p99=${pct(0.99).toFixed(1)} ` +
         `max=${pct(1).toFixed(1)} ` +
         `over25=${intervals.filter((ms) => ms > 25).length} ` +
+        `late=${intervals.filter((ms) => ms > LATE_MS).length} ` +
         `stalls=${stalls.length} stall_sum=${Math.floor(sum / 1000)} ` +
         `stall_max=${Math.floor(Math.max(0, ...stalls) / 1000)} ${extra}`,
     )

@@ -13,6 +13,11 @@ app=${1:?usage: run.sh ts|rs [cold|warm] [CORPUS_DIR]}
 mode=${2:-cold}
 bench=${XDG_CACHE_HOME:-$HOME/.cache}/vitrine-bench
 corpus=${3:-$bench/corpus}
+# The headless display, e.g. BENCH_OUTPUT=3840x2160@144Hz BENCH_SCALE=1.5.
+output=${BENCH_OUTPUT:-1920x1080@60Hz}
+scale=${BENCH_SCALE:-1}
+hz=${output##*@}
+hz=${hz%Hz}
 [[ -d $corpus ]] || { echo "no corpus at $corpus (bench/make-corpus.sh)" >&2; exit 1; }
 
 case $app in
@@ -40,7 +45,7 @@ if [[ -z $display ]]; then
   runtime=${XDG_RUNTIME_DIR:?}
   before=$(ls "$runtime" | grep -E '^wayland-[0-9]+$' || true)
   config=$(mktemp)
-  echo 'output HEADLESS-1 resolution 1920x1080@60Hz' > "$config"
+  echo "output HEADLESS-1 resolution $output scale $scale" > "$config"
   sway=$(nix build --no-link --print-out-paths --inputs-from . nixpkgs#sway)/bin/sway
   WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WAYLAND_DISPLAY= \
     "$sway" -c "$config" > /dev/null 2>&1 &
@@ -53,7 +58,7 @@ if [[ -z $display ]]; then
   [[ -n $display ]] || { echo "headless sway didn't start" >&2; exit 1; }
 fi
 
-echo "# $app $mode $(date -Iseconds) $(git rev-parse --short HEAD)"
+echo "# $app $mode $output scale $scale $(date -Iseconds) $(git rev-parse --short HEAD)"
 XDG_CACHE_HOME=$home/cache XDG_STATE_HOME=$home/state WAYLAND_DISPLAY=$display \
-  VITRINE_PROBE=1 ${BENCH_WRAP:-} "$bin" "$corpus" 2>&1 |
+  VITRINE_PROBE=1 VITRINE_PROBE_HZ=$hz ${BENCH_WRAP:-} "$bin" "$corpus" 2>&1 |
   tee "${BENCH_LOG:-/dev/null}" | grep "^RESULT" | sed "s/^RESULT //"

@@ -117,13 +117,14 @@ impl Recorder {
         let stall_max = samples.stalls.iter().copied().max().unwrap_or(0);
         println!(
             "RESULT {label} frames={} p50={:.1} p95={:.1} p99={:.1} max={:.1} \
-             over25={} stalls={} stall_sum={} stall_max={} {extra} t0_us={}",
+             over25={} late={} stalls={} stall_sum={} stall_max={} {extra} t0_us={}",
             samples.frames.len(),
             pct(0.5),
             pct(0.95),
             pct(0.99),
             pct(1.0),
             intervals.iter().filter(|&&ms| ms > 25.0).count(),
+            intervals.iter().filter(|&&ms| ms > late_ms()).count(),
             samples.stalls.len(),
             stall_sum / 1000,
             stall_max / 1000,
@@ -175,6 +176,15 @@ impl ScanTimes {
             self.insert_max,
         );
     }
+}
+
+// A frame is late when it takes over 1.5 refresh intervals.
+fn late_ms() -> f64 {
+    let hz: f64 = std::env::var("VITRINE_PROBE_HZ")
+        .ok()
+        .and_then(|hz| hz.parse().ok())
+        .unwrap_or(60.0);
+    1.5 * 1000.0 / hz
 }
 
 fn find<T: IsA<gtk::Widget>>(root: &gtk::Widget) -> Option<T> {

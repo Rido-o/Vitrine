@@ -159,6 +159,29 @@ workers decode: capping glibc's arenas and fixing its mmap threshold
   its JPEG loader can't decode smaller, so it does more work than the
   full-resolution variant measured above.
 
+## At 4K, 144 Hz
+
+The runs above use a 1920×1080, 60 Hz display, where a frame has 16.7 ms. On
+the author's monitor (3840×2160 at 144 Hz, scale 1.5), a frame has 6.9 ms,
+and the TypeScript app's short stalls turn into visible hitches. Warm, GL,
+`master` at `fd26708` (both fixes) against the spike:
+
+| | TS | spike |
+|---|---|---|
+| Frames drawn scrolling | 2,210 | 1,986 |
+| Median / 95th percentile frame | 6.7 / 7.8 ms | 6.8 / 6.9 ms |
+| Late frames (over 10.4 ms) | 63 | 3 |
+| Worst frame | 135 ms | 42 ms |
+| Main thread blocked in total | 185 ms | 67 ms |
+| Open an image: sharp | 143 ms | 20 ms |
+| Peak memory | 1,803 MB | 978 MB |
+
+(At the same speed the two scroll for different times, 15.2 s against
+13.4 s, because their scroll distances differ: the windows lay out
+differently, e.g. the TypeScript app has a toolbar and an info bar.) This matches how the two feel: the
+spike scrolls noticeably smoother on that monitor, even with every thumbnail
+cached.
+
 ## Correction
 
 The first version of this document compared against "warm" runs of the
