@@ -1,9 +1,12 @@
 mod library;
 mod probe;
+mod thumbnails;
+mod tiles;
 
 use gtk::{gdk, gio, glib, prelude::*};
 use library::Image;
-use std::{cmp::Ordering, path::PathBuf};
+use std::{cmp::Ordering, path::PathBuf, rc::Rc};
+use tiles::Tiles;
 
 const APP_ID: &str = "io.github.Rido_o.Vitrine.Spike";
 // As in the TypeScript app (Window.tsx, style.scss).
@@ -51,7 +54,7 @@ fn image(object: &glib::Object) -> std::cell::Ref<'_, Image> {
         .borrow::<Image>()
 }
 
-fn build_grid(store: &gio::ListStore) -> gtk::GridView {
+fn build_grid(store: &gio::ListStore, tiles: &Rc<Tiles>) -> gtk::GridView {
     let sorter = gtk::CustomSorter::new(|a, b| match image(a).path.cmp(&image(b).path) {
         Ordering::Less => gtk::Ordering::Smaller,
         Ordering::Equal => gtk::Ordering::Equal,
@@ -63,25 +66,32 @@ fn build_grid(store: &gio::ListStore) -> gtk::GridView {
 
     let factory = gtk::SignalListItemFactory::new();
     factory.connect_setup(|_, item| {
-        let label = gtk::Label::builder()
+        let picture = gtk::Picture::builder()
             .width_request(TILE_WIDTH)
             .height_request(TILE_HEIGHT)
-            .ellipsize(gtk::pango::EllipsizeMode::Middle)
+            .content_fit(gtk::ContentFit::Contain)
+            .can_shrink(true)
             .build();
         item.downcast_ref::<gtk::ListItem>()
             .expect("a ListItem")
-            .set_child(Some(&label));
+            .set_child(Some(&picture));
     });
-    factory.connect_bind(|_, item| {
+    let bind_tiles = tiles.clone();
+    factory.connect_bind(move |_, item| {
         let item = item.downcast_ref::<gtk::ListItem>().expect("a ListItem");
-        let label = item.child().and_downcast::<gtk::Label>().expect("a Label");
+        let picture = item
+            .child()
+            .and_downcast::<gtk::Picture>()
+            .expect("a Picture");
         let object = item.item().expect("a bound item");
-        let name = image(&object)
-            .path
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        label.set_label(&name);
+        bind_tiles.bind(&picture, &image(&object));
+    });
+    let unbind_tiles = tiles.clone();
+    factory.connect_unbind(move |_, item| {
+        let item = item.downcast_ref::<gtk::ListItem>().expect("a ListItem");
+        if let Some(picture) = item.child().and_downcast::<gtk::Picture>() {
+            unbind_tiles.unbind(&picture);
+        }
     });
 
     gtk::GridView::builder()
@@ -94,7 +104,8 @@ fn build_grid(store: &gio::ListStore) -> gtk::GridView {
 
 fn build_window(app: &gtk::Application, dir: PathBuf) {
     let store = gio::ListStore::new::<glib::BoxedAnyObject>();
-    let grid = build_grid(&store);
+    let tiles = Tiles::new(glib::user_cache_dir().join("vitrine-spike/thumbnails"));
+    let grid = build_grid(&store, &tiles);
     let scrolled = gtk::ScrolledWindow::builder()
         .hscrollbar_policy(gtk::PolicyType::Never)
         .child(&grid)
@@ -122,6 +133,12 @@ fn build_window(app: &gtk::Application, dir: PathBuf) {
             scan.batch(started);
         }
         scan.finish(store.n_items());
+        let mut images: Vec<Image> = (0..store.n_items())
+            .filter_map(|i| store.item(i))
+            .map(|object| image(&object).clone())
+            .collect();
+        images.sort_by(|a, b| a.path.cmp(&b.path));
+        tiles.set_background(&images);
     });
 
     window.present();

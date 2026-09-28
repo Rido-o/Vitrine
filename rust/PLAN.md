@@ -81,6 +81,14 @@ Own app ID (`io.github.Rido_o.Vitrine.Spike`) and cache
   `Thumb::URI`/`Thumb::MTime`/`Thumb::Size`), shared with file managers:
   folders already browsed in one show instantly. Costs PNG encode/decode
   (on workers). A decision for later, since it changes the app's cache.
+- **2a result:** first screen in ~0.4 s (TS: ~9.8 s cold), the whole corpus
+  generated in ~15–17 s in the background; scrolling p50/p95 16.6/17.0 ms
+  (TS: 51/146) with 3 dropped frames (TS: 335). Workers run at nice 10.
+  The remaining stalls (~250 of ~12 ms, one per row of new tiles, and
+  ~200 ms on a jump) are GTK's Vulkan renderer on NVIDIA's driver, a few ms
+  per new texture; with `GSK_RENDERER=ngl` they drop to ~20 of ≤14 ms and a
+  ~50 ms jump. The TypeScript app gains from GL too (holding →: 41 → 2
+  dropped frames warm). Memory peaks at ~770–910 MB, still to explain.
 - Fallback if the grid itself is the bottleneck: one custom widget drawing all
   visible thumbnails in `snapshot` instead of a widget per tile.
 - Measure: frame-time distribution while scrolling the uncached corpus, time

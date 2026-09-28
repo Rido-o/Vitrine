@@ -1,0 +1,10 @@
+# rs warm 2026-09-28T19:48:54+10:00 af258c9
+scan_detail first_us=87090 done_us=101129 batches=6 insert_max_us=12472 items=3000
+background generated=0 done_ms=151
+scan frames=69 p50=16.3 p95=16.7 p99=16.7 max=33.3 over25=1 stalls=4 stall_sum=83 stall_max=32 first_ms=0 done_ms=0 items=3000 t0_us=43138562454
+fill_first fill_ms=0
+scroll frames=1177 p50=17.3 p95=18.3 p99=20.0 max=33.3 over25=3 stalls=50 stall_sum=495 stall_max=15 scroll_ms=20366 fill_after_ms=0 t0_us=43139563871
+jump frames=2 p50=16.7 p95=16.7 p99=16.7 max=16.7 over25=0 stalls=3 stall_sum=78 stall_max=53 fill_ms=73 t0_us=43159930186
+skipped open hold (no full-screen view yet)
+idle frames=120 p50=16.7 p95=16.7 p99=16.7 max=16.7 over25=0 stalls=0 stall_sum=0 stall_max=0  t0_us=43160015507
+memory rss_mb=488 hwm_mb=532

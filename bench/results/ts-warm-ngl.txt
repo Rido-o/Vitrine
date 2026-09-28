@@ -1,0 +1,10 @@
+# ts warm 2026-09-28T19:51:51+10:00 af258c9
+scan frames=7 p50=97.0 p95=1100.0 p99=1100.0 max=1100.0 over25=5 stalls=31 stall_sum=2028 stall_max=544 first_ms=512 done_ms=1656 items=3000
+fill_first fill_ms=74
+scroll frames=867 p50=16.6 p95=66.7 p99=130.9 max=199.5 over25=167 stalls=143 stall_sum=4293 stall_max=153 scroll_ms=20412 fill_after_ms=2
+jump frames=2 p50=200.0 p95=200.0 p99=200.0 max=200.0 over25=1 stalls=5 stall_sum=232 stall_max=149 fill_ms=216
+open frames=88 p50=16.7 p95=16.7 p99=33.3 max=50.0 over25=2 stalls=2 stall_sum=49 stall_max=32 placeholder_ms=144 sharp_ms=147
+hold frames=132 p50=16.7 p95=17.8 p99=33.0 max=33.3 over25=2 stalls=16 stall_sum=203 stall_max=20 presses=60 last_sharp_ms=0
+close frames=64 p50=16.6 p95=16.7 p99=16.7 max=16.7 over25=0 stalls=1 stall_sum=14 stall_max=14 
+idle frames=125 p50=16.7 p95=16.7 p99=16.9 max=17.1 over25=0 stalls=0 stall_sum=0 stall_max=0 
+memory rss_mb=1145 hwm_mb=1236

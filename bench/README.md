@@ -13,8 +13,17 @@ bench/run.sh rs warm       # again, with the thumbnails already on disk
 BENCH_DISPLAY=$WAYLAND_DISPLAY bench/run.sh rs   # watch it in a real window
 ```
 
-Raw runs are kept in `results/` (`<app>-<mode>.txt`, overwritten by the next
-run of the same kind; the header line has the date and commit).
+Raw runs are kept in `results/` (`<app>-<mode>.txt`, and `-ngl` for GTK's GL
+renderer; overwritten by the next run of the same kind; the header line has
+the date and commit).
+
+Run both renderers: on NVIDIA's driver, GTK's default Vulkan renderer costs
+several ms of main-thread time per new texture (~12 ms per row of new
+thumbnails, ~100 ms `ioctl`s when many arrive at once), which the GL renderer
+(`GSK_RENDERER=ngl`) doesn't. `BENCH_WRAP` prefixes the app's command, e.g.
+`BENCH_WRAP="perf record -k CLOCK_MONOTONIC --call-graph dwarf -o x.perf"`;
+the spike's lines end with `t0_us` (monotonic) to find a scenario in a
+profile.
 
 `bench-ts` is the TypeScript app bundled with `probe-ts.tsx` as its entry
 (`nix build .#bench-ts`); the spike has the same probe built in
@@ -45,6 +54,7 @@ In order, in one run:
 |---|---|---|
 | `scan` | from the window appearing until the item count has been stable for 1 s | `first_ms` (first item), `done_ms` (last change), `items` |
 | `scan_detail` | spike only: from starting the walk, as the app sees it | `first_us`, `done_us`, `batches`, `insert_max_us` (longest main-thread insert) |
+| `background` | spike only: background generation finished | `generated`, `done_ms` (from starting the walk) |
 | `fill_first` | the first screen's thumbnails | `fill_ms` |
 | `scroll` | top to bottom at 4,000 px/s, then until every bound tile has a thumbnail | `scroll_ms`, `fill_after_ms` |
 | `jump` | to the middle in one step, until filled | `fill_ms` |

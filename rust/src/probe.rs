@@ -4,7 +4,22 @@
 //! reported as skipped.
 
 use gtk::{glib, prelude::*};
-use std::{cell::RefCell, rc::Rc, time::Duration};
+use std::{cell::RefCell, rc::Rc, sync::OnceLock, time::Duration};
+
+// When the window was built (the scan started), for times reported later.
+static START: OnceLock<i64> = OnceLock::new();
+
+/// Background generation is done: how many thumbnails it made, and when.
+pub fn background_finished(generated: usize) {
+    if std::env::var_os("VITRINE_PROBE").is_none() {
+        return;
+    }
+    let start = START.get().copied().unwrap_or_default();
+    println!(
+        "RESULT background generated={generated} done_ms={}",
+        (glib::monotonic_time() - start) / 1000
+    );
+}
 
 // A main-loop iteration taking longer than this counts as a stall.
 const STALL_US: i64 = 8_000;
@@ -19,6 +34,8 @@ struct Samples {
 }
 
 struct Recorder {
+    // Monotonic µs, printed as t0_us to line runs up with profiles.
+    start: i64,
     samples: Rc<RefCell<Samples>>,
     tick: Option<gtk::TickCallbackId>,
     timer: Option<glib::SourceId>,
@@ -47,6 +64,7 @@ impl Recorder {
             },
         );
         Self {
+            start: glib::monotonic_time(),
             samples,
             tick: Some(tick),
             timer: Some(timer),
@@ -73,7 +91,7 @@ impl Recorder {
         let stall_max = samples.stalls.iter().copied().max().unwrap_or(0);
         println!(
             "RESULT {label} frames={} p50={:.1} p95={:.1} p99={:.1} max={:.1} \
-             over25={} stalls={} stall_sum={} stall_max={} {extra}",
+             over25={} stalls={} stall_sum={} stall_max={} {extra} t0_us={}",
             samples.frames.len(),
             pct(0.5),
             pct(0.95),
@@ -83,6 +101,7 @@ impl Recorder {
             samples.stalls.len(),
             stall_sum / 1000,
             stall_max / 1000,
+            self.start,
         );
     }
 }
@@ -99,8 +118,10 @@ pub struct ScanTimes {
 
 impl ScanTimes {
     pub fn start() -> Self {
+        let start = glib::monotonic_time();
+        let _ = START.set(start);
         Self {
-            start: glib::monotonic_time(),
+            start,
             first: -1,
             batches: 0,
             insert_max: 0,
