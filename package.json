@@ -6,6 +6,7 @@
   "devDependencies": {
     "@girs/adw-1": "1.10.0-4.0.0-rc.17",
     "@girs/gdkpixbuf-2.0": "2.0.0-4.0.0-rc.17",
+    "@girs/gexiv2-0.16": "0.16.0-4.0.0-rc.17",
     "@girs/gjs": "4.0.0-rc.17",
     "@girs/graphene-1.0": "1.0.0-4.0.0-rc.17",
     "@girs/gsk-4.0": "4.0.0-4.0.0-rc.17",

@@ -3,8 +3,10 @@ import Gio from "gi://Gio"
 import GLib from "gi://GLib"
 import Graphene from "gi://Graphene"
 import Gtk from "gi://Gtk?version=4.0"
+import Pango from "gi://Pango"
 import History from "./History"
 import Library, { type SortKey } from "./Library"
+import { imageProperties } from "./Properties"
 import { getImageInfo, loadThumbnail, peekThumbnail } from "./Thumbnails"
 import { moveToTrash, restore, trashAvailable, type TrashedItem } from "./Trash"
 import ZoomableImage from "./ZoomableImage"
@@ -53,6 +55,8 @@ export default function ViewerWindow(
   // Set when the view made the window fullscreen, so leaving it restores it.
   let fullscreenedByPreview = false
   const sortButtons = new Map<SortKey, Gtk.Button>()
+  let gridPropertiesButton: Gtk.MenuButton
+  let previewPropertiesButton: Gtk.MenuButton
   const filenameLabels: Gtk.Label[] = []
   const resolutionLabels: Gtk.Label[] = []
   const wallpaperArgv = wallpaperCommand()
@@ -170,6 +174,58 @@ export default function ViewerWindow(
       : library.recursive
         ? "No images in this folder or its subfolders"
         : "No images in this folder — turn on Subfolders to include them"
+  }
+
+  // --- properties panel ----------------------------------------------------
+
+  function renderProperties(content: Gtk.Box) {
+    let child: Gtk.Widget | null
+    while ((child = content.get_first_child())) content.remove(child)
+    const path = getSelectedPath()
+    if (!path) {
+      content.append(new Gtk.Label({ label: "No image selected" }))
+      return
+    }
+    for (const section of imageProperties(path)) {
+      content.append(
+        new Gtk.Label({
+          label: section.title,
+          xalign: 0,
+          cssClasses: ["viewer-properties-heading"],
+        }),
+      )
+      const grid = new Gtk.Grid({ columnSpacing: 16, rowSpacing: 4 })
+      section.rows.forEach(([key, value], row) => {
+        const keyLabel = new Gtk.Label({
+          label: key,
+          xalign: 1,
+          yalign: 0,
+          cssClasses: ["viewer-properties-key"],
+        })
+        // Selectable for copying, but not focusable: the popover would focus
+        // the first value and select all of it on opening.
+        const valueLabel = new Gtk.Label({
+          label: value,
+          xalign: 0,
+          selectable: true,
+          focusable: false,
+          wrap: true,
+          wrapMode: Pango.WrapMode.WORD_CHAR,
+          maxWidthChars: 48,
+        })
+        grid.attach(keyLabel, 0, row, 1, 1)
+        grid.attach(valueLabel, 1, row, 1, 1)
+      })
+      content.append(grid)
+    }
+  }
+
+  function toggleProperties() {
+    const button =
+      stack.visibleChildName === "preview"
+        ? previewPropertiesButton
+        : gridPropertiesButton
+    button.active = !button.active
   }
 
   // --- actions -------------------------------------------------------------
@@ -507,6 +563,8 @@ export default function ViewerWindow(
     if (keyval === Gdk.KEY_r || keyval === Gdk.KEY_R) return (rescan(), true)
     if (keyval === Gdk.KEY_w || keyval === Gdk.KEY_W)
       return (setSelectedAsWallpaper(), true)
+    if (keyval === Gdk.KEY_i || keyval === Gdk.KEY_I)
+      return (toggleProperties(), true)
     if (stack.visibleChildName === "preview") {
       if (keyval === Gdk.KEY_Right) return (movePreview(1), true)
       if (keyval === Gdk.KEY_Left) return (movePreview(-1), true)
@@ -566,6 +624,42 @@ export default function ViewerWindow(
         </button>
         <label $={(self) => resolutionLabels.push(self)} label="0 × 0" />
       </>
+    )
+  }
+
+  function PropertiesButton({
+    ref,
+    cssClass,
+    pixelSize,
+  }: {
+    ref: (button: Gtk.MenuButton) => void
+    cssClass?: string
+    pixelSize: number
+  }) {
+    const content = new Gtk.Box({
+      orientation: Gtk.Orientation.VERTICAL,
+      spacing: 8,
+    })
+    const popover = new Gtk.Popover({
+      child: content,
+      cssClasses: ["viewer-properties"],
+    })
+    popover.connect("show", () => renderProperties(content))
+    return (
+      <Gtk.MenuButton
+        $={(self) => {
+          ref(self)
+          self.set_child(
+            new Gtk.Image({
+              iconName: "circle-info-awesome-symbolic",
+              pixelSize,
+            }),
+          )
+        }}
+        class={cssClass}
+        tooltipText="Image properties (i)"
+        popover={popover}
+      />
     )
   }
 
@@ -674,6 +768,11 @@ export default function ViewerWindow(
                 />
               </box>
               <box hexpand halign={Gtk.Align.END} spacing={8}>
+                <PropertiesButton
+                  ref={(self) => (gridPropertiesButton = self)}
+                  cssClass="viewer-toolbar-menu"
+                  pixelSize={16}
+                />
                 <button
                   class="viewer-toolbar-button"
                   tooltipText="Close (Esc)"
@@ -753,6 +852,10 @@ export default function ViewerWindow(
                 marginEnd={16}
                 spacing={8}
               >
+                <PropertiesButton
+                  ref={(self) => (previewPropertiesButton = self)}
+                  pixelSize={20}
+                />
                 <button
                   $={(self) => (fullscreenButton = self)}
                   onClicked={toggleFullscreen}

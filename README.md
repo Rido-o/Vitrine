@@ -17,7 +17,8 @@ your wallpaper with a command of your choice.
 - **Top bar**: a folder entry (`~` works) with a history of the last 10
   folders; a sort pill with Name (full path), Date modified, Size and Random
   (click again to reshuffle), and ↑/↓ to flip the direction (Date and Size
-  start descending); a Subfolders toggle; and a close button on the right.
+  start descending); a Subfolders toggle; and, on the right, image properties
+  (i) and close.
 - **Info bar**: the filename (click to show it in your file manager over
   `org.freedesktop.FileManager1`), resolution, rescan, view and Set wallpaper.
 - **Full-screen view**: scroll to zoom around the cursor (from fit up to 8×
@@ -29,6 +30,12 @@ your wallpaper with a command of your choice.
   the background, so ←/→ are instant, and decoding never freezes the window.
   While an image is still decoding (e.g. holding an arrow key) its thumbnail
   is shown, then swapped for the full image.
+- **Image properties** (the i button on either screen, or `i`): name, folder,
+  size, type and dates; dimensions (as shown, after EXIF rotation), megapixels,
+  format and orientation; and, when the file has EXIF, the camera, lens,
+  exposure, aperture, ISO, focal length, flash, date taken, GPS location,
+  software, artist and copyright (read with gexiv2). Values can be selected
+  to copy them.
 - **Set wallpaper** (button or `w`) runs a configurable command with the image
   path and shows a "Wallpaper set" toast; the viewer stays open.
 - **Delete** moves the image to the trash, and **Ctrl+Z** (or the toast's Undo)
@@ -53,6 +60,7 @@ Keys (grid unless noted):
 | --- | --- |
 | Enter, double-click | Open in the full-screen view |
 | `w` | Set as wallpaper (grid and view) |
+| `i` | Image properties (grid and view) |
 | `r` | Rescan |
 | Delete | Move to trash (needs GVfs) |
 | Ctrl+Z | Undo the last delete; repeat to go further back (grid and view) |
@@ -152,6 +160,7 @@ src/
   Thumbnails.ts     thumbnail cache (disk + memory), loading, concurrency
   History.ts        folder history file
   ZoomableImage.ts  full-screen image widget (zoom, pan, sharp mode)
+  Properties.ts     the properties panel's contents (file info, GdkPixbuf, EXIF)
   ImageCache.ts     full-size images: the one shown plus ±2 preloaded
   decode.ts         threaded image decoding (GdkPixbuf), shared with thumbnails
   Trash.ts          trash and exact-item restore through GVfs (trash:///)
@@ -165,7 +174,8 @@ icons/              bundled symbolic icons
 
 - App ID `io.github.Rido_o.Vitrine`. The app is `NON_UNIQUE`: every launch is
   its own process and window; nothing stays running in the background.
-- Everything is plain GTK4/Gio/GdkPixbuf/GLib; the only library is gnim.
+- Everything is plain GTK4/Gio/GdkPixbuf/GLib, plus gexiv2 for EXIF; the only
+  JS library is gnim.
 
 ### Build
 
@@ -182,6 +192,8 @@ icons/              bundled symbolic icons
    `bin/vitrine` (`gjs -m main.js`), wrapped with `wrapGAppsHook4`'s arguments
    by hand (`dontWrapGApps`) so its own GdkPixbuf `loaders.cache` (gdk-pixbuf's
    loaders plus librsvg and `webp-pixbuf-loader`) overrides the hook's.
+   `gexiv2_0_16` (EXIF) is a build input so the wrapper puts its typelib on
+   `GI_TYPELIB_PATH`.
 
 esbuild strips types without checking them; `checks.typecheck` (run by
 `nix flake check`) does, with `tsc --noEmit` against the `@girs` type packages
@@ -283,7 +295,7 @@ GJS app called shard-view, and was renamed and moved to its own repo.
 
 ## Credits
 
-- Icons: [Font Awesome Free](https://fontawesome.com) 6.6.0, licensed
+- Icons: [Font Awesome Free](https://fontawesome.com) 7.3.1, licensed
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 - [gnim](https://github.com/aylur/gnim) (MIT) for JSX on GJS.
 

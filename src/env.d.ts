@@ -4,6 +4,7 @@ import "@girs/gjs"
 import "@girs/gjs/dom"
 import "@girs/gtk-4.0"
 import "@girs/gdkpixbuf-2.0"
+import "@girs/gexiv2-0.16"
 import "@girs/adw-1"
 
 declare global {

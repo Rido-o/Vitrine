@@ -8,6 +8,7 @@
   gobject-introspection,
   wrapGAppsHook4,
   gdk-pixbuf,
+  gexiv2_0_16,
   gjs,
   glib,
   gtk4,
@@ -46,6 +47,7 @@ in
 
     buildInputs = [
       gdk-pixbuf
+      gexiv2_0_16
       gjs
       glib
       gtk4
