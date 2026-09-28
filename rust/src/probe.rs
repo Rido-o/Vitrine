@@ -430,6 +430,16 @@ pub fn run(window: &gtk::ApplicationWindow) {
         press(&window, gdk::Key::Escape);
         sleep(500).await;
 
+        // click: selecting a tile as a click does, which the theme animates
+        // (keyboard selection doesn't); the grid is scrolled to
+        // SELECT_POSITION, so these are in view.
+        for position in [SELECT_POSITION + 2, SELECT_POSITION + 3] {
+            let recorder = Recorder::start(&window);
+            selection.set_selected(position);
+            sleep(600).await;
+            recorder.finish("click", &format!("position={position}"));
+        }
+
         idle(&window).await;
         finish(&window);
     });
