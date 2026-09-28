@@ -1,12 +1,15 @@
 import Gdk from "gi://Gdk?version=4.0"
 import Gio from "gi://Gio"
 import GLib from "gi://GLib"
+import GObject from "gi://GObject"
 import Graphene from "gi://Graphene"
 import Gtk from "gi://Gtk?version=4.0"
 import Pango from "gi://Pango"
 import History from "./History"
 import Library, { type SortKey } from "./Library"
+import { decodeImage } from "./decode"
 import { imageProperties } from "./Properties"
+import { showShortcuts } from "./Shortcuts"
 import { getImageInfo, loadThumbnail, peekThumbnail } from "./Thumbnails"
 import { moveToTrash, restore, trashAvailable, type TrashedItem } from "./Trash"
 import ZoomableImage from "./ZoomableImage"
@@ -229,6 +232,43 @@ export default function ViewerWindow(
   }
 
   // --- actions -------------------------------------------------------------
+
+  function setClipboard(
+    type: GObject.GType,
+    set: (value: GObject.Value) => void,
+  ) {
+    const value = new GObject.Value()
+    value.init(type)
+    set(value)
+    win.get_clipboard().set_content(Gdk.ContentProvider.new_for_value(value))
+  }
+
+  // Decodes the full image (the first frame of a GIF) for the clipboard.
+  function copySelectedImage() {
+    withSelectedPath((path) => {
+      decodeImage(path)
+        .then((pixbuf) => {
+          const texture = Gdk.Texture.new_for_pixbuf(pixbuf)
+          setClipboard(Gdk.Texture.$gtype, (value) => value.set_object(texture))
+          showToast("Copied image")
+        })
+        .catch((error) => {
+          console.error(`Could not copy ${path}:`, error)
+          showToast("Could not copy image")
+        })
+    })
+  }
+
+  function copySelectedPath() {
+    withSelectedPath((path) => {
+      setClipboard(GObject.TYPE_STRING, (value) => value.set_string(path))
+      showToast("Copied path")
+    })
+  }
+
+  function openShortcuts() {
+    showShortcuts(win, wallpaperArgv !== null)
+  }
 
   function setSelectedAsWallpaper() {
     if (!wallpaperArgv) return
@@ -563,6 +603,15 @@ export default function ViewerWindow(
       return (setSelectedAsWallpaper(), true)
     if (keyval === Gdk.KEY_i || keyval === Gdk.KEY_I)
       return (toggleProperties(), true)
+    if (
+      (keyval === Gdk.KEY_c || keyval === Gdk.KEY_C) &&
+      state & Gdk.ModifierType.CONTROL_MASK
+    ) {
+      if (state & Gdk.ModifierType.SHIFT_MASK) copySelectedPath()
+      else copySelectedImage()
+      return true
+    }
+    if (keyval === Gdk.KEY_question) return (openShortcuts(), true)
     if (stack.visibleChildName === "preview") {
       if (keyval === Gdk.KEY_Right) return (movePreview(1), true)
       if (keyval === Gdk.KEY_Left) return (movePreview(-1), true)
@@ -622,6 +671,70 @@ export default function ViewerWindow(
         </button>
         <label $={(self) => resolutionLabels.push(self)} label="0 × 0" />
       </>
+    )
+  }
+
+  // The ⋯ menu's actions are window actions ("win.…"); the keys are handled
+  // in onKey (so Ctrl+C still copies text in the folder entry), and "accel"
+  // only labels them in the menu.
+  const actions: Array<[string, () => void]> = [
+    ["copy-image", copySelectedImage],
+    ["copy-path", copySelectedPath],
+    ["show-in-file-manager", () => withSelectedPath(showInFileManager)],
+    ["rescan", rescan],
+    ["shortcuts", openShortcuts],
+  ]
+
+  function menuItem(label: string, action: string, accel?: string) {
+    const item = Gio.MenuItem.new(label, `win.${action}`)
+    if (accel) item.set_attribute_value("accel", new GLib.Variant("s", accel))
+    return item
+  }
+
+  function menuSection(...items: Gio.MenuItem[]) {
+    const section = new Gio.Menu()
+    for (const item of items) section.append_item(item)
+    return section
+  }
+
+  const actionsMenu = new Gio.Menu()
+  actionsMenu.append_section(
+    null,
+    menuSection(
+      menuItem("Copy image", "copy-image", "<Control>c"),
+      menuItem("Copy path", "copy-path", "<Control><Shift>c"),
+    ),
+  )
+  actionsMenu.append_section(
+    null,
+    menuSection(
+      menuItem("Show in file manager", "show-in-file-manager"),
+      menuItem("Rescan folder", "rescan", "r"),
+    ),
+  )
+  actionsMenu.append_section(
+    null,
+    menuSection(menuItem("Keyboard shortcuts", "shortcuts", "question")),
+  )
+
+  function MoreButton({
+    cssClass,
+    pixelSize,
+  }: {
+    cssClass?: string
+    pixelSize: number
+  }) {
+    return (
+      <Gtk.MenuButton
+        $={(self) =>
+          self.set_child(
+            new Gtk.Image({ iconName: "ellipsis-awesome-symbolic", pixelSize }),
+          )
+        }
+        class={cssClass}
+        tooltipText="More actions"
+        menuModel={actionsMenu}
+      />
     )
   }
 
@@ -771,6 +884,7 @@ export default function ViewerWindow(
                   cssClass="viewer-toolbar-menu"
                   pixelSize={16}
                 />
+                <MoreButton cssClass="viewer-toolbar-menu" pixelSize={16} />
                 <button
                   class="viewer-toolbar-button"
                   tooltipText="Close (Esc)"
@@ -854,6 +968,7 @@ export default function ViewerWindow(
                   ref={(self) => (previewPropertiesButton = self)}
                   pixelSize={20}
                 />
+                <MoreButton pixelSize={20} />
                 <button
                   $={(self) => (fullscreenButton = self)}
                   onClicked={toggleFullscreen}
@@ -911,6 +1026,12 @@ export default function ViewerWindow(
       </overlay>
     </Gtk.ApplicationWindow>
   ) as Gtk.ApplicationWindow
+
+  for (const [name, activate] of actions) {
+    const action = new Gio.SimpleAction({ name })
+    action.connect("activate", activate)
+    win.add_action(action)
+  }
 
   win.connect("notify::fullscreened", syncFullscreenButton)
   syncFullscreenButton()

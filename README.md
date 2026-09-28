@@ -22,7 +22,7 @@ your wallpaper with a command of your choice.
   folders; a sort pill with Name (full path), Date modified, Size and Random
   (click again to reshuffle), and ↑/↓ to flip the direction (Date and Size
   start descending); a Subfolders toggle; and, on the right, image properties
-  (i) and close.
+  (i), more actions (⋯) and close.
 - **Info bar**: the filename (click to show it in your file manager over
   `org.freedesktop.FileManager1`), resolution, rescan, view and Set wallpaper.
 - **Full-screen view**: scroll to zoom around the cursor (from fit up to 8×
@@ -40,6 +40,11 @@ your wallpaper with a command of your choice.
   exposure, aperture, ISO, focal length, flash, date taken, GPS location,
   software, artist and copyright (read with gexiv2). Values can be selected
   to copy them.
+- **More actions** (the ⋯ button on either screen): Copy image (`Ctrl+C`; the
+  full image, or a GIF's first frame), Copy path (`Ctrl+Shift+C`), Show in
+  file manager, Rescan folder and Keyboard shortcuts (`?`, a window listing
+  every key). On Wayland the clipboard is served by Vitrine, so a copy lasts
+  only while it's open unless a clipboard manager keeps it.
 - **Set wallpaper** (button or `w`) runs a configurable command with the image
   path and shows a "Wallpaper set" toast; the viewer stays open.
 - **Delete** moves the image to the trash, and **Ctrl+Z** (or the toast's Undo)
@@ -67,6 +72,8 @@ Keys (grid unless noted):
 | Enter, double-click | Open in the full-screen view |
 | `w` | Set as wallpaper (grid and view) |
 | `i` | Image properties (grid and view) |
+| Ctrl+C, Ctrl+Shift+C | Copy the image, or its path (grid and view) |
+| `?` | Keyboard shortcuts (grid and view) |
 | `r` | Rescan |
 | Delete | Move to trash (needs GVfs) |
 | Ctrl+Z | Undo the last delete; repeat to go further back (grid and view) |
@@ -167,6 +174,7 @@ src/
   History.ts        folder history file
   ZoomableImage.ts  full-screen image widget (zoom, pan, sharp mode)
   Properties.ts     the properties panel's contents (file info, GdkPixbuf, EXIF)
+  Shortcuts.ts      the keyboard shortcuts window
   ImageCache.ts     full-size images: the one shown plus ±2 preloaded
   decode.ts         threaded image and GIF decoding (GdkPixbuf), shared with
                     thumbnails

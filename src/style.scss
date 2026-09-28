@@ -334,3 +334,69 @@ popover.viewer-properties {
     color: t.$fg-muted;
   }
 }
+
+// The ⋯ menu; inside .viewer-preview too, whose label rules it overrides.
+popover.menu {
+  > contents {
+    padding: 6px;
+    border: 1px solid t.$border-solid;
+    border-radius: 12px;
+    background-color: t.$bg;
+    box-shadow: t.$window-shadow;
+    color: t.$fg;
+  }
+
+  modelbutton {
+    padding: 8px 12px;
+    border-radius: 8px;
+    color: t.$fg;
+    transition: t.$transition;
+
+    &:hover {
+      background-color: t.$bg-raised;
+      color: t.$fg-bright;
+    }
+  }
+
+  label {
+    min-height: 0;
+    padding: 0;
+    border: none;
+    background-color: transparent;
+    color: inherit;
+  }
+
+  accelerator {
+    color: t.$fg-muted;
+  }
+
+  separator {
+    min-height: 1px;
+    margin: 4px 0;
+    background-color: t.$separator;
+  }
+}
+
+.viewer-shortcuts {
+  background-color: t.$bg;
+  color: t.$fg;
+
+  .viewer-shortcuts-content {
+    padding: 20px 24px;
+  }
+
+  .viewer-shortcuts-heading {
+    margin-top: 8px;
+    color: t.$fg-bright;
+    font-weight: bold;
+  }
+
+  .key {
+    padding: 2px 8px;
+    border: 1px solid t.$border;
+    border-radius: 6px;
+    background-color: t.$bg-surface;
+    color: t.$fg-bright;
+    font-family: monospace;
+  }
+}
