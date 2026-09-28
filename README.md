@@ -23,7 +23,8 @@ your wallpaper with a command of your choice.
 - **Full-screen view**: scroll to zoom around the cursor (from fit up to 8×
   actual pixels), drag to pan, click the left/right edge (a sixth of the width)
   for the previous/next image, double-click (the middle) to toggle fit/100%,
-  and `s` for sharp (nearest-neighbour) pixels. Images are drawn with GTK's
+  `s` for sharp (nearest-neighbour) pixels, and a button (or `f`) to make the
+  window fullscreen; leaving the view restores it. Images are drawn with GTK's
   default filter, snapped to whole device pixels. The two images on each side are decoded in
   the background, so ←/→ are instant, and decoding never freezes the window.
   While an image is still decoding (e.g. holding an arrow key) its thumbnail
@@ -62,6 +63,7 @@ Keys (grid unless noted):
 | double-click (view) | Toggle fit/100%: the middle at fit, anywhere when zoomed |
 | `+`/`=`, `-`, `0` (view) | Zoom in, out, fit |
 | `s` (view) | Sharp pixels |
+| `f` (view) | Toggle fullscreen; leaving the view restores the window |
 
 Files:
 

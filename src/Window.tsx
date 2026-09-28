@@ -48,6 +48,10 @@ export default function ViewerWindow(
   let pendingSelection: string | null = null
   let autoSelected: string | null = null
   let directionButton: Gtk.Button
+  let fullscreenButton: Gtk.Button
+  let fullscreenIcon: Gtk.Image
+  // Set when the view made the window fullscreen, so leaving it restores it.
+  let fullscreenedByPreview = false
   const sortButtons = new Map<SortKey, Gtk.Button>()
   const filenameLabels: Gtk.Label[] = []
   const resolutionLabels: Gtk.Label[] = []
@@ -429,8 +433,29 @@ export default function ViewerWindow(
     selection.selected = (base + offset + count) % count
   }
 
+  function syncFullscreenButton() {
+    const fullscreen = win.fullscreened
+    if (!fullscreen) fullscreenedByPreview = false
+    fullscreenIcon.iconName = fullscreen
+      ? "compress-awesome-symbolic"
+      : "expand-awesome-symbolic"
+    fullscreenButton.tooltipText = fullscreen
+      ? "Leave fullscreen (f)"
+      : "Fullscreen (f)"
+  }
+
+  function toggleFullscreen() {
+    if (win.fullscreened) {
+      win.unfullscreen()
+    } else {
+      fullscreenedByPreview = true
+      win.fullscreen()
+    }
+  }
+
   function hidePreview() {
     const index = selection.selected
+    if (fullscreenedByPreview) win.unfullscreen()
     preview.setFile(null)
     stack.visibleChildName = "grid"
     GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
@@ -497,6 +522,8 @@ export default function ViewerWindow(
         return (preview.resetZoom(), true)
       if (keyval === Gdk.KEY_s || keyval === Gdk.KEY_S)
         return (preview.toggleSharp(), true)
+      if (keyval === Gdk.KEY_f || keyval === Gdk.KEY_F)
+        return (toggleFullscreen(), true)
       if (keyval === Gdk.KEY_Escape || keyval === Gdk.KEY_q)
         return (hidePreview(), true)
       return false
@@ -709,58 +736,46 @@ export default function ViewerWindow(
           >
             <Gtk.Overlay hexpand vexpand>
               {preview}
-              <button
+              <box
                 $type="overlay"
-                class="preview-close-button"
-                tooltipText="Back to grid (Esc)"
                 halign={Gtk.Align.END}
                 valign={Gtk.Align.START}
                 marginTop={16}
                 marginEnd={16}
-                onClicked={hidePreview}
+                spacing={8}
               >
-                <image iconName="xmark-awesome-symbolic" pixelSize={20} />
-              </button>
+                <button
+                  $={(self) => (fullscreenButton = self)}
+                  onClicked={toggleFullscreen}
+                >
+                  <image
+                    $={(self) => (fullscreenIcon = self)}
+                    iconName="expand-awesome-symbolic"
+                    pixelSize={20}
+                  />
+                </button>
+                <button
+                  tooltipText="Back to grid (Esc)"
+                  onClicked={hidePreview}
+                >
+                  <image iconName="xmark-awesome-symbolic" pixelSize={20} />
+                </button>
+              </box>
               <box
                 $type="overlay"
+                class="preview-image-info"
                 halign={Gtk.Align.CENTER}
                 valign={Gtk.Align.END}
-                spacing={8}
                 marginBottom={24}
+                spacing={8}
               >
+                <InfoLabels />
                 <button
-                  class="preview-navigation-button"
-                  tooltipText="Previous image (←)"
-                  onClicked={() => movePreview(-1)}
-                >
-                  <image
-                    iconName="arrow-left-awesome-symbolic"
-                    pixelSize={20}
-                  />
-                </button>
-                <box
-                  class="preview-image-info"
-                  spacing={8}
-                  valign={Gtk.Align.CENTER}
-                >
-                  <InfoLabels />
-                  <button
-                    visible={wallpaperArgv !== null}
-                    tooltipText="Set as wallpaper (w)"
-                    onClicked={setSelectedAsWallpaper}
-                    label="Set wallpaper"
-                  />
-                </box>
-                <button
-                  class="preview-navigation-button"
-                  tooltipText="Next image (→)"
-                  onClicked={() => movePreview(1)}
-                >
-                  <image
-                    iconName="arrow-right-awesome-symbolic"
-                    pixelSize={20}
-                  />
-                </button>
+                  visible={wallpaperArgv !== null}
+                  tooltipText="Set as wallpaper (w)"
+                  onClicked={setSelectedAsWallpaper}
+                  label="Set wallpaper"
+                />
               </box>
             </Gtk.Overlay>
           </box>
@@ -786,6 +801,9 @@ export default function ViewerWindow(
       </overlay>
     </Gtk.ApplicationWindow>
   ) as Gtk.ApplicationWindow
+
+  win.connect("notify::fullscreened", syncFullscreenButton)
+  syncFullscreenButton()
 
   win.connect("close-request", () => {
     if (toastTimeout) GLib.source_remove(toastTimeout)
