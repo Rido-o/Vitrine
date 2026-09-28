@@ -3,21 +3,29 @@
 The gtk4-rs spike (`rust/`, see `rust/PLAN.md`) against the TypeScript app,
 on the same corpus and scenarios (`bench/README.md`). Raw runs are in
 `results/`; the numbers below are from the runs at `ab9d0e4` (TypeScript
-app, with the Phase 3 probe) and `5844d4b` (spike, end of Phase 3).
+app, with the Phase 3 probe; its warm runs at `2909b5e`, see "Correction")
+and `5844d4b` (spike, end of Phase 3).
 
 ## Verdict
 
-The spike is much smoother in every scenario measured. With Vulkan (GTK's
-default) it draws ~3.5× as many frames per second while scrolling a folder
-whose thumbnails are being generated. It fills the first screen ~25× sooner,
-shows an opened image sharp 4–11× sooner, and barely drops a frame holding
-←/→. Its memory peaks 16–61% lower in three of the four configurations. The
-exception is cold on Vulkan, where both peak at about 870–880 MB. With the GL
-renderer (`GSK_RENDERER=ngl`) the spike drops at most a handful of frames in
-any scenario.
+Once every thumbnail is on disk, both apps scroll about equally smoothly
+(56–60 frames per second). The spike is much better everywhere else:
+
+- **While thumbnails are being generated** (a new folder, or one the
+  TypeScript app hasn't finished; it doesn't finish this corpus within a
+  run), the spike draws ~3.5× as many frames per second while scrolling and
+  fills the first screen ~25× sooner.
+- **Opening an image** shows the thumbnail at once and the sharp image 3–4×
+  sooner.
+- **Holding ←/→** drops 0–4 frames against 4–11.
+- **Memory peaks** 16–61% lower in three of the four configurations. The
+  exception is cold on Vulkan, where both peak at about 870–880 MB.
+
+With the GL renderer (`GSK_RENDERER=ngl`, now `gl`) the spike drops at most
+a handful of frames in any scenario.
 
 **Recommendation: continue the port.** The spike does far less than the app
-(see "What the spike doesn't do"), so some of the gap will close as features
+(see "What the spike doesn't do"), so some of the gap may close as features
 come over. The gains come from structure, not from missing features:
 decoding on worker threads, memory freed as soon as it's dropped, and decoding
 only the pixels shown. None of those depends on what gets ported.
@@ -42,11 +50,10 @@ Vulkan is what users get by default; GL is the fix on NVIDIA (see "Findings").
 |---|---|---|---|---|
 | First screen of thumbnails (cold) | 9.8 s | 0–0.4 s | 9.9 s | 0–0.4 s |
 | Frames per second scrolling, cold | 16 | 57 | 16 | 58 |
-| Frames per second scrolling, warm | 16 | 57 | 41 | 58 |
-| Open an image: sharp (warm) | 455 ms | 40 ms | 156 ms | 35 ms |
-| Hold → 60 times: dropped frames (warm) | 40 | 4 | 8 | 0 |
-| Idle: dropped frames in 2 s (warm) | 32 | 0 | 0 | 0 |
-| Peak memory (warm) | 1,013 MB | 732 MB | 1,637 MB | 638 MB |
+| Frames per second scrolling, warm | 56 | 57 | 60 | 58 |
+| Open an image: sharp (warm) | 128 ms | 40 ms | 138 ms | 35 ms |
+| Hold → 60 times: dropped frames (warm) | 11 | 4 | 4 | 0 |
+| Peak memory (warm) | 1,340 MB | 732 MB | 1,640 MB | 638 MB |
 
 The spike's first screen varies between runs (it competes with start-up and
 every worker starting at once).
@@ -55,8 +62,8 @@ every worker starting at once).
 
 | | TS cold | TS warm | spike cold | spike warm |
 |---|---|---|---|---|
-| All 3,000 items listed, from the window | 1.2 s | 1.9 s | at once | at once |
-| Worst stall while scanning | 264 ms | 381 ms | 226 ms | 163 ms |
+| All 3,000 items listed, from the window | 1.2 s | 1.6 s | at once | at once |
+| Worst stall while scanning | 264 ms | 710 ms | 226 ms | 163 ms |
 
 The spike's walk takes ~7 ms on a worker thread; it is done before the window
 has drawn. Both apps' worst stall here is start-up (GTK loading its icon theme
@@ -70,13 +77,13 @@ Scrolling top to bottom at 4,000 px/s (about 20 s), Vulkan / GL:
 
 | | TS cold | spike cold | TS warm | spike warm |
 |---|---|---|---|---|
-| Frames drawn | 437 / 445 | 1,168 / 1,176 | 329 / 833 | 1,169 / 1,172 |
-| Median frame | 52 / 50 ms | 17.0 / 17.3 ms | 35 / 17 ms | 17.0 / 17.2 ms |
-| 95th percentile frame | 150 / 147 ms | 19.5 / 18.9 ms | 196 / 67 ms | 18.7 / 18.5 ms |
-| Dropped frames | 336 / 344 | 41 / 5 | 217 / 182 | 30 / 10 |
-| Main thread blocked in total | 10.2 / 9.1 s | 3.3 / 0.6 s | 9.9 / 4.6 s | 2.9 / 0.4 s |
-| Scroll took (target ~20.4 s) | 27.0 / 27.0 s | 20.4 s | 20.5 / 20.1 s | 20.4 s |
-| Jump to the middle, until filled | 8.0 / 7.7 s | 0.35 s / 46 ms | 0.29 / 0.22 s | 0.34 s / 54 ms |
+| Frames drawn | 437 / 445 | 1,168 / 1,176 | 1,150 / 1,220 | 1,169 / 1,172 |
+| Median frame | 52 / 50 ms | 17.0 / 17.3 ms | 16.5 / 16.7 ms | 17.0 / 17.2 ms |
+| 95th percentile frame | 150 / 147 ms | 19.5 / 18.9 ms | 18.6 / 17.9 ms | 18.7 / 18.5 ms |
+| Dropped frames | 336 / 344 | 41 / 5 | 33 / 13 | 30 / 10 |
+| Main thread blocked in total | 10.2 / 9.1 s | 3.3 / 0.6 s | 3.0 / 0.3 s | 2.9 / 0.4 s |
+| Scroll took (target ~20.4 s) | 27.0 / 27.0 s | 20.4 s | 20.4 s | 20.4 s |
+| Jump to the middle, until filled | 8.0 / 7.7 s | 0.35 s / 46 ms | 223 / 218 ms | 0.34 s / 54 ms |
 
 Generating all 3,000 thumbnails in the background takes the spike 11–14 s;
 the TypeScript app hadn't finished by the end of a run. Per image on a
@@ -90,12 +97,12 @@ per second, then Esc. Warm, Vulkan / GL:
 
 | | TS | spike |
 |---|---|---|
-| Placeholder (thumbnail) shown | 453 / 154 ms | 0 / 0 ms |
-| Sharp image shown | 455 / 156 ms | 40 / 35 ms |
-| Open: dropped frames | 17 / 2 | 1 / 0 |
-| Hold →: dropped frames | 40 / 8 | 4 / 0 |
-| Hold →: worst stall | 184 / 23 ms | 12 ms / none |
-| Close: dropped frames | 6 / 5 | 4 / 0 |
+| Placeholder (thumbnail) shown | 126 / 135 ms | 0 / 0 ms |
+| Sharp image shown | 128 / 138 ms | 40 / 35 ms |
+| Open: dropped frames | 2 / 2 | 1 / 0 |
+| Hold →: dropped frames | 11 / 4 | 4 / 0 |
+| Hold →: worst stall | 44 / 18 ms | 12 ms / none |
+| Close: dropped frames | 1 / 1 | 4 / 0 |
 
 Cold runs are similar for the spike (sharp in 30–56 ms, no dropped frames
 holding → on Vulkan). For the TypeScript app, cold is 183–211 ms to sharp and
@@ -113,7 +120,11 @@ Peak resident memory over a whole run:
 | | TS, Vulkan | spike, Vulkan | TS, GL | spike, GL |
 |---|---|---|---|---|
 | Cold | 867 MB | 883 MB | 950 MB | 801 MB |
-| Warm | 1,013 MB | 732 MB | 1,637 MB | 638 MB |
+| Warm | 1,340 MB | 732 MB | 1,640 MB | 638 MB |
+
+The TypeScript app's peaks vary a lot between identical runs (1,063 and
+1,340 MB warm on Vulkan, minutes apart), with its garbage collector's timing;
+the spike's vary by a few tens of MB.
 
 At the end of a warm GL run the spike holds 592 MB. Of that, ~120 MB is mapped
 files (libraries and fonts, mostly shared with other processes) and ~30 MB GPU
@@ -128,17 +139,17 @@ workers decode: capping glibc's arenas and fixing its mmap threshold
   new texture.** That's ~12 ms per row of new thumbnails, and 100–300 ms when
   a screenful arrives at once (e.g. after a jump). It shows up as NVIDIA
   driver `ioctl`s. The GL renderer (`GSK_RENDERER=ngl`) doesn't have it. It's
-  a known driver problem, not ours. **The TypeScript app gains from GL too,
-  today, with no code change:** warm, holding → drops 8 frames instead of 40,
-  scrolling draws 41 frames per second instead of 16, and idle stops dropping
-  frames.
+  a known driver problem, not ours. **The TypeScript app gains from GL too:**
+  warm, scrolling drops 13 frames instead of 33 and holding → 4 instead of
+  11. `master` now picks GL itself when NVIDIA's driver is loaded.
 - **GdkPixbuf's async API decodes on the main thread** (it only reads in the
   background). This was the TypeScript app's biggest cost; in the spike every
   decode runs on a worker.
 - **`GridView` keeps ~390 tiles bound**, far more than are visible. A
-  300-texture cache, as the TypeScript app has, lets off-screen tiles evict
-  visible ones. The spike never evicts a bound tile's texture. The TypeScript
-  app likely has the same thrash.
+  300-texture cache lets off-screen tiles evict visible ones. The spike never
+  evicts a bound tile's texture. The TypeScript app had the same thrash (its
+  view opened without the placeholder for ~130 ms); `master` now keeps bound
+  tiles' textures too.
 - **Decode only the pixels shown.** Thumbnails decode JPEGs at a reduced size
   (libjpeg-turbo's 1/2–1/8 scaling), and the full-screen view decodes at the
   window's size. Both cut decode time, memory, and above all upload time.
@@ -147,6 +158,17 @@ workers decode: capping glibc's arenas and fixing its mmap threshold
 - **Glycin wasn't tried in the spike.** It always decodes at full size, and
   its JPEG loader can't decode smaller, so it does more work than the
   full-resolution variant measured above.
+
+## Correction
+
+The first version of this document compared against "warm" runs of the
+TypeScript app that weren't warm. Each followed a cold run, and the app
+hadn't finished generating thumbnails in the background by the end of it, so
+the "warm" run was still generating, on the main thread. Those runs gave the
+TypeScript app 16–41 frames per second scrolling warm, 156–455 ms to open an
+image and 8–40 dropped frames holding →. The warm numbers above are from runs
+with every thumbnail on disk. The spike finishes generating within its cold
+run, so its warm runs were warm. The cold comparisons are unaffected.
 
 ## What the spike doesn't do
 

@@ -97,7 +97,7 @@ Own app ID (`io.github.Rido_o.Vitrine.Spike`) and cache
   The remaining stalls (~250 of ~12 ms, one per row of new tiles, and
   ~200 ms on a jump) are GTK's Vulkan renderer on NVIDIA's driver, a few ms
   per new texture; with `GSK_RENDERER=ngl` they drop to ~20 of ≤14 ms and a
-  ~50 ms jump. The TypeScript app gains from GL too (holding →: 41 → 2
+  ~50 ms jump. The TypeScript app gains from GL too (holding →: 11 → 4
   dropped frames warm). Memory peaks at ~770–910 MB, still to explain.
 - Fallback if the grid itself is the bottleneck: one custom widget drawing all
   visible thumbnails in `snapshot` instead of a widget per tile.
@@ -120,8 +120,8 @@ Own app ID (`io.github.Rido_o.Vitrine.Spike`) and cache
 
 - **Result:** decoding at the window's size, on 2 workers, with the shown
   image first and the queue replaced on every move. Warm with GL: the
-  placeholder at once, the sharp image in ~35 ms (TS: ~155 ms), holding → with
-  no dropped frames (TS: 8; 40 with Vulkan) and the last image sharp on
+  placeholder at once, the sharp image in ~35 ms (TS: ~130 ms), holding → with
+  no dropped frames (TS: 4; 11 with Vulkan) and the last image sharp on
   release. Decoding at full resolution instead (`VITRINE_VIEWER=full`) keeps
   opening fast but makes holding → drop 17–18 frames with stalls up to ~300
   ms (uploads), and peaks ~270 MB higher: screen-size decoding is the default.

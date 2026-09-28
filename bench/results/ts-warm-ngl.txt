@@ -1,10 +1,10 @@
-# ts warm 2026-09-28T20:50:32+10:00 ab9d0e4
-scan frames=9 p50=33.3 p95=199.3 p99=199.3 max=199.3 over25=6 stalls=20 stall_sum=393 stall_max=51 first_ms=542 done_ms=924 items=3000
-fill_first fill_ms=416
-scroll frames=833 p50=17.2 p95=66.7 p99=115.8 max=167.6 over25=182 stalls=172 stall_sum=4555 stall_max=102 scroll_ms=20082 fill_after_ms=2
-jump frames=2 p50=214.5 p95=214.5 p99=214.5 max=214.5 over25=1 stalls=5 stall_sum=231 stall_max=153 fill_ms=220
-open frames=88 p50=16.7 p95=16.7 p99=33.3 max=50.0 over25=2 stalls=4 stall_sum=76 stall_max=34 placeholder_ms=154 sharp_ms=156
-hold frames=131 p50=16.7 p95=32.1 p99=33.3 max=33.3 over25=8 stalls=19 stall_sum=255 stall_max=23 presses=60 last_sharp_ms=0
-close frames=57 p50=16.7 p95=30.2 p99=32.7 max=33.3 over25=5 stalls=1 stall_sum=21 stall_max=21 
-idle frames=127 p50=16.7 p95=16.7 p99=16.7 max=16.7 over25=0 stalls=0 stall_sum=0 stall_max=0 
-memory rss_mb=1546 hwm_mb=1637
+# ts warm 2026-09-28T21:45:25+10:00 2909b5e
+scan frames=14 p50=29.7 p95=46.6 p99=50.0 max=50.0 over25=7 stalls=16 stall_sum=361 stall_max=52 first_ms=501 done_ms=823 items=3000
+fill_first fill_ms=324
+scroll frames=1220 p50=16.7 p95=17.9 p99=29.5 max=33.3 over25=13 stalls=23 stall_sum=331 stall_max=29 scroll_ms=20411 fill_after_ms=2
+jump frames=2 p50=200.0 p95=200.0 p99=200.0 max=200.0 over25=1 stalls=5 stall_sum=229 stall_max=152 fill_ms=218
+open frames=88 p50=16.7 p95=16.7 p99=33.3 max=50.0 over25=2 stalls=4 stall_sum=68 stall_max=30 placeholder_ms=135 sharp_ms=138
+hold frames=127 p50=16.7 p95=19.0 p99=33.3 max=33.6 over25=4 stalls=15 stall_sum=160 stall_max=18 presses=60 last_sharp_ms=0
+close frames=58 p50=17.2 p95=19.7 p99=20.3 max=48.9 over25=1 stalls=2 stall_sum=46 stall_max=33 
+idle frames=126 p50=16.7 p95=18.1 p99=29.2 max=29.2 over25=2 stalls=0 stall_sum=0 stall_max=0 
+memory rss_mb=1601 hwm_mb=1640
