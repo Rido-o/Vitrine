@@ -8,6 +8,9 @@ export const APP_ID = "io.github.Rido_o.Vitrine"
 // Name before the rename; its cache and history are moved over once.
 export const OLD_APP_NAME = "shard-view"
 
+// Files per round trip when listing a folder (over NFS each is a network call).
+const LIST_BATCH_SIZE = 200
+
 // GJS's GC doesn't see the native memory behind textures and pixbufs, so
 // code that drops a lot of it asks for a collection; requests made before it
 // runs share one.
@@ -107,4 +110,58 @@ export function setWallpaper(argv: string[], file: string): Promise<void> {
       reject(error)
     }
   })
+}
+
+// Lists `directory` asynchronously, calling `visit` with each batch of file
+// infos; the enumerator is always closed.
+export async function listDirectory(
+  directory: Gio.File,
+  attributes: string,
+  visit: (infos: Gio.FileInfo[]) => void,
+  {
+    flags = Gio.FileQueryInfoFlags.NONE,
+    priority = GLib.PRIORITY_DEFAULT,
+    cancellable = null,
+  }: {
+    flags?: Gio.FileQueryInfoFlags
+    priority?: number
+    cancellable?: Gio.Cancellable | null
+  } = {},
+) {
+  const enumerator = await new Promise<Gio.FileEnumerator>((resolve, reject) =>
+    directory.enumerate_children_async(
+      attributes,
+      flags,
+      priority,
+      cancellable,
+      (_source, result) => {
+        try {
+          resolve(directory.enumerate_children_finish(result))
+        } catch (error) {
+          reject(error)
+        }
+      },
+    ),
+  )
+  const nextFiles = () =>
+    new Promise<Gio.FileInfo[]>((resolve, reject) =>
+      enumerator.next_files_async(
+        LIST_BATCH_SIZE,
+        priority,
+        cancellable,
+        (_source, result) => {
+          try {
+            resolve(enumerator.next_files_finish(result))
+          } catch (error) {
+            reject(error)
+          }
+        },
+      ),
+    )
+  try {
+    let infos: Gio.FileInfo[]
+    while ((infos = await nextFiles()).length > 0) visit(infos)
+  } finally {
+    enumerator.close_async(priority, null, null)
+  }
 }

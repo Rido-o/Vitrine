@@ -3,7 +3,14 @@ import GdkPixbuf from "gi://GdkPixbuf"
 import Gio from "gi://Gio"
 import GLib from "gi://GLib"
 import { decodeImage } from "./decode"
-import { APP_NAME, basename, cached, OLD_APP_NAME, requestGc } from "./util"
+import {
+  APP_NAME,
+  basename,
+  cached,
+  listDirectory,
+  OLD_APP_NAME,
+  requestGc,
+} from "./util"
 
 // Decoded size of cached thumbnails (changing it means a new cache folder).
 const THUMBNAIL_WIDTH = 440
@@ -215,45 +222,19 @@ export function evictThumbnail(file: string) {
 
 // Calls `visit` for each entry in `directory`, in batches at low priority so a
 // large cache doesn't hold up the window.
-async function forEachChild(
+function forEachChild(
   directory: Gio.File,
   visit: (info: Gio.FileInfo) => void,
 ) {
-  const enumerator = await new Promise<Gio.FileEnumerator>((resolve, reject) =>
-    directory.enumerate_children_async(
-      "standard::name,standard::type,time::modified",
-      Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS,
-      GLib.PRIORITY_LOW,
-      null,
-      (_source, result) => {
-        try {
-          resolve(directory.enumerate_children_finish(result))
-        } catch (error) {
-          reject(error)
-        }
-      },
-    ),
+  return listDirectory(
+    directory,
+    "standard::name,standard::type,time::modified",
+    (infos) => infos.forEach(visit),
+    {
+      flags: Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS,
+      priority: GLib.PRIORITY_LOW,
+    },
   )
-  let infos: Gio.FileInfo[]
-  while (
-    (infos = await new Promise<Gio.FileInfo[]>((resolve, reject) =>
-      enumerator.next_files_async(
-        200,
-        GLib.PRIORITY_LOW,
-        null,
-        (_source, result) => {
-          try {
-            resolve(enumerator.next_files_finish(result))
-          } catch (error) {
-            reject(error)
-          }
-        },
-      ),
-    )).length > 0
-  ) {
-    infos.forEach(visit)
-  }
-  enumerator.close(null)
 }
 
 // Deletes `file`; false if it failed. Another Vitrine process may be deleting

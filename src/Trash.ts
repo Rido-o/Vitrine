@@ -9,6 +9,7 @@
 // restores exactly that item.
 import Gio from "gi://Gio"
 import GLib from "gi://GLib"
+import { listDirectory } from "./util"
 
 export type TrashedItem = { original: string; uri: string }
 
@@ -21,46 +22,14 @@ export function trashAvailable() {
 // URIs of the trash:/// items that came from `path`.
 async function itemsFrom(path: string) {
   const trash = Gio.File.new_for_uri("trash:///")
-  const enumerator = await new Promise<Gio.FileEnumerator>((resolve, reject) =>
-    trash.enumerate_children_async(
-      "standard::name,trash::orig-path",
-      Gio.FileQueryInfoFlags.NONE,
-      GLib.PRIORITY_DEFAULT,
-      null,
-      (_source, result) => {
-        try {
-          resolve(trash.enumerate_children_finish(result))
-        } catch (error) {
-          reject(error)
-        }
-      },
-    ),
-  )
   const uris = new Set<string>()
-  let infos: Gio.FileInfo[]
-  while (
-    (infos = await new Promise<Gio.FileInfo[]>((resolve, reject) =>
-      enumerator.next_files_async(
-        200,
-        GLib.PRIORITY_DEFAULT,
-        null,
-        (_source, result) => {
-          try {
-            resolve(enumerator.next_files_finish(result))
-          } catch (error) {
-            reject(error)
-          }
-        },
-      ),
-    )).length > 0
-  ) {
+  await listDirectory(trash, "standard::name,trash::orig-path", (infos) => {
     for (const info of infos) {
       if (info.get_attribute_byte_string("trash::orig-path") === path) {
-        uris.add(enumerator.get_child(info).get_uri())
+        uris.add(trash.get_child(info.get_name()).get_uri())
       }
     }
-  }
-  enumerator.close(null)
+  })
   return uris
 }
 

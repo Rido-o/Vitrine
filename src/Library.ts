@@ -2,7 +2,7 @@ import Gio from "gi://Gio"
 import GLib from "gi://GLib"
 import Gtk from "gi://Gtk?version=4.0"
 import { evictThumbnail } from "./Thumbnails"
-import { cached } from "./util"
+import { cached, listDirectory } from "./util"
 
 export type SortKey = "name" | "date" | "size" | "random"
 
@@ -17,7 +17,6 @@ const IMAGE_EXTENSIONS = new Set([
 ])
 const ATTRIBUTES =
   "standard::name,standard::type,standard::is-symlink,standard::size,time::modified"
-const BATCH_SIZE = 200
 const SCAN_WORKERS = 4
 // Folders watched for changes (inotify watches are limited), and how often
 // changes trigger a rescan at most.
@@ -34,44 +33,6 @@ const WATCHED_EVENTS = new Set([
 
 export function isImage(path: string) {
   return IMAGE_EXTENSIONS.has(path.split(".").pop()?.toLowerCase() ?? "")
-}
-
-function enumerateChildren(directory: Gio.File, cancellable: Gio.Cancellable) {
-  return new Promise<Gio.FileEnumerator>((resolve, reject) => {
-    directory.enumerate_children_async(
-      ATTRIBUTES,
-      Gio.FileQueryInfoFlags.NONE,
-      GLib.PRIORITY_DEFAULT,
-      cancellable,
-      (_source, result) => {
-        try {
-          resolve(directory.enumerate_children_finish(result))
-        } catch (error) {
-          reject(error)
-        }
-      },
-    )
-  })
-}
-
-function nextFiles(
-  enumerator: Gio.FileEnumerator,
-  cancellable: Gio.Cancellable,
-) {
-  return new Promise<Gio.FileInfo[]>((resolve, reject) => {
-    enumerator.next_files_async(
-      BATCH_SIZE,
-      GLib.PRIORITY_DEFAULT,
-      cancellable,
-      (_source, result) => {
-        try {
-          resolve(enumerator.next_files_finish(result))
-        } catch (error) {
-          reject(error)
-        }
-      },
-    )
-  })
 }
 
 // An ordered list of the images in a folder, mirrored into a Gtk.StringList
@@ -172,51 +133,46 @@ export default class Library {
     return directories
   }
 
+  // Whether `directory` was read in full.
   private async scanDirectory(
     directory: Gio.File,
     pending: Gio.File[],
     cancellable: Gio.Cancellable,
     onBatch: (images: string[]) => void,
   ) {
-    let enumerator: Gio.FileEnumerator
     try {
-      enumerator = await enumerateChildren(directory, cancellable)
-    } catch (error) {
-      if (cancellable.is_cancelled()) return
-      console.error(`Could not read ${directory.get_path()}:`, error)
-      return
-    }
-    let read = true
-    try {
-      let infos: Gio.FileInfo[]
-      while ((infos = await nextFiles(enumerator, cancellable)).length > 0) {
-        const images: string[] = []
-        for (const info of infos) {
-          const child = directory.get_child(info.get_name())
-          if (info.get_file_type() === Gio.FileType.DIRECTORY) {
-            if (this.recursive && !info.get_is_symlink()) pending.push(child)
-            continue
+      await listDirectory(
+        directory,
+        ATTRIBUTES,
+        (infos) => {
+          if (cancellable.is_cancelled()) return
+          const images: string[] = []
+          for (const info of infos) {
+            const child = directory.get_child(info.get_name())
+            if (info.get_file_type() === Gio.FileType.DIRECTORY) {
+              if (this.recursive && !info.get_is_symlink()) pending.push(child)
+              continue
+            }
+            const path = child.get_path()
+            if (!path || !isImage(path)) continue
+            this.mtimes.set(
+              path,
+              info.get_modification_date_time()?.to_unix() ?? 0,
+            )
+            this.sizes.set(path, info.get_size())
+            images.push(path)
           }
-          const path = child.get_path()
-          if (!path || !isImage(path)) continue
-          this.mtimes.set(
-            path,
-            info.get_modification_date_time()?.to_unix() ?? 0,
-          )
-          this.sizes.set(path, info.get_size())
-          images.push(path)
-        }
-        if (cancellable.is_cancelled()) return
-        if (images.length > 0) onBatch(images)
-      }
+          if (images.length > 0) onBatch(images)
+        },
+        { cancellable },
+      )
+      return true
     } catch (error) {
-      if (cancellable.is_cancelled()) return
-      console.error(`Could not read ${directory.get_path()}:`, error)
-      read = false
-    } finally {
-      enumerator.close_async(GLib.PRIORITY_DEFAULT, null, null)
+      if (!cancellable.is_cancelled()) {
+        console.error(`Could not read ${directory.get_path()}:`, error)
+      }
+      return false
     }
-    return read
   }
 
   private begin() {
