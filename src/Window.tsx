@@ -691,26 +691,38 @@ export default function ViewerWindow(
       grid.grab_focus()
       return true
     }
+    if (state & Gdk.ModifierType.CONTROL_MASK) {
+      if (keyval === Gdk.KEY_z || keyval === Gdk.KEY_Z)
+        return (undoDelete(), true)
+      if (keyval === Gdk.KEY_c || keyval === Gdk.KEY_C) {
+        if (state & Gdk.ModifierType.SHIFT_MASK) copySelectedPath()
+        else copySelectedImage()
+        return true
+      }
+      if (
+        keyval === Gdk.KEY_w ||
+        keyval === Gdk.KEY_W ||
+        keyval === Gdk.KEY_q ||
+        keyval === Gdk.KEY_Q
+      )
+        return (win.close(), true)
+    }
+    // Everything else is a plain key (Shift is allowed, for ? and +), so
+    // e.g. Ctrl+W doesn't set the wallpaper.
+    if (
+      state &
+      (Gdk.ModifierType.CONTROL_MASK |
+        Gdk.ModifierType.ALT_MASK |
+        Gdk.ModifierType.SUPER_MASK)
+    )
+      return false
     if (keyval === Gdk.KEY_Delete || keyval === Gdk.KEY_KP_Delete)
       return (deleteSelected(), true)
-    if (
-      (keyval === Gdk.KEY_z || keyval === Gdk.KEY_Z) &&
-      state & Gdk.ModifierType.CONTROL_MASK
-    )
-      return (undoDelete(), true)
     if (keyval === Gdk.KEY_r || keyval === Gdk.KEY_R) return (rescan(), true)
     if (keyval === Gdk.KEY_w || keyval === Gdk.KEY_W)
       return (setSelectedAsWallpaper(), true)
     if (keyval === Gdk.KEY_i || keyval === Gdk.KEY_I)
       return (toggleProperties(), true)
-    if (
-      (keyval === Gdk.KEY_c || keyval === Gdk.KEY_C) &&
-      state & Gdk.ModifierType.CONTROL_MASK
-    ) {
-      if (state & Gdk.ModifierType.SHIFT_MASK) copySelectedPath()
-      else copySelectedImage()
-      return true
-    }
     if (keyval === Gdk.KEY_question) return (openShortcuts(), true)
     if (stack.visibleChildName === "preview") {
       if (keyval === Gdk.KEY_Right) return (movePreview(1), true)

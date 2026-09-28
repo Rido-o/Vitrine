@@ -81,6 +81,7 @@ Keys (grid unless noted):
 | `r` | Rescan |
 | Delete | Move to trash (needs GVfs) |
 | Ctrl+Z | Undo the last delete; repeat to go further back (grid and view) |
+| Ctrl+W, Ctrl+Q | Close the window (grid and view) |
 | Esc, `q` | Close the view, or quit from the grid |
 | ←/→ (view) | Previous/next image |
 | click the left/right sixth (view, at fit) | Previous/next image; the cursor shows an arrow there |

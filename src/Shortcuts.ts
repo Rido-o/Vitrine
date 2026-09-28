@@ -16,6 +16,7 @@ function sections(wallpaper: boolean): Section[] {
         ["r", "Rescan folder"],
         ["Delete", "Move to trash"],
         ["Ctrl+Z", "Undo delete"],
+        ["Ctrl+W, Ctrl+Q", "Close the window"],
         ["?", "Keyboard shortcuts"],
       ],
     },
