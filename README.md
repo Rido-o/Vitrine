@@ -217,6 +217,18 @@ Things that broke and look like harmless cleanups:
   large image kept ~8 MB alive until collected, so generating 348 screenshot
   thumbnails peaked at 2.9 GB, versus ~0.35 GB with it and no slower; a folder
   under ~400 images never evicts, so the eviction nudge alone never ran.
+- **~800 MB after scrolling a large folder isn't a leak.** After a warm scroll
+  through 7,756 images, `/proc/PID/smaps` showed ~550 MB of `[heap]` and ~200
+  MB of GPU driver mappings (`/dev/nvidiactl`), with only ~170 MB of
+  thumbnails live. The heap is freed render allocations that glibc keeps: once
+  large buffers are freed it raises its mmap threshold, so later ~0.5 MB
+  texture allocations come from the heap, and fragmentation stops it
+  shrinking. It's the same in a gtk4-rs prototype and with every GSK renderer,
+  and it stays bounded (444–904 MB over five runs). `GLIBC_TUNABLES=
+  glibc.malloc.mmap_threshold=131072` brings it to ~470 MB, but it isn't set:
+  thumbnail generation got ~6% slower, and every texture allocation would
+  mmap on the main thread; frame times weren't measured, and responsiveness
+  matters more than memory here.
 - **Decode with GdkPixbuf's async API (`decode.ts`), not
   `Gdk.Texture.new_from_bytes`.** The latter decodes on the main thread and
   froze the window for the whole decode (up to ~150 ms for a 12 MP WebP, ~90
