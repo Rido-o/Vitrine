@@ -19,6 +19,9 @@
   libglycin-gtk4,
   webp-pixbuf-loader,
   gnim,
+  # Bundle bench/probe-ts.tsx (the benchmark, see bench/README.md) instead of
+  # the app's own entry.
+  probe ? false,
 }: let
   appId = "io.github.Rido_o.Vitrine";
   mimeTypes = ["image/gif" "image/jpeg" "image/png" "image/tiff" "image/webp"];
@@ -35,12 +38,15 @@
   };
 in
   stdenv.mkDerivation {
-    pname = "vitrine";
+    pname =
+      if probe
+      then "vitrine-bench"
+      else "vitrine";
     version = "0.1.0";
 
     src = lib.fileset.toSource {
       root = ./.;
-      fileset = lib.fileset.unions [./src ./icons];
+      fileset = lib.fileset.unions ([./src ./icons] ++ lib.optional probe ./bench/probe-ts.tsx);
     };
 
     nativeBuildInputs = [
@@ -72,7 +78,11 @@ in
 
       sass --no-source-map src/style.scss src/style.css
 
-      esbuild src/main.tsx \
+      esbuild ${
+        if probe
+        then "bench/probe-ts.tsx"
+        else "src/main.tsx"
+      } \
         --bundle --format=esm --outfile=main.js \
         --external:'gi://*' --external:'resource://*' \
         --external:system --external:gettext --external:cairo \

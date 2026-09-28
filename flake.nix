@@ -42,6 +42,12 @@
   in {
     packages = forAllSystems (pkgs: {
       default = pkgs.callPackage ./package.nix {inherit gnim;};
+      # The gtk4-rs spike (rust/) and the TypeScript app's benchmark build.
+      spike = pkgs.callPackage ./rust/package.nix {};
+      bench-ts = pkgs.callPackage ./package.nix {
+        inherit gnim;
+        probe = true;
+      };
     });
 
     homeManagerModules.default = import ./hm-module.nix self;
@@ -70,6 +76,10 @@
           ${linkNodeModules pkgs}
           export PATH="$PWD/node_modules/.bin:$PATH"
         '';
+      };
+      spike = pkgs.mkShell {
+        inputsFrom = [self.packages.${pkgs.stdenv.hostPlatform.system}.spike];
+        packages = [pkgs.cargo pkgs.clippy pkgs.rustfmt pkgs.rust-analyzer];
       };
     });
 

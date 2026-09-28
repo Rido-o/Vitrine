@@ -1,0 +1,13 @@
+[package]
+name = "vitrine-rs"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+description = "Spike: a gtk4-rs port of Vitrine, to measure performance"
+publish = false
+
+[dependencies]
+gtk = { package = "gtk4", version = "0.11", features = ["v4_16"] }
+
+[profile.release]
+debug = "line-tables-only"
