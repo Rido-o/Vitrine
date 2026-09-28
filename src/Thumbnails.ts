@@ -16,13 +16,17 @@ import {
 const THUMBNAIL_WIDTH = 440
 const THUMBNAIL_HEIGHT = 320
 const THUMBNAIL_CONCURRENCY = 4
+// Background generation uses fewer, leaving room for tiles scrolled to, and
+// checks this many images for a cached thumbnail per pass.
+const BACKGROUND_CONCURRENCY = 2
+const BACKGROUND_CHECKS = 100
 
 // Cache files are named after the image's path and mtime, so edited, moved or
 // deleted images leave orphans. Files are touched when used (at most daily)
 // and pruned once unused for PRUNE_AFTER_DAYS.
 const PRUNE_AFTER_DAYS = 90
 const TOUCH_AFTER_SECONDS = 24 * 60 * 60
-const CACHE_FILE = /^[0-9a-f]{32}\.jpg$/
+const CACHE_FILE = /^[0-9a-f]{32}\.(jpg|png)$/
 
 // Decoded thumbnails kept in memory (~0.5 MB each), least recently used
 // dropped first; a dropped tile that scrolls back into view reloads from disk.
@@ -118,36 +122,163 @@ function touchIfStale(path: string) {
   }
 }
 
-let activeLoads = 0
-const queue: Array<() => void> = []
+// Cache files are named after a hash of the path and mtime. Formats that can
+// be transparent were once saved as JPEG, losing it (transparent areas came
+// out black); a suffix gives their thumbnails new names, so those old ones go
+// unused and get pruned.
+function cacheBase(file: string, mtime: number) {
+  const canBeTransparent = !/\.jpe?g$/i.test(file)
+  const hash = GLib.compute_checksum_for_string(
+    GLib.ChecksumType.MD5,
+    canBeTransparent ? `${file}:${mtime}:alpha` : `${file}:${mtime}`,
+    -1,
+  )
+  return GLib.build_filenamev([THUMBNAIL_CACHE, `${hash}`])
+}
 
-function withConcurrencyLimit<T>(task: () => Promise<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const run = () => {
-      activeLoads++
-      task()
-        .then(resolve, reject)
-        .finally(() => {
-          activeLoads--
-          queue.shift()?.()
-        })
+// The cached thumbnail's path, if there is one: a JPEG, or a PNG when the
+// image has transparent pixels.
+function cachedFile(file: string, mtime: number) {
+  const base = cacheBase(file, mtime)
+  for (const path of [`${base}.jpg`, `${base}.png`]) {
+    if (GLib.file_test(path, GLib.FileTest.EXISTS)) return path
+  }
+  return null
+}
+
+function hasTransparency(pixbuf: GdkPixbuf.Pixbuf) {
+  if (!pixbuf.get_has_alpha()) return false
+  const pixels = pixbuf.get_pixels()
+  const stride = pixbuf.get_rowstride()
+  const channels = pixbuf.get_n_channels()
+  for (let y = 0; y < pixbuf.get_height(); y++) {
+    const row = y * stride
+    for (let x = 0; x < pixbuf.get_width(); x++) {
+      if (pixels[row + x * channels + 3] < 255) return true
     }
-    if (activeLoads < THUMBNAIL_CONCURRENCY) run()
-    else queue.push(run)
+  }
+  return false
+}
+
+// Decodes `file` down to thumbnail size and saves it to the cache.
+async function generate(file: string, mtime: number) {
+  const pixbuf = await decodeImage(file, {
+    width: THUMBNAIL_WIDTH,
+    height: THUMBNAIL_HEIGHT,
+  }).finally(() => {
+    if (++generated === GC_AFTER_GENERATED) {
+      generated = 0
+      requestGc()
+    }
+  })
+  const base = cacheBase(file, mtime)
+  try {
+    if (hasTransparency(pixbuf)) pixbuf.savev(`${base}.png`, "png", [], [])
+    else pixbuf.savev(`${base}.jpg`, "jpeg", ["quality"], ["85"])
+  } catch (error) {
+    console.error(`Could not cache thumbnail ${file}:`, error)
+  }
+  return pixbuf
+}
+
+// Rejection of a thumbnail no tile wanted any more by the time its turn came.
+export class Skipped extends Error {}
+
+// Generating (decoding a full image) is the slow part, so it's queued, at most
+// THUMBNAIL_CONCURRENCY at a time. Tiles' requests go newest first (the ones
+// just scrolled to), and one no tile wants any longer is skipped, so scrolling
+// fast through a big folder doesn't build a backlog of tiles already passed.
+// A folder's other missing thumbnails are generated in the background, only
+// while no tile is waiting.
+type Job = { run: () => Promise<unknown>; skip: () => void; key: string }
+const requested: Job[] = []
+let active = 0
+// How many bound tiles want each thumbnail (loadThumbnail adds one,
+// releaseThumbnail takes it back).
+const wanted = new Map<string, number>()
+let background: Array<[string, number]> = []
+let backgroundNext = 0
+
+function pump() {
+  while (active < THUMBNAIL_CONCURRENCY) {
+    const job =
+      requested.pop() ??
+      (active < BACKGROUND_CONCURRENCY ? nextBackgroundJob() : undefined)
+    if (!job) return
+    if (job.key && !wanted.has(job.key)) {
+      job.skip()
+      continue
+    }
+    active++
+    job.run().finally(() => {
+      active--
+      pump()
+    })
+  }
+}
+
+// The next background thumbnail that isn't cached, loading or in memory. Looks
+// at a limited number per call (each is a stat), continuing when idle, so a
+// big folder that's already cached doesn't block the window.
+function nextBackgroundJob(): Job | undefined {
+  for (let checked = 0; checked < BACKGROUND_CHECKS; checked++) {
+    const item = background[backgroundNext++]
+    if (!item) return undefined
+    const [file, mtime] = item
+    const key = memoryKey(file, mtime)
+    if (loads.has(key) || textures.has(key) || cachedFile(file, mtime)) {
+      continue
+    }
+    return {
+      key: "",
+      skip: () => {},
+      run: () =>
+        generate(file, mtime).catch((error) =>
+          console.error(`Could not generate thumbnail ${file}:`, error),
+        ),
+    }
+  }
+  GLib.idle_add(GLib.PRIORITY_LOW, () => {
+    pump()
+    return GLib.SOURCE_REMOVE
+  })
+  return undefined
+}
+
+// Generates the missing thumbnails of `images` ([path, mtime]) in the
+// background, replacing any earlier list (one window per process is usual).
+export function generateInBackground(images: Array<[string, number]>) {
+  background = images
+  backgroundNext = 0
+  pump()
+}
+
+export function stopBackgroundGeneration(images: Array<[string, number]>) {
+  if (background !== images) return
+  background = []
+  backgroundNext = 0
+}
+
+function queueGeneration(
+  key: string,
+  generateTexture: () => Promise<Gdk.Texture>,
+) {
+  return new Promise<Gdk.Texture>((resolve, reject) => {
+    requested.push({
+      key,
+      skip: () => reject(new Skipped()),
+      run: () => generateTexture().then(resolve, reject),
+    })
+    pump()
   })
 }
 
-function cachePath(file: string, mtime: number) {
-  const hash = GLib.compute_checksum_for_string(
-    GLib.ChecksumType.MD5,
-    `${file}:${mtime}`,
-    -1,
-  )
-  return GLib.build_filenamev([THUMBNAIL_CACHE, `${hash}.jpg`])
-}
-
+// Loads a tile's thumbnail from memory, the cache or the image; call
+// releaseThumbnail when the tile no longer shows it. Rejects with Skipped if
+// it's released before its turn to be generated.
 export function loadThumbnail(file: string, mtime: number) {
   const key = memoryKey(file, mtime)
+  wanted.set(key, (wanted.get(key) ?? 0) + 1)
   const existing = getTexture(key)
   if (existing) return Promise.resolve(existing)
 
@@ -155,9 +286,8 @@ export function loadThumbnail(file: string, mtime: number) {
   if (inFlight) return inFlight
 
   const promise = (async () => {
-    const path = cachePath(file, mtime)
-
-    if (GLib.file_test(path, GLib.FileTest.EXISTS)) {
+    const path = cachedFile(file, mtime)
+    if (path) {
       try {
         const texture = Gdk.Texture.new_for_pixbuf(await decodeImage(path))
         touchIfStale(path)
@@ -166,37 +296,31 @@ export function loadThumbnail(file: string, mtime: number) {
         console.error(`Could not load cached thumbnail ${file}:`, error)
       }
     }
-
-    return withConcurrencyLimit(async () => {
-      const pixbuf = await decodeImage(file, {
-        width: THUMBNAIL_WIDTH,
-        height: THUMBNAIL_HEIGHT,
-      }).finally(() => {
-        if (++generated === GC_AFTER_GENERATED) {
-          generated = 0
-          requestGc()
-        }
-      })
-      try {
-        pixbuf.savev(path, "jpeg", ["quality"], ["85"])
-      } catch (error) {
-        console.error(`Could not cache thumbnail ${file}:`, error)
-      }
-      return Gdk.Texture.new_for_pixbuf(pixbuf)
-    })
+    return queueGeneration(key, async () =>
+      Gdk.Texture.new_for_pixbuf(await generate(file, mtime)),
+    )
   })()
     .then((texture) => {
       rememberTexture(key, texture)
       return texture
     })
     .catch((error) => {
-      console.error(`Could not load thumbnail ${file}:`, error)
+      if (!(error instanceof Skipped)) {
+        console.error(`Could not load thumbnail ${file}:`, error)
+      }
       throw error
     })
     .finally(() => loads.delete(key))
 
   loads.set(key, promise)
   return promise
+}
+
+export function releaseThumbnail(file: string, mtime: number) {
+  const key = memoryKey(file, mtime)
+  const count = (wanted.get(key) ?? 0) - 1
+  if (count > 0) wanted.set(key, count)
+  else wanted.delete(key)
 }
 
 export function getImageInfo(file: string) {

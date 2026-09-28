@@ -10,7 +10,14 @@ import Library, { type SortKey } from "./Library"
 import { decodeImage } from "./decode"
 import { propertiesPopover } from "./PropertiesPopover"
 import { showShortcuts } from "./Shortcuts"
-import { getImageInfo, loadThumbnail, peekThumbnail } from "./Thumbnails"
+import {
+  generateInBackground,
+  getImageInfo,
+  loadThumbnail,
+  peekThumbnail,
+  releaseThumbnail,
+  stopBackgroundGeneration,
+} from "./Thumbnails"
 import { moveToTrash, restore, trashAvailable, type TrashedItem } from "./Trash"
 import ZoomableImage from "./ZoomableImage"
 import {
@@ -57,6 +64,8 @@ export default function ViewerWindow(
   // The last selected image and its position: a rescan that replaces or
   // removes it makes GTK drop the selection, which is then put back.
   let lastSelected: { path: string; index: number } | null = null
+  // The images whose thumbnails are being generated in the background.
+  let backgroundImages: Array<[string, number]> = []
   let directionButton: Gtk.Button
   let fullscreenButton: Gtk.Button
   let fullscreenIcon: Gtk.Image
@@ -105,17 +114,28 @@ export default function ViewerWindow(
     picture.add_css_class("viewer-thumbnail")
     ;(listItem as Gtk.ListItem).set_child(picture)
   })
+  // Each tile's thumbnail [path, mtime], released when the tile is unbound
+  // (scrolled away) so one not generated yet is skipped.
+  const boundThumbnails = new Map<Gtk.ListItem, [string, number]>()
   factory.connect("bind", (_, object) => {
     const listItem = object as Gtk.ListItem
     const path = (listItem.get_item() as Gtk.StringObject).get_string()
+    const mtime = library.mtime(path)
     const picture = listItem.get_child() as Gtk.Picture
     picture.set_paintable(null)
-    loadThumbnail(path, library.mtime(path))
+    boundThumbnails.set(listItem, [path, mtime])
+    loadThumbnail(path, mtime)
       .then((texture) => {
         const current = listItem.get_item() as Gtk.StringObject | null
         if (current?.get_string() === path) picture.set_paintable(texture)
       })
       .catch(() => {})
+  })
+  factory.connect("unbind", (_, object) => {
+    const bound = boundThumbnails.get(object as Gtk.ListItem)
+    if (!bound) return
+    boundThumbnails.delete(object as Gtk.ListItem)
+    releaseThumbnail(...bound)
   })
 
   const grid = new Gtk.GridView({
@@ -325,6 +345,15 @@ export default function ViewerWindow(
   // full-screen view doesn't jump to another image).
   function onLibraryChanged() {
     restoreSelection()
+    // Once a folder is scanned, generate its missing thumbnails.
+    stopBackgroundGeneration(backgroundImages)
+    if (!library.loading) {
+      backgroundImages = library.paths.map((path) => [
+        path,
+        library.mtime(path),
+      ])
+      generateInBackground(backgroundImages)
+    }
     if (pendingSelection) {
       const index = library.paths.indexOf(pendingSelection)
       if (index !== -1) {
@@ -989,11 +1018,7 @@ export default function ViewerWindow(
             hexpand
             vexpand
           >
-            <Gtk.Overlay
-              $={(self) => autoHide.watch(self)}
-              hexpand
-              vexpand
-            >
+            <Gtk.Overlay $={(self) => autoHide.watch(self)} hexpand vexpand>
               {preview}
               <box
                 $type="overlay"
@@ -1088,6 +1113,7 @@ export default function ViewerWindow(
     if (toastTimeout) GLib.source_remove(toastTimeout)
     autoHide.dispose()
     library.dispose()
+    stopBackgroundGeneration(backgroundImages)
     return false
   })
 

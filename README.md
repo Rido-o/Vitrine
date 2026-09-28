@@ -11,7 +11,11 @@ your wallpaper with a command of your choice.
 
 - **Thumbnail grid** with an on-disk thumbnail cache and lazy,
   concurrency-limited loading; at most 300 decoded thumbnails stay in memory,
-  so memory stays bounded in huge folders. Folders are scanned in the
+  so memory stays bounded in huge folders. Thumbnails being generated go
+  newest first and are skipped once scrolled past, so the tiles you stop on
+  appear straight away; once a folder is scanned, its other missing thumbnails
+  are generated in the background (2 at a time, only while no tile is
+  waiting). Images smaller than a thumbnail keep their size. Folders are scanned in the
   background (4 folders at a time), so the window opens immediately and the
   grid fills in as images are found, even for large folders over NFS. It
   refreshes itself when images are added, removed, renamed or edited (Gio file
@@ -95,9 +99,12 @@ Keys (grid unless noted):
 
 Files:
 
-- Thumbnails: `~/.cache/vitrine/thumbnails-2`. A thumbnail is refreshed when it's
-  used, and a few seconds after launch Vitrine deletes any not used for 90
-  days, so thumbnails of edited, moved or deleted images don't pile up.
+- Thumbnails: `~/.cache/vitrine/thumbnails-2`. JPEG, or PNG for images with
+  transparent pixels (earlier JPEG thumbnails of PNG, WebP, GIF and TIFF
+  images lost their transparency, so those are regenerated under new names).
+  A thumbnail is refreshed when it's used, and a few seconds after launch
+  Vitrine deletes any not used for 90 days, so thumbnails of edited, moved or
+  deleted images don't pile up.
 - Folder history: `~/.local/state/vitrine/history`
 
 (The shard-view era's folder history is moved over once. Older thumbnail
