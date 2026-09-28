@@ -10,6 +10,11 @@ publish = false
 gtk = { package = "gtk4", version = "0.11", features = ["v4_16"] }
 async-channel = "2"
 libc = "0.2"
+turbojpeg = { version = "1.5", default-features = false, features = ["pkg-config"] }
+fast_image_resize = "6"
+png = "0.18"
+kamadak-exif = "0.6"
+libwebp-sys = "0.14"
 
 [profile.release]
 debug = "line-tables-only"

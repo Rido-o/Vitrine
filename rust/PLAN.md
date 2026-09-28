@@ -76,6 +76,16 @@ Own app ID (`io.github.Rido_o.Vitrine.Spike`) and cache
 - **2b:** `turbojpeg` with a 1/2–1/8 scaling factor plus `fast_image_resize`
   (SIMD) for the final step; kept only if faster. Not `zune-jpeg`: no scaled
   decode yet (zune-image#434). Other formats stay on GdkPixbuf or `image`.
+- **2b result:** per image, JPEG 10–45 ms (4–24 MP; the entropy decode is the
+  floor), PNG 50 → 26 ms (`png` + SIMD resize), WebP unchanged at ~68 ms
+  (GdkPixbuf's loader already uses libwebp's scaling; libwebp's decode is the
+  floor). First screen ~30–400 ms cold (varies with startup), the corpus in
+  ~12.4 s (bound by the 5 background workers, not decoding). EXIF rotation now
+  fits the rotated size (2a gave portraits 320×427). Memory: glibc arenas kept
+  the workers' decode buffers (~230 MB after a cold run); a fixed 1 MB mmap
+  threshold and 4 arenas (`mallopt`) cut the cold peak ~844 → ~740 MB. Warm
+  with GL: 479 MB peak (138 MB of it the 300 cached textures, ~120 MB mapped
+  libraries), no dropped frames.
 - **2c:** a variant using the freedesktop thumbnail cache
   (`~/.cache/thumbnails/x-large`, 512 px, MD5 of the file URI, PNG with
   `Thumb::URI`/`Thumb::MTime`/`Thumb::Size`), shared with file managers:

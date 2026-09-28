@@ -1,10 +1,13 @@
-# rs cold 2026-09-28T19:47:35+10:00 af258c9
-scan_detail first_us=183803 done_us=195817 batches=6 insert_max_us=10589 items=3000
-scan frames=42 p50=16.7 p95=17.9 p99=268.8 max=268.8 over25=2 stalls=3 stall_sum=391 stall_max=272 first_ms=0 done_ms=0 items=3000 t0_us=43059218403
-fill_first fill_ms=380
-background generated=2242 done_ms=16256
-scroll frames=1236 p50=16.6 p95=17.0 p99=18.6 max=33.6 over25=3 stalls=250 stall_sum=2903 stall_max=28 scroll_ms=20366 fill_after_ms=0 t0_us=43060605131
-jump frames=1 p50=0.0 p95=0.0 p99=0.0 max=0.0 over25=0 stalls=2 stall_sum=245 stall_max=237 fill_ms=238 t0_us=43080972059
+this derivation will be built:
+  /nix/store/8ks6pb6wgzwav2zz75zcngnjyk4f6b5s-vitrine-rs-0.1.0.drv
+building '/nix/store/8ks6pb6wgzwav2zz75zcngnjyk4f6b5s-vitrine-rs-0.1.0.drv'...
+# rs cold 2026-09-28T20:27:16+10:00 ec183f9
+scan_detail first_us=852669 done_us=863809 batches=6 insert_max_us=9971 items=3000
+scan frames=5 p50=32.7 p95=700.0 p99=700.0 max=700.0 over25=2 stalls=4 stall_sum=1073 stall_max=686 first_ms=0 done_ms=0 items=3000 t0_us=45441424198
+fill_first fill_ms=420
+background generated=2218 done_ms=15354
+scroll frames=1250 p50=16.5 p95=16.8 p99=17.9 max=47.4 over25=6 stalls=200 stall_sum=2288 stall_max=37 scroll_ms=20368 fill_after_ms=0 t0_us=45442940838
+jump frames=1 p50=0.0 p95=0.0 p99=0.0 max=0.0 over25=0 stalls=1 stall_sum=195 stall_max=195 fill_ms=197 t0_us=45463309375
 skipped open hold (no full-screen view yet)
-idle frames=117 p50=16.7 p95=16.7 p99=16.7 max=83.3 over25=1 stalls=1 stall_sum=61 stall_max=61  t0_us=43081218959
-memory rss_mb=674 hwm_mb=913
+idle frames=119 p50=16.7 p95=16.7 p99=16.7 max=50.0 over25=1 stalls=1 stall_sum=37 stall_max=37  t0_us=45463514473
+memory rss_mb=706 hwm_mb=885 heap_mb=128 anon_mb=387 gpu_mb=50 file_mb=140

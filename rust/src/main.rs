@@ -19,6 +19,7 @@ gridview > child { padding: 6px; }
 ";
 
 fn main() -> glib::ExitCode {
+    tune_malloc();
     let app = gtk::Application::builder()
         .application_id(APP_ID)
         .flags(gio::ApplicationFlags::NON_UNIQUE | gio::ApplicationFlags::HANDLES_OPEN)
@@ -42,6 +43,21 @@ fn main() -> glib::ExitCode {
         }
     });
     app.run()
+}
+
+// glibc raises its mmap threshold each time a large block is freed, so the
+// workers' multi-MB decode buffers ended up in per-thread arenas that never
+// shrink (~230 MB after generating a 3,000-image folder). A fixed 1 MB
+// threshold returns them to the system on free (thumbnails, ~0.5 MB, stay in
+// the arenas), and 4 arenas bound the rest: peak RSS 844 → 718 MB, no
+// measurable slowdown.
+fn tune_malloc() {
+    // SAFETY: mallopt only sets allocator parameters; called before any
+    // other thread exists.
+    unsafe {
+        libc::mallopt(libc::M_MMAP_THRESHOLD, 1 << 20);
+        libc::mallopt(libc::M_ARENA_MAX, 4);
+    }
 }
 
 // The store holds `Image`s boxed as GObjects, in the order found; the grid

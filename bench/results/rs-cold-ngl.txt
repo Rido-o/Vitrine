@@ -1,10 +1,10 @@
-# rs cold 2026-09-28T19:48:02+10:00 af258c9
-scan_detail first_us=89498 done_us=101590 batches=6 insert_max_us=10695 items=3000
-scan frames=39 p50=16.5 p95=66.5 p99=233.3 max=233.3 over25=3 stalls=3 stall_sum=426 stall_max=230 first_ms=0 done_ms=0 items=3000 t0_us=43086556618
-fill_first fill_ms=411
-background generated=2239 done_ms=15439
-scroll frames=1266 p50=16.6 p95=16.8 p99=17.2 max=20.8 over25=0 stalls=20 stall_sum=198 stall_max=14 scroll_ms=20369 fill_after_ms=0 t0_us=43087973136
-jump frames=1 p50=0.0 p95=0.0 p99=0.0 max=0.0 over25=0 stalls=1 stall_sum=43 stall_max=43 fill_ms=54 t0_us=43108342546
+# rs cold 2026-09-28T20:27:45+10:00 ec183f9
+scan_detail first_us=88748 done_us=105940 batches=6 insert_max_us=15728 items=3000
+scan frames=30 p50=16.7 p95=266.7 p99=266.8 max=266.8 over25=3 stalls=4 stall_sum=571 stall_max=268 first_ms=0 done_ms=0 items=3000 t0_us=45468806703
+fill_first fill_ms=170
+background generated=2232 done_ms=12435
+scroll frames=1250 p50=16.7 p95=17.5 p99=17.7 max=33.3 over25=1 stalls=19 stall_sum=184 stall_max=21 scroll_ms=20366 fill_after_ms=0 t0_us=45469980485
+jump frames=1 p50=0.0 p95=0.0 p99=0.0 max=0.0 over25=0 stalls=1 stall_sum=20 stall_max=20 fill_ms=22 t0_us=45490347316
 skipped open hold (no full-screen view yet)
-idle frames=120 p50=16.7 p95=16.7 p99=16.7 max=16.7 over25=0 stalls=0 stall_sum=0 stall_max=0  t0_us=43108404443
-memory rss_mb=708 hwm_mb=769
+idle frames=120 p50=16.7 p95=16.7 p99=16.7 max=33.3 over25=1 stalls=1 stall_sum=21 stall_max=21  t0_us=45490375489
+memory rss_mb=672 hwm_mb=738 heap_mb=144 anon_mb=375 gpu_mb=26 file_mb=125

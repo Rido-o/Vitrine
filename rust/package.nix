@@ -6,6 +6,7 @@
   gdk-pixbuf,
   glycin-loaders,
   gtk4,
+  libjpeg_turbo,
   librsvg,
   shared-mime-info,
   webp-pixbuf-loader,
@@ -21,7 +22,7 @@ rustPlatform.buildRustPackage {
   cargoLock.lockFile = ./Cargo.lock;
 
   nativeBuildInputs = [pkg-config wrapGAppsHook4];
-  buildInputs = [gdk-pixbuf gtk4 webp-pixbuf-loader];
+  buildInputs = [gdk-pixbuf gtk4 libjpeg_turbo webp-pixbuf-loader];
 
   # As in ../package.nix: our own loaders.cache, so GdkPixbuf reads WebP.
   postInstall = ''

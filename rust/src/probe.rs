@@ -214,7 +214,55 @@ fn memory() -> String {
             .and_then(|kb| kb.parse::<i64>().ok())
             .map_or(0, |kb| kb / 1024)
     };
-    format!("rss_mb={} hwm_mb={}", field("VmRSS:"), field("VmHWM:"))
+    format!(
+        "rss_mb={} hwm_mb={} {}",
+        field("VmRSS:"),
+        field("VmHWM:"),
+        memory_breakdown()
+    )
+}
+
+// Resident memory by kind of mapping, from /proc/self/smaps: the main heap,
+// other anonymous memory (malloc's per-thread arenas, large allocations),
+// GPU driver mappings, and files (libraries, the thumbnail cache).
+fn memory_breakdown() -> String {
+    let smaps = std::fs::read_to_string("/proc/self/smaps").unwrap_or_default();
+    let (mut heap, mut anon, mut gpu, mut file) = (0, 0, 0, 0);
+    let mut kind = 0;
+    for line in smaps.lines() {
+        if let Some(kb) = line.strip_prefix("Rss:") {
+            let kb: i64 = kb.trim().trim_end_matches(" kB").parse().unwrap_or(0);
+            match kind {
+                0 => heap += kb,
+                1 => anon += kb,
+                2 => gpu += kb,
+                _ => file += kb,
+            }
+            continue;
+        }
+        // A mapping's header: "start-end perms offset dev inode [path]".
+        let mut fields = line.split_whitespace();
+        let is_header = fields.next().is_some_and(|range| range.contains('-'))
+            && fields.next().is_some_and(|perms| perms.len() == 4);
+        if !is_header {
+            continue;
+        }
+        let path = fields.nth(3).unwrap_or("");
+        kind = match path {
+            "[heap]" => 0,
+            "" | "[stack]" | "[anon]" => 1,
+            _ if path.starts_with("/dev/nvidia") || path.starts_with("/dev/dri") => 2,
+            _ if path.starts_with("/memfd:") || path.starts_with("[anon:") => 1,
+            _ => 3,
+        };
+    }
+    format!(
+        "heap_mb={} anon_mb={} gpu_mb={} file_mb={}",
+        heap / 1024,
+        anon / 1024,
+        gpu / 1024,
+        file / 1024
+    )
 }
 
 pub fn run(window: &gtk::ApplicationWindow) {

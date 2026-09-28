@@ -6,6 +6,7 @@
 # previous run's. Uses a headless sway unless BENCH_DISPLAY names a Wayland
 # display to use instead (e.g. to watch it). BENCH_WRAP prefixes the app's
 # command, e.g. BENCH_WRAP="perf record -g -o /tmp/perf.data".
+# BENCH_LOG=FILE keeps the app's whole output.
 set -euo pipefail
 
 app=${1:?usage: run.sh ts|rs [cold|warm] [CORPUS_DIR]}
@@ -54,4 +55,5 @@ fi
 
 echo "# $app $mode $(date -Iseconds) $(git rev-parse --short HEAD)"
 XDG_CACHE_HOME=$home/cache XDG_STATE_HOME=$home/state WAYLAND_DISPLAY=$display \
-  VITRINE_PROBE=1 ${BENCH_WRAP:-} "$bin" "$corpus" 2>&1 | grep "^RESULT" | sed "s/^RESULT //"
+  VITRINE_PROBE=1 ${BENCH_WRAP:-} "$bin" "$corpus" 2>&1 |
+  tee "${BENCH_LOG:-/dev/null}" | grep "^RESULT" | sed "s/^RESULT //"
