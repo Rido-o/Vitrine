@@ -5,10 +5,43 @@ import GLib from "gi://GLib"
 
 // Decodes an image in GdkPixbuf's worker thread, so large images don't freeze
 // the window (Gdk.Texture.new_from_bytes decodes on the main thread: up to
-// ~150 ms for a 12 MP WebP). With `size`, scales to fit within it while
-// decoding. Cancelling `cancellable` stops the read and the decode. The EXIF
-// orientation is applied, so phone photos aren't sideways.
-export function decodeImage(
+// ~150 ms for a 12 MP WebP). With `size`, scales down to fit within it while
+// decoding (smaller images keep their size). Cancelling `cancellable` stops
+// the read and the decode. The EXIF orientation is applied, so phone photos
+// aren't sideways.
+export async function decodeImage(
+  path: string,
+  size?: { width: number; height: number },
+  cancellable: Gio.Cancellable | null = null,
+): Promise<GdkPixbuf.Pixbuf> {
+  if (size) {
+    const [width, height] = await imageSize(path, cancellable)
+    if (width <= size.width && height <= size.height) size = undefined
+  }
+  return decode(path, size, cancellable)
+}
+
+// The stored size (before EXIF rotation), from the file's header.
+function imageSize(path: string, cancellable: Gio.Cancellable | null) {
+  return new Promise<[number, number]>((resolve, reject) =>
+    GdkPixbuf.Pixbuf.get_file_info_async(
+      path,
+      cancellable,
+      (_source, result) => {
+        try {
+          const [format, width, height] =
+            GdkPixbuf.Pixbuf.get_file_info_finish(result)
+          if (!format) throw new Error("Unrecognized image format")
+          resolve([width, height])
+        } catch (error) {
+          reject(error)
+        }
+      },
+    ),
+  )
+}
+
+function decode(
   path: string,
   size?: { width: number; height: number },
   cancellable: Gio.Cancellable | null = null,
