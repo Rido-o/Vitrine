@@ -697,6 +697,12 @@ export default function ViewerWindow(
         return (preview.toggleSharp(), true)
       if (keyval === Gdk.KEY_f || keyval === Gdk.KEY_F)
         return (toggleFullscreen(), true)
+      if (keyval === Gdk.KEY_bracketleft) return (preview.rotate(false), true)
+      if (keyval === Gdk.KEY_bracketright) return (preview.rotate(true), true)
+      if (keyval === Gdk.KEY_h || keyval === Gdk.KEY_H)
+        return (preview.flip(true), true)
+      if (keyval === Gdk.KEY_v || keyval === Gdk.KEY_V)
+        return (preview.flip(false), true)
       if (keyval === Gdk.KEY_Escape || keyval === Gdk.KEY_q)
         return (hidePreview(), true)
       return false
@@ -751,7 +757,19 @@ export default function ViewerWindow(
     ["show-in-file-manager", () => withSelectedPath(showInFileManager)],
     ["rescan", rescan],
     ["shortcuts", openShortcuts],
+    ["rotate-left", () => preview.rotate(false)],
+    ["rotate-right", () => preview.rotate(true)],
+    ["flip-horizontally", () => preview.flip(true)],
+    ["flip-vertically", () => preview.flip(false)],
   ]
+  // Only enabled in the full-screen view.
+  const VIEW_ACTIONS = new Set([
+    "rotate-left",
+    "rotate-right",
+    "flip-horizontally",
+    "flip-vertically",
+  ])
+  const viewActions: Gio.SimpleAction[] = []
 
   function menuItem(label: string, action: string, accel?: string) {
     const item = Gio.MenuItem.new(label, `win.${action}`)
@@ -771,6 +789,15 @@ export default function ViewerWindow(
     menuSection(
       menuItem("Copy image", "copy-image", "<Control>c"),
       menuItem("Copy path", "copy-path", "<Control><Shift>c"),
+    ),
+  )
+  actionsMenu.append_section(
+    null,
+    menuSection(
+      menuItem("Rotate left", "rotate-left", "bracketleft"),
+      menuItem("Rotate right", "rotate-right", "bracketright"),
+      menuItem("Flip horizontally", "flip-horizontally", "h"),
+      menuItem("Flip vertically", "flip-vertically", "v"),
     ),
   )
   actionsMenu.append_section(
@@ -1116,13 +1143,21 @@ export default function ViewerWindow(
     const action = new Gio.SimpleAction({ name })
     action.connect("activate", activate)
     win.add_action(action)
+    if (VIEW_ACTIONS.has(name)) {
+      action.enabled = false
+      viewActions.push(action)
+    }
   }
 
   win.connect("notify::fullscreened", () => {
     syncFullscreenButton()
     showControls()
   })
-  stack.connect("notify::visible-child-name", showControls)
+  stack.connect("notify::visible-child-name", () => {
+    showControls()
+    const inView = stack.visibleChildName === "preview"
+    for (const action of viewActions) action.enabled = inView
+  })
   syncFullscreenButton()
 
   win.connect("close-request", () => {

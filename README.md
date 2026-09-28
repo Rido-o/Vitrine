@@ -28,7 +28,9 @@ your wallpaper with a command of your choice.
 - **Full-screen view**: scroll to zoom around the cursor (from fit up to 8×
   actual pixels), drag to pan, click the left/right edge (a sixth of the width)
   for the previous/next image, double-click (the middle) to toggle fit/100%,
-  `s` for sharp (nearest-neighbour) pixels, and a button (or `f`) to make the
+  `s` for sharp (nearest-neighbour) pixels, `[`/`]` to rotate and `h`/`v` to
+  flip (also in the ⋯ menu; only the view changes, never the file, and it
+  resets for the next image), and a button (or `f`) to make the
   window fullscreen; leaving the view restores it. When fullscreen, the buttons,
   info and cursor fade out after 2 s without mouse movement (not while the
   pointer is on them or a menu is open). Images are drawn with GTK's
@@ -86,6 +88,8 @@ Keys (grid unless noted):
 | double-click (view) | Toggle fit/100%: the middle at fit, anywhere when zoomed |
 | `+`/`=`, `-`, `0` (view) | Zoom in, out, fit |
 | `s` (view) | Sharp pixels |
+| `[`, `]` (view) | Rotate left, right (only the view; resets for the next image) |
+| `h`, `v` (view) | Flip horizontally, vertically (only the view) |
 | `f` (view) | Toggle fullscreen; leaving the view restores the window |
 
 Files:

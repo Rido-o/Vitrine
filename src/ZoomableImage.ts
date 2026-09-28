@@ -33,6 +33,10 @@ const ZoomableImage = GObject.registerClass(
     declare private pointerX: number
     declare private pointerY: number
     declare private cursorHidden: boolean
+    // View-only orientation: the image is flipped (horizontally, in its own
+    // axes) and then rotated clockwise by `rotation` degrees.
+    declare private rotation: number
+    declare private flipped: boolean
     declare private frames: GdkPixbuf.PixbufAnimationIter | null
     declare private tickId: number
     declare private frameBytes: number
@@ -56,6 +60,8 @@ const ZoomableImage = GObject.registerClass(
       this.pointerX = 0
       this.pointerY = 0
       this.cursorHidden = false
+      this.rotation = 0
+      this.flipped = false
       this.frames = null
       this.tickId = 0
       this.frameBytes = 0
@@ -121,6 +127,8 @@ const ZoomableImage = GObject.registerClass(
       this.path = path
       const id = ++this.loadId
       this.stopAnimation()
+      this.rotation = 0
+      this.flipped = false
       this.showingPlaceholder = false
       if (!path) {
         this.texture = null
@@ -190,6 +198,37 @@ const ZoomableImage = GObject.registerClass(
       this.frames = null
     }
 
+    // Rotation and flips are in screen terms and only change the view; they
+    // reset for the next image. A flip on screen is a flip in the image's own
+    // axes after undoing the rotation: H·R(θ) = R(−θ)·H, and V = R(180°)·H.
+    rotate(clockwise: boolean) {
+      this.setOrientation(this.rotation + (clockwise ? 90 : -90), this.flipped)
+    }
+
+    flip(horizontally: boolean) {
+      this.setOrientation(
+        (horizontally ? 0 : 180) - this.rotation,
+        !this.flipped,
+      )
+    }
+
+    private setOrientation(rotation: number, flipped: boolean) {
+      if (!this.texture) return
+      this.rotation = ((rotation % 360) + 360) % 360
+      this.flipped = flipped
+      this.resetZoom()
+    }
+
+    private shownWidth() {
+      const texture = this.texture!
+      return this.rotation % 180 ? texture.get_height() : texture.get_width()
+    }
+
+    private shownHeight() {
+      const texture = this.texture!
+      return this.rotation % 180 ? texture.get_width() : texture.get_height()
+    }
+
     toggleSharp() {
       this.sharp = !this.sharp
       this.queue_draw()
@@ -214,8 +253,8 @@ const ZoomableImage = GObject.registerClass(
     private fitScale() {
       if (!this.texture) return 1
       return Math.min(
-        this.get_width() / this.texture.get_width(),
-        this.get_height() / this.texture.get_height(),
+        this.get_width() / this.shownWidth(),
+        this.get_height() / this.shownHeight(),
       )
     }
 
@@ -259,12 +298,12 @@ const ZoomableImage = GObject.registerClass(
       this.offsetX = clamp(
         this.offsetX,
         this.get_width(),
-        this.texture.get_width() * this.scale,
+        this.shownWidth() * this.scale,
       )
       this.offsetY = clamp(
         this.offsetY,
         this.get_height(),
-        this.texture.get_height() * this.scale,
+        this.shownHeight() * this.scale,
       )
     }
 
@@ -316,17 +355,45 @@ const ZoomableImage = GObject.registerClass(
       const bounds = new Graphene.Rect().init(
         left,
         top,
-        snap(this.offsetX + this.texture.get_width() * this.scale) - left,
-        snap(this.offsetY + this.texture.get_height() * this.scale) - top,
+        snap(this.offsetX + this.shownWidth() * this.scale) - left,
+        snap(this.offsetY + this.shownHeight() * this.scale) - top,
       )
+      if (this.rotation === 0 && !this.flipped) {
+        this.appendTexture(snapshot, this.texture, bounds)
+        return
+      }
+      // Drawn around the centre of `bounds`, in the image's own (unrotated)
+      // size.
+      const width = bounds.get_width()
+      const height = bounds.get_height()
+      const [w, h] = this.rotation % 180 ? [height, width] : [width, height]
+      snapshot.save()
+      snapshot.translate(
+        new Graphene.Point({ x: left + width / 2, y: top + height / 2 }),
+      )
+      snapshot.rotate(this.rotation)
+      if (this.flipped) snapshot.scale(-1, 1)
+      this.appendTexture(
+        snapshot,
+        this.texture,
+        new Graphene.Rect().init(-w / 2, -h / 2, w, h),
+      )
+      snapshot.restore()
+    }
+
+    private appendTexture(
+      snapshot: Gtk.Snapshot,
+      texture: Gdk.Texture,
+      bounds: Graphene.Rect,
+    ) {
       if (this.sharp) {
         snapshot.append_scaled_texture(
-          this.texture,
+          texture,
           Gsk.ScalingFilter.NEAREST,
           bounds,
         )
       } else {
-        snapshot.append_texture(this.texture, bounds)
+        snapshot.append_texture(texture, bounds)
       }
     }
   },

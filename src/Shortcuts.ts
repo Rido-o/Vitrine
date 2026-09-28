@@ -34,6 +34,8 @@ function sections(wallpaper: boolean): Section[] {
         ["Double-click", "Toggle fit/100%"],
         ["+ − 0", "Zoom in, out, fit"],
         ["s", "Sharp pixels"],
+        ["[ ]", "Rotate left, right (view only)"],
+        ["h v", "Flip horizontally, vertically (view only)"],
         ["f", "Toggle fullscreen"],
         ["Esc, q", "Back to the grid"],
       ],
