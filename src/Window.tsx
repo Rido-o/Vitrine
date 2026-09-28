@@ -418,6 +418,7 @@ export default function ViewerWindow(
   }
   library.onChanged = onLibraryChanged
   library.onRescanned = () => refreshPreviewIfOpen()
+  library.onModified = (path) => preview.forget(path)
 
   function openDirectory(input: string, selectFile: string | null = null) {
     const path = normalizeDirectory(input)
@@ -533,7 +534,11 @@ export default function ViewerWindow(
   function updatePreviewImage() {
     const index = selection.selected
     withSelectedPath((path) =>
-      preview.setFile(path, neighbours(index), peekThumbnail(path)),
+      preview.setFile(
+        path,
+        neighbours(index),
+        peekThumbnail(path, library.mtime(path)),
+      ),
     )
   }
 

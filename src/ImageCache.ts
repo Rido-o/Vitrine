@@ -118,6 +118,16 @@ export default class ImageCache {
     if (dropped) requestGc()
   }
 
+  // Drops `path`'s decode (e.g. the file changed), so the next `keep` starts
+  // a new one.
+  forget(path: string) {
+    const entry = this.entries.get(path)
+    if (!entry) return
+    this.entries.delete(path)
+    this.queue = this.queue.filter((queued) => queued !== path)
+    entry.drop()
+  }
+
   // The image for `path`, which must be in the last `keep`. Rejects with
   // `Cancelled` if a later `keep` drops it.
   get(path: string) {

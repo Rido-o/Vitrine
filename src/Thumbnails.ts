@@ -42,27 +42,33 @@ const OLD_THUMBNAIL_CACHES = [
 ]
 GLib.mkdir_with_parents(THUMBNAIL_CACHE, 0o755)
 
+// In memory by path and mtime, so a load started before a file changed can't
+// stand in for the new version.
 const textures = new Map<string, Gdk.Texture>()
 const loads = new Map<string, Promise<Gdk.Texture>>()
 const imageInfo = new Map<string, { filename: string; resolution: string }>()
 const touched = new Set<string>()
 
+function memoryKey(file: string, mtime: number) {
+  return `${file}\n${mtime}`
+}
+
 // Map keeps insertion order, so re-inserting on use keeps the least recently
 // used texture first.
-function getTexture(file: string) {
-  const texture = textures.get(file)
+function getTexture(key: string) {
+  const texture = textures.get(key)
   if (texture) {
-    textures.delete(file)
-    textures.set(file, texture)
+    textures.delete(key)
+    textures.set(key, texture)
   }
   return texture
 }
 
 let evictions = 0
 let generated = 0
-function rememberTexture(file: string, texture: Gdk.Texture) {
-  textures.delete(file)
-  textures.set(file, texture)
+function rememberTexture(key: string, texture: Gdk.Texture) {
+  textures.delete(key)
+  textures.set(key, texture)
   while (textures.size > MAX_TEXTURES) {
     textures.delete(textures.keys().next().value!)
     if (++evictions === GC_AFTER_EVICTIONS) {
@@ -134,10 +140,11 @@ function cachePath(file: string, mtime: number) {
 }
 
 export function loadThumbnail(file: string, mtime: number) {
-  const existing = getTexture(file)
+  const key = memoryKey(file, mtime)
+  const existing = getTexture(key)
   if (existing) return Promise.resolve(existing)
 
-  const inFlight = loads.get(file)
+  const inFlight = loads.get(key)
   if (inFlight) return inFlight
 
   const promise = (async () => {
@@ -172,16 +179,16 @@ export function loadThumbnail(file: string, mtime: number) {
     })
   })()
     .then((texture) => {
-      rememberTexture(file, texture)
+      rememberTexture(key, texture)
       return texture
     })
     .catch((error) => {
       console.error(`Could not load thumbnail ${file}:`, error)
       throw error
     })
-    .finally(() => loads.delete(file))
+    .finally(() => loads.delete(key))
 
-  loads.set(file, promise)
+  loads.set(key, promise)
   return promise
 }
 
@@ -193,12 +200,16 @@ export function getImageInfo(file: string) {
 }
 
 // The thumbnail if it's already in memory; never loads.
-export function peekThumbnail(file: string) {
-  return textures.get(file) ?? null
+export function peekThumbnail(file: string, mtime: number) {
+  return textures.get(memoryKey(file, mtime)) ?? null
 }
 
+// Drops every version of `file` (at most MAX_TEXTURES entries to look through).
 export function evictThumbnail(file: string) {
-  textures.delete(file)
+  const prefix = memoryKey(file, 0).slice(0, -1)
+  for (const key of textures.keys()) {
+    if (key.startsWith(prefix)) textures.delete(key)
+  }
   imageInfo.delete(file)
 }
 

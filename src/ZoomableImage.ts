@@ -229,6 +229,13 @@ const ZoomableImage = GObject.registerClass(
       return this.rotation % 180 ? texture.get_width() : texture.get_height()
     }
 
+    // Forgets `path`'s decoded image because the file changed; if it's shown,
+    // the next setFile loads it again.
+    forget(path: string) {
+      this.images.forget(path)
+      if (path === this.path) this.path = null
+    }
+
     toggleSharp() {
       this.sharp = !this.sharp
       this.queue_draw()

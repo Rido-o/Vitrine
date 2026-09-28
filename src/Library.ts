@@ -88,6 +88,8 @@ export default class Library {
   onChanged: () => void = () => {}
   // After a rescan that completed, whether asked for or after a change on disk.
   onRescanned: () => void = () => {}
+  // For each image a rescan found changed on disk.
+  onModified: (path: string) => void = () => {}
 
   private mtimes = new Map<string, number>()
   private sizes = new Map<string, number>()
@@ -286,6 +288,7 @@ export default class Library {
       if (previous === undefined || previous === this.mtimes.get(path)) continue
       modified = true
       evictThumbnail(path)
+      this.onModified(path)
       const index = this.paths.indexOf(path)
       if (index !== -1) this.model.splice(index, 1, [path])
     }
