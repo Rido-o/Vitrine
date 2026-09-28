@@ -150,6 +150,9 @@ Wayland, which would have to import or copy it), or dmabufs filled on a worker
 `bench/run.sh` on both apps, results in `bench/RESULTS.md`, then a try on rei
 for feel. Decide: continue the port, adjust and re-measure, or drop it.
 
+- **Results written** (`bench/RESULTS.md`): the numbers favour continuing the
+  port. Still to do: the try on rei.
+
 ## Working rules
 
 - Numbers reported after each phase before the next.
