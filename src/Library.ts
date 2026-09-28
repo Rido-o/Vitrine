@@ -95,6 +95,10 @@ export default class Library {
   private sizes = new Map<string, number>()
   private randomKeys = new Map<string, number>()
   private cancellable: Gio.Cancellable | null = null
+  // Images removed (trashed) or added (restored) in Vitrine while a scan runs;
+  // a rescan's results predate them, so it leaves them alone.
+  private removedDuringScan = new Set<string>()
+  private addedDuringScan = new Set<string>()
   private monitors = new Map<string, Gio.FileMonitor>()
   private rescanTimeout = 0
 
@@ -220,6 +224,8 @@ export default class Library {
     const cancellable = new Gio.Cancellable()
     this.cancellable = cancellable
     this.loading = true
+    this.removedDuringScan.clear()
+    this.addedDuringScan.clear()
     return cancellable
   }
 
@@ -245,7 +251,10 @@ export default class Library {
       Gio.File.new_for_path(directory),
       cancellable,
       (images) => {
-        for (const path of images) this.insert(path)
+        for (const path of images) {
+          if (this.removedDuringScan.has(path)) this.evict(path)
+          else if (!this.addedDuringScan.has(path)) this.insert(path)
+        }
         this.onChanged()
       },
     )
@@ -267,19 +276,19 @@ export default class Library {
     if (cancellable.is_cancelled()) return false
 
     const freshSet = new Set(fresh)
-    const previousSet = new Set(this.paths)
-
     for (let i = this.paths.length - 1; i >= 0; i--) {
       const path = this.paths[i]
-      if (!freshSet.has(path)) {
+      if (!freshSet.has(path) && !this.addedDuringScan.has(path)) {
         this.paths.splice(i, 1)
         this.model.remove(i)
         this.evict(path)
       }
     }
 
+    const current = new Set(this.paths)
     for (const path of fresh) {
-      if (!previousSet.has(path)) this.insert(path)
+      if (this.removedDuringScan.has(path)) this.evict(path)
+      else if (!current.has(path)) this.insert(path)
     }
 
     let modified = false
@@ -349,6 +358,10 @@ export default class Library {
       return -1
     }
     this.insert(path)
+    if (this.loading) {
+      this.addedDuringScan.add(path)
+      this.removedDuringScan.delete(path)
+    }
     return this.paths.indexOf(path)
   }
 
@@ -359,6 +372,10 @@ export default class Library {
       this.model.remove(index)
     }
     this.evict(path)
+    if (this.loading) {
+      this.removedDuringScan.add(path)
+      this.addedDuringScan.delete(path)
+    }
     return index
   }
 
