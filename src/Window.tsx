@@ -298,10 +298,7 @@ export default function ViewerWindow(
   }
 
   function rescan() {
-    if (library.loading) return
-    library.rescan().then((done) => {
-      if (done) refreshPreviewIfOpen()
-    })
+    if (!library.loading) library.rescan()
   }
 
   // --- folder --------------------------------------------------------------
@@ -349,6 +346,7 @@ export default function ViewerWindow(
     syncInfoLabels()
   }
   library.onChanged = onLibraryChanged
+  library.onRescanned = () => refreshPreviewIfOpen()
 
   function openDirectory(input: string, selectFile: string | null = null) {
     const path = normalizeDirectory(input)
@@ -919,6 +917,7 @@ export default function ViewerWindow(
 
   win.connect("close-request", () => {
     if (toastTimeout) GLib.source_remove(toastTimeout)
+    library.dispose()
     return false
   })
 

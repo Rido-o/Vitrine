@@ -13,7 +13,11 @@ your wallpaper with a command of your choice.
   concurrency-limited loading; at most 300 decoded thumbnails stay in memory,
   so memory stays bounded in huge folders. Folders are scanned in the
   background (4 folders at a time), so the window opens immediately and the
-  grid fills in as images are found, even for large folders over NFS.
+  grid fills in as images are found, even for large folders over NFS. It
+  refreshes itself when images are added, removed, renamed or edited (Gio file
+  monitors on up to 1,000 folders, at most one rescan a second); changes made
+  on another machine, e.g. directly on an NFS server, aren't seen, so press
+  `r` for those.
 - **Top bar**: a folder entry (`~` works) with a history of the last 10
   folders; a sort pill with Name (full path), Date modified, Size and Random
   (click again to reshuffle), and ↑/↓ to flip the direction (Date and Size

@@ -19,6 +19,18 @@ const ATTRIBUTES =
   "standard::name,standard::type,standard::is-symlink,standard::size,time::modified"
 const BATCH_SIZE = 200
 const SCAN_WORKERS = 4
+// Folders watched for changes (inotify watches are limited), and how often
+// changes trigger a rescan at most.
+const WATCH_LIMIT = 1000
+const RESCAN_DELAY_MS = 1000
+const WATCHED_EVENTS = new Set([
+  Gio.FileMonitorEvent.CHANGES_DONE_HINT,
+  Gio.FileMonitorEvent.CREATED,
+  Gio.FileMonitorEvent.DELETED,
+  Gio.FileMonitorEvent.MOVED_IN,
+  Gio.FileMonitorEvent.MOVED_OUT,
+  Gio.FileMonitorEvent.RENAMED,
+])
 
 export function isImage(path: string) {
   return IMAGE_EXTENSIONS.has(path.split(".").pop()?.toLowerCase() ?? "")
@@ -74,11 +86,15 @@ export default class Library {
   descending = false
   loading = false
   onChanged: () => void = () => {}
+  // After a rescan that completed, whether asked for or after a change on disk.
+  onRescanned: () => void = () => {}
 
   private mtimes = new Map<string, number>()
   private sizes = new Map<string, number>()
   private randomKeys = new Map<string, number>()
   private cancellable: Gio.Cancellable | null = null
+  private monitors = new Map<string, Gio.FileMonitor>()
+  private rescanTimeout = 0
 
   mtime(path: string) {
     return this.mtimes.get(path) ?? 0
@@ -118,12 +134,13 @@ export default class Library {
 
   // Walks `root` (and its subfolders when recursive, SCAN_WORKERS folders at a
   // time: over NFS each call is a round trip), calling `onBatch` with the
-  // image paths found in each batch.
+  // image paths found in each batch; returns the folders read.
   private async scan(
     root: Gio.File,
     cancellable: Gio.Cancellable,
     onBatch: (images: string[]) => void,
   ) {
+    const directories: Gio.File[] = []
     const pending = [root]
     let active = 0
     await new Promise<void>((resolve) => {
@@ -136,16 +153,17 @@ export default class Library {
         while (active < SCAN_WORKERS && pending.length > 0) {
           const directory = pending.shift()!
           active++
-          this.scanDirectory(directory, pending, cancellable, onBatch).finally(
-            () => {
+          this.scanDirectory(directory, pending, cancellable, onBatch)
+            .then((read) => read && directories.push(directory))
+            .finally(() => {
               active--
               pump()
-            },
-          )
+            })
         }
       }
       pump()
     })
+    return directories
   }
 
   private async scanDirectory(
@@ -162,6 +180,7 @@ export default class Library {
       console.error(`Could not read ${directory.get_path()}:`, error)
       return
     }
+    let read = true
     try {
       let infos: Gio.FileInfo[]
       while ((infos = await nextFiles(enumerator, cancellable)).length > 0) {
@@ -187,9 +206,11 @@ export default class Library {
     } catch (error) {
       if (cancellable.is_cancelled()) return
       console.error(`Could not read ${directory.get_path()}:`, error)
+      read = false
     } finally {
       enumerator.close_async(GLib.PRIORITY_DEFAULT, null, null)
     }
+    return read
   }
 
   private begin() {
@@ -212,16 +233,23 @@ export default class Library {
   // complete (or false if another load or rescan superseded it).
   async load(directory: string) {
     const cancellable = this.begin()
+    this.unwatch()
     this.directory = directory
     this.paths.length = 0
     this.model.splice(0, this.model.get_n_items(), [])
     this.onChanged()
 
-    await this.scan(Gio.File.new_for_path(directory), cancellable, (images) => {
-      for (const path of images) this.insert(path)
-      this.onChanged()
-    })
-    return this.finish(cancellable)
+    const directories = await this.scan(
+      Gio.File.new_for_path(directory),
+      cancellable,
+      (images) => {
+        for (const path of images) this.insert(path)
+        this.onChanged()
+      },
+    )
+    if (!this.finish(cancellable)) return false
+    this.watch(directories)
+    return true
   }
 
   // Picks up added, removed and changed files without rebuilding the model.
@@ -229,7 +257,7 @@ export default class Library {
     const cancellable = this.begin()
     const previousMtimes = new Map(this.mtimes)
     const fresh: string[] = []
-    await this.scan(
+    const directories = await this.scan(
       Gio.File.new_for_path(this.directory),
       cancellable,
       (images) => fresh.push(...images),
@@ -264,7 +292,10 @@ export default class Library {
     if (modified && (this.sortKey === "date" || this.sortKey === "size")) {
       this.sort()
     }
-    return this.finish(cancellable)
+    if (!this.finish(cancellable)) return false
+    this.watch(directories)
+    this.onRescanned()
+    return true
   }
 
   sort() {
@@ -326,6 +357,78 @@ export default class Library {
     }
     this.evict(path)
     return index
+  }
+
+  // Watches the scanned folders (the first WATCH_LIMIT) and rescans after a
+  // change. Monitors only see changes made on this machine (not, say, on an
+  // NFS server).
+  private watch(directories: Gio.File[]) {
+    const wanted = new Map(
+      directories.slice(0, WATCH_LIMIT).map((dir) => [dir.get_path()!, dir]),
+    )
+    for (const [path, monitor] of this.monitors) {
+      if (wanted.has(path)) continue
+      monitor.cancel()
+      this.monitors.delete(path)
+    }
+    for (const [path, directory] of wanted) {
+      if (this.monitors.has(path)) continue
+      try {
+        const monitor = directory.monitor_directory(
+          Gio.FileMonitorFlags.WATCH_MOVES,
+          null,
+        )
+        monitor.connect("changed", (_monitor, file, other, event) =>
+          this.onFileChanged(file, other, event),
+        )
+        this.monitors.set(path, monitor)
+      } catch (error) {
+        console.error(`Could not watch ${path}:`, error)
+      }
+    }
+  }
+
+  private unwatch() {
+    for (const monitor of this.monitors.values()) monitor.cancel()
+    this.monitors.clear()
+    if (this.rescanTimeout) GLib.source_remove(this.rescanTimeout)
+    this.rescanTimeout = 0
+  }
+
+  // Other files only matter when recursive: they may be folders.
+  private onFileChanged(
+    file: Gio.File,
+    other: Gio.File | null,
+    event: Gio.FileMonitorEvent,
+  ) {
+    if (!WATCHED_EVENTS.has(event)) return
+    const relevant =
+      this.recursive ||
+      isImage(file.get_basename() ?? "") ||
+      isImage(other?.get_basename() ?? "")
+    if (relevant) this.scheduleRescan()
+  }
+
+  // At most one rescan per RESCAN_DELAY_MS, so copying many files doesn't
+  // rescan for each; waits for a running scan to finish first.
+  private scheduleRescan() {
+    if (this.rescanTimeout) return
+    this.rescanTimeout = GLib.timeout_add(
+      GLib.PRIORITY_DEFAULT,
+      RESCAN_DELAY_MS,
+      () => {
+        this.rescanTimeout = 0
+        if (this.loading) this.scheduleRescan()
+        else this.rescan()
+        return GLib.SOURCE_REMOVE
+      },
+    )
+  }
+
+  // Stops scanning and watching, for a closed window.
+  dispose() {
+    this.cancellable?.cancel()
+    this.unwatch()
   }
 
   private evict(path: string) {
