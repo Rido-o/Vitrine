@@ -244,6 +244,9 @@ export default class Library {
     this.unwatch()
     this.directory = directory
     this.paths.length = 0
+    this.mtimes.clear()
+    this.sizes.clear()
+    this.randomKeys.clear()
     this.model.splice(0, this.model.get_n_items(), [])
     this.onChanged()
 

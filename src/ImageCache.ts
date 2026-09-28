@@ -113,7 +113,6 @@ export default class ImageCache {
       if (!this.entries.has(path)) this.entries.set(path, this.create(path))
     }
     this.queue = paths.filter((path) => !this.entries.get(path)!.started)
-    for (const entry of this.entries.values()) entry.promise.catch(() => {})
     this.pump()
     if (dropped) requestGc()
   }
