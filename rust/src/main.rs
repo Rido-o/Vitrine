@@ -15,21 +15,23 @@ const APP_ID: &str = "io.github.Rido_o.Vitrine.Spike";
 // As in the TypeScript app (Window.tsx, style.scss).
 const TILE_WIDTH: i32 = 272;
 const TILE_HEIGHT: i32 = 153;
-// The selection is an instant outline, as in the TypeScript app: the default
-// theme animated it, and short animations looked choppy next to scrolling.
+// The selection is an outline, as in the TypeScript app, that fades in: the
+// default theme's animated highlight looked choppy next to scrolling, and none
+// at all felt abrupt. Only its colour changes, briefly, so a lower frame rate
+// barely shows.
 const CSS: &str = "
 window { background-color: #1e1e1e; color: #ddd; }
 gridview { background-color: transparent; }
 gridview > child {
   padding: 6px;
-  outline: none;
   background: none;
-  transition: none;
-}
-gridview > child:selected {
-  outline: 3px solid #8eaaaa;
+  outline: 3px solid transparent;
   outline-offset: -7px;
   border-radius: 12px;
+  transition: outline-color 120ms ease-out;
+}
+gridview > child:selected {
+  outline-color: #8eaaaa;
 }
 .preview { background-color: black; }
 ";
