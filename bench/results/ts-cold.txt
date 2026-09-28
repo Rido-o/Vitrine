@@ -1,10 +1,13 @@
-# ts cold 2026-09-28T19:49:21+10:00 af258c9
-scan frames=17 p50=66.7 p95=283.3 p99=367.3 max=367.3 over25=16 stalls=26 stall_sum=687 stall_max=252 first_ms=842 done_ms=1210 items=3000
-fill_first fill_ms=9830
-scroll frames=453 p50=51.1 p95=146.0 p99=183.1 max=233.1 over25=335 stalls=343 stall_sum=9422 stall_max=101 scroll_ms=27121 fill_after_ms=6603
-jump frames=93 p50=66.7 p95=200.0 p99=250.0 max=300.0 over25=90 stalls=52 stall_sum=2565 stall_max=119 fill_ms=7567
-open frames=48 p50=16.7 p95=83.3 p99=149.2 max=149.2 over25=20 stalls=10 stall_sum=529 stall_max=126 placeholder_ms=192 sharp_ms=194
-hold frames=68 p50=33.3 p95=83.3 p99=86.3 max=116.6 over25=43 stalls=49 stall_sum=1065 stall_max=98 presses=60 last_sharp_ms=0
-close frames=35 p50=16.7 p95=70.8 p99=99.8 max=99.8 over25=13 stalls=10 stall_sum=439 stall_max=99 
-idle frames=75 p50=16.7 p95=66.7 p99=83.3 max=116.7 over25=28 stalls=12 stall_sum=618 stall_max=104 
-memory rss_mb=756 hwm_mb=830
+this derivation will be built:
+  /nix/store/bl5yqwhxyv2zr3yy5i786gas7vm3d91r-vitrine-bench-0.1.0.drv
+building '/nix/store/bl5yqwhxyv2zr3yy5i786gas7vm3d91r-vitrine-bench-0.1.0.drv'...
+# ts cold 2026-09-28T20:48:01+10:00 ab9d0e4
+scan frames=18 p50=50.0 p95=300.0 p99=317.3 max=317.3 over25=17 stalls=19 stall_sum=625 stall_max=264 first_ms=858 done_ms=1210 items=3000
+fill_first fill_ms=9781
+scroll frames=437 p50=51.8 p95=150.0 p99=200.0 max=250.0 over25=336 stalls=345 stall_sum=10157 stall_max=133 scroll_ms=26950 fill_after_ms=6448
+jump frames=113 p50=50.0 p95=182.8 p99=250.0 max=302.6 over25=97 stalls=50 stall_sum=2220 stall_max=105 fill_ms=7955
+open frames=43 p50=33.3 p95=83.3 p99=148.7 max=148.7 over25=22 stalls=11 stall_sum=487 stall_max=145 placeholder_ms=196 sharp_ms=211
+hold frames=77 p50=30.9 p95=83.3 p99=133.3 max=186.5 over25=39 stalls=41 stall_sum=1121 stall_max=133 presses=60 last_sharp_ms=0
+close frames=30 p50=18.5 p95=100.3 p99=115.0 max=115.0 over25=13 stalls=8 stall_sum=387 stall_max=100 
+idle frames=67 p50=16.7 p95=83.3 p99=116.7 max=130.6 over25=26 stalls=13 stall_sum=700 stall_max=100 
+memory rss_mb=762 hwm_mb=867

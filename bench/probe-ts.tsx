@@ -164,6 +164,8 @@ async function run(win: Gtk.ApplicationWindow, start: number) {
 
   // open: from the top, the first image.
   adjustment.value = 0
+  // Let the grid rebind its tiles first (they still show the middle).
+  await sleep(200)
   await waitUntil(FILL_TIMEOUT_MS, () => tilesFilled(g))
   const preview = find<Preview>(win, (w) =>
     GObject.type_name(w.constructor.$gtype).includes("ZoomableImage"),

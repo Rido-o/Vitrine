@@ -1,10 +1,12 @@
-# rs warm 2026-09-28T20:28:11+10:00 ec183f9
-scan_detail first_us=179170 done_us=196956 batches=6 insert_max_us=15736 items=3000
-background generated=0 done_ms=288
-scan frames=47 p50=16.3 p95=33.1 p99=183.3 max=183.3 over25=3 stalls=4 stall_sum=300 stall_max=183 first_ms=0 done_ms=0 items=3000 t0_us=45495605417
+# rs warm 2026-09-28T21:09:37+10:00 ab9d0e4
+scan_detail first_us=167799 done_us=183318 batches=6 insert_max_us=14148 items=3000
+background generated=0 done_ms=265
+scan frames=51 p50=16.2 p95=31.9 p99=165.5 max=165.5 over25=3 stalls=4 stall_sum=270 stall_max=163 first_ms=0 done_ms=0 items=3000 t0_us=47980997149
 fill_first fill_ms=0
-scroll frames=1222 p50=16.5 p95=16.9 p99=18.3 max=48.3 over25=7 stalls=195 stall_sum=2260 stall_max=39 scroll_ms=20366 fill_after_ms=0 t0_us=45496608054
-jump frames=1 p50=0.0 p95=0.0 p99=0.0 max=0.0 over25=0 stalls=1 stall_sum=230 stall_max=230 fill_ms=231 t0_us=45516975072
-skipped open hold (no full-screen view yet)
-idle frames=118 p50=16.7 p95=16.7 p99=16.7 max=66.7 over25=1 stalls=1 stall_sum=50 stall_max=50  t0_us=45517212873
-memory rss_mb=548 hwm_mb=699 heap_mb=109 anon_mb=238 gpu_mb=58 file_mb=141
+scroll frames=1169 p50=17.0 p95=18.7 p99=32.0 max=46.1 over25=30 stalls=220 stall_sum=2908 stall_max=35 scroll_ms=20366 fill_after_ms=0 t0_us=47982000978
+jump frames=1 p50=0.0 p95=0.0 p99=0.0 max=0.0 over25=0 stalls=2 stall_sum=335 stall_max=325 fill_ms=339 t0_us=48002367587
+open frames=90 p50=16.7 p95=16.7 p99=16.7 max=33.3 over25=1 stalls=1 stall_sum=15 stall_max=15 placeholder_ms=0 sharp_ms=40 t0_us=48002914206
+hold frames=122 p50=16.7 p95=17.6 p99=32.7 max=33.3 over25=4 stalls=44 stall_sum=428 stall_max=12 presses=60 last_sharp_ms=0 t0_us=48004415143
+close frames=57 p50=17.1 p95=29.3 p99=33.3 max=37.1 over25=4 stalls=2 stall_sum=45 stall_max=28  t0_us=48006438403
+idle frames=169 p50=16.7 p95=16.7 p99=16.7 max=16.7 over25=0 stalls=0 stall_sum=0 stall_max=0  t0_us=48007438579
+memory rss_mb=590 hwm_mb=732 heap_mb=117 anon_mb=280 gpu_mb=49 file_mb=142

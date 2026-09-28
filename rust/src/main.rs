@@ -1,11 +1,14 @@
+mod decode;
 mod library;
+mod preview;
 mod probe;
 mod thumbnails;
 mod tiles;
 
 use gtk::{gdk, gio, glib, prelude::*};
 use library::Image;
-use std::{cmp::Ordering, path::PathBuf, rc::Rc};
+use preview::Preview;
+use std::{cell::RefCell, cmp::Ordering, path::PathBuf, rc::Rc};
 use tiles::Tiles;
 
 const APP_ID: &str = "io.github.Rido_o.Vitrine.Spike";
@@ -16,6 +19,7 @@ const CSS: &str = "
 window { background-color: #1e1e1e; color: #ddd; }
 gridview { background-color: transparent; }
 gridview > child { padding: 6px; }
+.preview { background-color: black; }
 ";
 
 fn main() -> glib::ExitCode {
@@ -129,6 +133,10 @@ fn build_window(app: &gtk::Application, dir: PathBuf) {
         .build();
     let stack = gtk::Stack::new();
     stack.add_named(&scrolled, Some("grid"));
+    let preview = Preview::new();
+    let preview_page = gtk::Box::builder().css_classes(["preview"]).build();
+    preview_page.append(&preview.picture);
+    stack.add_named(&preview_page, Some("preview"));
     let window = gtk::ApplicationWindow::builder()
         .application(app)
         .title("Vitrine (spike)")
@@ -136,6 +144,8 @@ fn build_window(app: &gtk::Application, dir: PathBuf) {
         .default_height(1000)
         .child(&stack)
         .build();
+
+    connect_preview(&window, &stack, &grid, &tiles, &preview);
 
     let receiver = library::scan(dir, true);
     let scan = probe::ScanTimes::start();
@@ -161,4 +171,100 @@ fn build_window(app: &gtk::Application, dir: PathBuf) {
     if std::env::var_os("VITRINE_PROBE").is_some() {
         probe::run(&window);
     }
+}
+
+// Opening (Enter, double-click), ←/→ and Esc in the full-screen view.
+fn connect_preview(
+    window: &gtk::ApplicationWindow,
+    stack: &gtk::Stack,
+    grid: &gtk::GridView,
+    tiles: &Rc<Tiles>,
+    preview: &Rc<Preview>,
+) {
+    let selection = grid
+        .model()
+        .and_downcast::<gtk::SingleSelection>()
+        .expect("the grid's model is a SingleSelection");
+    let show_at: Rc<dyn Fn(i64)> = {
+        let (window, stack, selection) = (window.clone(), stack.clone(), selection.clone());
+        let (tiles, preview) = (tiles.clone(), preview.clone());
+        Rc::new(move |position: i64| {
+            let count = selection.n_items() as i64;
+            if count == 0 {
+                return;
+            }
+            let at = |offset: i64| {
+                selection
+                    .item((position + offset).rem_euclid(count) as u32)
+                    .map(|object| image(&object).clone())
+            };
+            let Some(shown) = at(0) else { return };
+            selection.set_selected(position.rem_euclid(count) as u32);
+            // Nearest first, the way ←/→ would reach them.
+            let neighbours = [1, -1, 2, -2]
+                .into_iter()
+                .filter_map(at)
+                .map(|image| image.path)
+                .collect();
+            // In device pixels (integer scale; fractional scaling is later).
+            let scale = window.scale_factor().max(1) as u32;
+            let width = window.width().max(1) as u32 * scale;
+            let height = window.height().max(1) as u32 * scale;
+            preview.show(
+                shown.path.clone(),
+                neighbours,
+                tiles.cached(&shown),
+                width,
+                height,
+            );
+            stack.set_visible_child_name("preview");
+        })
+    };
+
+    let open = show_at.clone();
+    grid.connect_activate(move |_, position| open(position as i64));
+
+    let keys = gtk::EventControllerKey::builder()
+        .propagation_phase(gtk::PropagationPhase::Capture)
+        .build();
+    let (window_, stack_, grid_, preview_) =
+        (window.clone(), stack.clone(), grid.clone(), preview.clone());
+    keys.connect_key_pressed(move |_, key, _, _| {
+        if stack_.visible_child_name().as_deref() != Some("preview") {
+            return glib::Propagation::Proceed;
+        }
+        let selected = selection.selected() as i64;
+        match key {
+            gdk::Key::Right => show_at(selected + 1),
+            gdk::Key::Left => show_at(selected - 1),
+            gdk::Key::Escape => {
+                stack_.set_visible_child_name("grid");
+                grid_.scroll_to(selected as u32, gtk::ListScrollFlags::FOCUS, None);
+                clear_after_paint(&window_, &stack_, &preview_);
+            }
+            _ => return glib::Propagation::Proceed,
+        }
+        glib::Propagation::Stop
+    });
+    window.add_controller(keys);
+}
+
+// Dropping the view's textures once the grid's first frame is drawn, so
+// freeing them doesn't delay it.
+fn clear_after_paint(window: &gtk::ApplicationWindow, stack: &gtk::Stack, preview: &Rc<Preview>) {
+    let Some(clock) = window.frame_clock() else {
+        preview.clear();
+        return;
+    };
+    let handler = Rc::new(RefCell::new(None));
+    let (stack, preview, handler_) = (stack.clone(), preview.clone(), handler.clone());
+    let id = clock.connect_after_paint(move |clock| {
+        if let Some(id) = handler_.borrow_mut().take() {
+            clock.disconnect(id);
+        }
+        if stack.visible_child_name().as_deref() == Some("grid") {
+            preview.clear();
+        }
+    });
+    *handler.borrow_mut() = Some(id);
 }

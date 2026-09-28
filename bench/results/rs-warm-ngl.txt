@@ -1,10 +1,12 @@
-# rs warm 2026-09-28T20:28:38+10:00 ec183f9
-scan_detail first_us=85373 done_us=106029 batches=6 insert_max_us=18288 items=3000
-background generated=0 done_ms=156
-scan frames=67 p50=16.3 p95=16.7 p99=16.9 max=50.0 over25=1 stalls=3 stall_sum=71 stall_max=41 first_ms=0 done_ms=0 items=3000 t0_us=45522411595
+# rs warm 2026-09-28T21:10:08+10:00 ab9d0e4
+scan_detail first_us=79609 done_us=96260 batches=6 insert_max_us=13221 items=3000
+background generated=0 done_ms=137
+scan frames=87 p50=16.4 p95=16.7 p99=17.3 max=33.3 over25=1 stalls=3 stall_sum=70 stall_max=31 first_ms=0 done_ms=0 items=3000 t0_us=48012511713
 fill_first fill_ms=0
-scroll frames=1231 p50=16.5 p95=17.2 p99=17.7 max=19.0 over25=0 stalls=7 stall_sum=79 stall_max=18 scroll_ms=20368 fill_after_ms=0 t0_us=45523417230
-jump frames=1 p50=0.0 p95=0.0 p99=0.0 max=0.0 over25=0 stalls=2 stall_sum=32 stall_max=20 fill_ms=26 t0_us=45543785753
-skipped open hold (no full-screen view yet)
-idle frames=120 p50=16.7 p95=16.7 p99=16.7 max=16.7 over25=0 stalls=0 stall_sum=0 stall_max=0  t0_us=45543823808
-memory rss_mb=465 hwm_mb=479 heap_mb=104 anon_mb=212 gpu_mb=30 file_mb=118
+scroll frames=1172 p50=17.2 p95=18.5 p99=19.6 max=33.7 over25=10 stalls=37 stall_sum=393 stall_max=21 scroll_ms=20365 fill_after_ms=0 t0_us=48013515172
+jump frames=1 p50=0.0 p95=0.0 p99=0.0 max=0.0 over25=0 stalls=1 stall_sum=42 stall_max=42 fill_ms=54 t0_us=48033880895
+open frames=91 p50=16.7 p95=16.7 p99=16.7 max=16.7 over25=0 stalls=0 stall_sum=0 stall_max=0 placeholder_ms=0 sharp_ms=35 t0_us=48034143113
+hold frames=147 p50=16.7 p95=16.7 p99=18.5 max=19.6 over25=0 stalls=0 stall_sum=0 stall_max=0 presses=60 last_sharp_ms=0 t0_us=48035643569
+close frames=70 p50=17.0 p95=17.4 p99=17.4 max=17.4 over25=0 stalls=1 stall_sum=12 stall_max=12  t0_us=48037663197
+idle frames=120 p50=16.7 p95=18.7 p99=20.2 max=20.5 over25=0 stalls=0 stall_sum=0 stall_max=0  t0_us=48038663366
+memory rss_mb=592 hwm_mb=638 heap_mb=128 anon_mb=312 gpu_mb=30 file_mb=119

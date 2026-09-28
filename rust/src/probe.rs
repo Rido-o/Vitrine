@@ -3,8 +3,16 @@
 //! bench/probe-ts.tsx, then quits. Scenarios whose widgets don't exist yet are
 //! reported as skipped.
 
+use gtk::gdk;
+use gtk::glib::translate::IntoGlib;
 use gtk::{glib, prelude::*};
-use std::{cell::RefCell, rc::Rc, sync::OnceLock, time::Duration};
+use std::{
+    cell::RefCell,
+    path::{Path, PathBuf},
+    rc::Rc,
+    sync::OnceLock,
+    time::Duration,
+};
 
 // When the window was built (the scan started), for times reported later.
 static START: OnceLock<i64> = OnceLock::new();
@@ -26,6 +34,24 @@ const STALL_US: i64 = 8_000;
 const SCROLL_PX_PER_S: f64 = 4000.0;
 const SCAN_SETTLE_MS: i64 = 1000;
 const FILL_TIMEOUT_MS: i64 = 60_000;
+const OPEN_POSITION: u32 = 0;
+const HOLD_PRESSES: u32 = 60;
+const HOLD_INTERVAL_MS: u64 = 33;
+
+thread_local! {
+    // What the full-screen view shows, and whether it's the decoded image.
+    static SHOWN: RefCell<Option<(PathBuf, bool)>> = const { RefCell::new(None) };
+}
+
+/// Called by the full-screen view when it shows `path` (`sharp`: decoded,
+/// not the thumbnail placeholder).
+pub fn preview_shown(path: &Path, sharp: bool) {
+    SHOWN.with_borrow_mut(|shown| *shown = Some((path.to_owned(), sharp)));
+}
+
+fn is_sharp(path: &Path) -> bool {
+    SHOWN.with_borrow(|shown| matches!(shown, Some((p, true)) if p == path))
+}
 
 #[derive(Default)]
 struct Samples {
@@ -319,10 +345,79 @@ pub fn run(window: &gtk::ApplicationWindow) {
         let fill = wait_until(FILL_TIMEOUT_MS, || tiles_filled(&grid)).await;
         recorder.finish("jump", &format!("fill_ms={fill}"));
 
-        println!("RESULT skipped open hold (no full-screen view yet)");
+        // open: from the top, the first image.
+        adjustment.set_value(0.0);
+        // Let the grid rebind its tiles first (they still show the middle).
+        sleep(200).await;
+        wait_until(FILL_TIMEOUT_MS, || tiles_filled(&grid)).await;
+        let model = grid.model().expect("the grid has a model");
+        let path_at = |position: u32| {
+            model
+                .item(position % model.n_items())
+                .and_downcast::<glib::BoxedAnyObject>()
+                .map(|object| object.borrow::<crate::library::Image>().path.clone())
+                .expect("an image at the position")
+        };
+        let mut pictures = Vec::new();
+        find_all::<gtk::Picture>(&root, &mut pictures);
+        let preview = pictures
+            .into_iter()
+            .find(|picture| picture.widget_name() == "preview")
+            .expect("the full-screen view's picture");
+        let recorder = Recorder::start(&window);
+        let open_start = glib::monotonic_time();
+        grid.emit_by_name::<()>("activate", &[&OPEN_POSITION]);
+        let placeholder = wait_until(5000, || preview.paintable().is_some()).await;
+        let first = path_at(OPEN_POSITION);
+        let sharp = wait_until(5000, || is_sharp(&first)).await;
+        let sharp_ms = if sharp < 0 { -1 } else { ms_since(open_start) };
+        sleep(1500u64.saturating_sub(ms_since(open_start) as u64)).await;
+        recorder.finish(
+            "open",
+            &format!("placeholder_ms={placeholder} sharp_ms={sharp_ms}"),
+        );
+
+        // hold: → at 30 presses/s, then how long the last image takes.
+        let recorder = Recorder::start(&window);
+        for _ in 0..HOLD_PRESSES {
+            press(&window, gdk::Key::Right);
+            sleep(HOLD_INTERVAL_MS).await;
+        }
+        let last = path_at(OPEN_POSITION + HOLD_PRESSES);
+        let settle = wait_until(5000, || is_sharp(&last)).await;
+        recorder.finish(
+            "hold",
+            &format!("presses={HOLD_PRESSES} last_sharp_ms={settle}"),
+        );
+
+        let recorder = Recorder::start(&window);
+        press(&window, gdk::Key::Escape);
+        sleep(1000).await;
+        recorder.finish("close", "");
+
         idle(&window).await;
         finish(&window);
     });
+}
+
+// Like GTK: the window's key controllers in turn until one handles it.
+fn press(window: &gtk::ApplicationWindow, key: gdk::Key) {
+    let controllers = window.observe_controllers();
+    for i in 0..controllers.n_items() {
+        let Some(keys) = controllers
+            .item(i)
+            .and_downcast::<gtk::EventControllerKey>()
+        else {
+            continue;
+        };
+        let handled = keys.emit_by_name::<bool>(
+            "key-pressed",
+            &[&key.into_glib(), &0u32, &gdk::ModifierType::empty()],
+        );
+        if handled {
+            return;
+        }
+    }
 }
 
 async fn wait_for_grid(root: &gtk::Widget) -> Option<gtk::GridView> {

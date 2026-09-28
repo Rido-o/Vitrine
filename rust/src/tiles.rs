@@ -11,9 +11,11 @@ use std::{
     rc::Rc,
 };
 
-// Textures kept in memory (~560 KB each at 440×320), least recently used
-// dropped first.
-const MAX_TEXTURES: usize = 300;
+// Textures kept for tiles no longer bound (~450 KB each at 440×320), least
+// recently used dropped first. Bound tiles' textures are never dropped: the
+// grid keeps ~390 tiles bound (rows around the viewport), and a cap below
+// that had off-screen tiles evicting the visible ones.
+const MAX_UNBOUND: usize = 100;
 
 #[derive(Default)]
 struct TextureCache {
@@ -31,13 +33,24 @@ impl TextureCache {
         })
     }
 
-    fn insert(&mut self, key: String, texture: gdk::Texture) {
+    fn insert(
+        &mut self,
+        key: String,
+        texture: gdk::Texture,
+        bound: &HashMap<String, Vec<gtk::Picture>>,
+    ) {
         self.clock += 1;
         self.textures.insert(key, (texture, self.clock));
-        if self.textures.len() > MAX_TEXTURES {
+        let unbound = self
+            .textures
+            .keys()
+            .filter(|key| !bound.contains_key(*key))
+            .count();
+        if unbound > MAX_UNBOUND {
             let oldest = self
                 .textures
                 .iter()
+                .filter(|(key, _)| !bound.contains_key(*key))
                 .min_by_key(|(_, (_, used))| *used)
                 .map(|(key, _)| key.clone());
             if let Some(oldest) = oldest {
@@ -109,6 +122,13 @@ impl Tiles {
         }
     }
 
+    /// `image`'s thumbnail, if it's in memory.
+    pub fn cached(&self, image: &Image) -> Option<gdk::Texture> {
+        self.cache
+            .borrow_mut()
+            .get(&thumbnails::key(&image.path, image.mtime))
+    }
+
     pub fn unbind(&self, picture: &gtk::Picture) {
         let Some((key, _)) = self.keys.borrow_mut().remove(picture) else {
             return;
@@ -158,7 +178,9 @@ impl Tiles {
                 return;
             }
         };
-        self.cache.borrow_mut().insert(key.clone(), texture.clone());
+        self.cache
+            .borrow_mut()
+            .insert(key.clone(), texture.clone(), &self.pictures.borrow());
         if let Some(pictures) = self.pictures.borrow().get(&key) {
             for picture in pictures {
                 picture.set_paintable(Some(&texture));

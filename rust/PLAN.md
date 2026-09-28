@@ -118,6 +118,21 @@ Own app ID (`io.github.Rido_o.Vitrine.Spike`) and cache
 - Measure: Enter to placeholder and to sharp image, stalls while switching,
   holding → at 30/s (dropped frames, time to the final image after release).
 
+- **Result:** decoding at the window's size, on 2 workers, with the shown
+  image first and the queue replaced on every move. Warm with GL: the
+  placeholder at once, the sharp image in ~35 ms (TS: ~155 ms), holding → with
+  no dropped frames (TS: 8; 40 with Vulkan) and the last image sharp on
+  release. Decoding at full resolution instead (`VITRINE_VIEWER=full`) keeps
+  opening fast but makes holding → drop 17–18 frames with stalls up to ~300
+  ms (uploads), and peaks ~270 MB higher: screen-size decoding is the default.
+  Glycin wasn't built: it always decodes at full size, and its JPEG loader
+  (zune-jpeg) can't decode smaller, so it does strictly more work than the
+  full-resolution variant measured here.
+- Found on the way: GTK's `GridView` keeps ~390 tiles bound (rows around the
+  viewport); with a 300-texture cap, off-screen tiles evicted visible ones
+  (the view opened without its placeholder). Bound tiles' textures are now
+  never evicted, plus up to 100 for tiles scrolled away.
+
 ## Phase 3b (only if needed): full-resolution zoom
 
 Tiles of ~1024² at full resolution, created only for the visible region and a

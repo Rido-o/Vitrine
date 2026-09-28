@@ -1,10 +1,12 @@
-# rs cold 2026-09-28T20:27:45+10:00 ec183f9
-scan_detail first_us=88748 done_us=105940 batches=6 insert_max_us=15728 items=3000
-scan frames=30 p50=16.7 p95=266.7 p99=266.8 max=266.8 over25=3 stalls=4 stall_sum=571 stall_max=268 first_ms=0 done_ms=0 items=3000 t0_us=45468806703
-fill_first fill_ms=170
-background generated=2232 done_ms=12435
-scroll frames=1250 p50=16.7 p95=17.5 p99=17.7 max=33.3 over25=1 stalls=19 stall_sum=184 stall_max=21 scroll_ms=20366 fill_after_ms=0 t0_us=45469980485
-jump frames=1 p50=0.0 p95=0.0 p99=0.0 max=0.0 over25=0 stalls=1 stall_sum=20 stall_max=20 fill_ms=22 t0_us=45490347316
-skipped open hold (no full-screen view yet)
-idle frames=120 p50=16.7 p95=16.7 p99=16.7 max=33.3 over25=1 stalls=1 stall_sum=21 stall_max=21  t0_us=45490375489
-memory rss_mb=672 hwm_mb=738 heap_mb=144 anon_mb=375 gpu_mb=26 file_mb=125
+# rs cold 2026-09-28T21:09:06+10:00 ab9d0e4
+scan_detail first_us=81490 done_us=93164 batches=6 insert_max_us=9749 items=3000
+scan frames=38 p50=16.3 p95=32.0 p99=248.1 max=248.1 over25=3 stalls=4 stall_sum=453 stall_max=240 first_ms=0 done_ms=0 items=3000 t0_us=47949746114
+fill_first fill_ms=0
+background generated=2247 done_ms=11089
+scroll frames=1176 p50=17.3 p95=18.9 p99=19.4 max=33.4 over25=5 stalls=56 stall_sum=578 stall_max=23 scroll_ms=20367 fill_after_ms=0 t0_us=47950748027
+jump frames=1 p50=0.0 p95=0.0 p99=0.0 max=0.0 over25=0 stalls=1 stall_sum=32 stall_max=32 fill_ms=46 t0_us=47971115417
+open frames=92 p50=16.7 p95=16.7 p99=16.7 max=16.7 over25=0 stalls=0 stall_sum=0 stall_max=0 placeholder_ms=0 sharp_ms=30 t0_us=47971368578
+hold frames=137 p50=16.7 p95=19.6 p99=32.6 max=33.3 over25=6 stalls=0 stall_sum=0 stall_max=0 presses=60 last_sharp_ms=0 t0_us=47972868918
+close frames=68 p50=16.3 p95=16.7 p99=16.7 max=16.7 over25=0 stalls=1 stall_sum=9 stall_max=9  t0_us=47974880920
+idle frames=126 p50=16.7 p95=16.7 p99=16.7 max=16.7 over25=0 stalls=0 stall_sum=0 stall_max=0  t0_us=47975881115
+memory rss_mb=758 hwm_mb=801 heap_mb=170 anon_mb=431 gpu_mb=30 file_mb=126

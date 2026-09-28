@@ -1,13 +1,15 @@
 this derivation will be built:
-  /nix/store/8ks6pb6wgzwav2zz75zcngnjyk4f6b5s-vitrine-rs-0.1.0.drv
-building '/nix/store/8ks6pb6wgzwav2zz75zcngnjyk4f6b5s-vitrine-rs-0.1.0.drv'...
-# rs cold 2026-09-28T20:27:16+10:00 ec183f9
-scan_detail first_us=852669 done_us=863809 batches=6 insert_max_us=9971 items=3000
-scan frames=5 p50=32.7 p95=700.0 p99=700.0 max=700.0 over25=2 stalls=4 stall_sum=1073 stall_max=686 first_ms=0 done_ms=0 items=3000 t0_us=45441424198
-fill_first fill_ms=420
-background generated=2218 done_ms=15354
-scroll frames=1250 p50=16.5 p95=16.8 p99=17.9 max=47.4 over25=6 stalls=200 stall_sum=2288 stall_max=37 scroll_ms=20368 fill_after_ms=0 t0_us=45442940838
-jump frames=1 p50=0.0 p95=0.0 p99=0.0 max=0.0 over25=0 stalls=1 stall_sum=195 stall_max=195 fill_ms=197 t0_us=45463309375
-skipped open hold (no full-screen view yet)
-idle frames=119 p50=16.7 p95=16.7 p99=16.7 max=50.0 over25=1 stalls=1 stall_sum=37 stall_max=37  t0_us=45463514473
-memory rss_mb=706 hwm_mb=885 heap_mb=128 anon_mb=387 gpu_mb=50 file_mb=140
+  /nix/store/b7aanksqll5ihjrhls9b2s7l3c281rjk-vitrine-rs-0.1.0.drv
+building '/nix/store/b7aanksqll5ihjrhls9b2s7l3c281rjk-vitrine-rs-0.1.0.drv'...
+# rs cold 2026-09-28T21:08:33+10:00 ab9d0e4
+scan_detail first_us=185678 done_us=195347 batches=6 insert_max_us=8917 items=3000
+scan frames=44 p50=16.3 p95=17.1 p99=229.9 max=229.9 over25=2 stalls=3 stall_sum=362 stall_max=226 first_ms=0 done_ms=0 items=3000 t0_us=47917541335
+fill_first fill_ms=399
+background generated=2239 done_ms=14347
+scroll frames=1168 p50=17.0 p95=19.5 p99=33.2 max=100.0 over25=41 stalls=228 stall_sum=3267 stall_max=91 scroll_ms=20368 fill_after_ms=0 t0_us=47918943456
+jump frames=1 p50=0.0 p95=0.0 p99=0.0 max=0.0 over25=0 stalls=3 stall_sum=361 stall_max=338 fill_ms=354 t0_us=47939311677
+open frames=88 p50=16.7 p95=16.7 p99=16.7 max=66.7 over25=1 stalls=1 stall_sum=56 stall_max=56 placeholder_ms=0 sharp_ms=56 t0_us=47939887931
+hold frames=126 p50=16.7 p95=17.3 p99=18.0 max=19.0 over25=0 stalls=49 stall_sum=488 stall_max=14 presses=60 last_sharp_ms=0 t0_us=47941388870
+close frames=62 p50=16.8 p95=17.3 p99=18.5 max=33.3 over25=1 stalls=2 stall_sum=28 stall_max=15  t0_us=47943415445
+idle frames=167 p50=16.7 p95=16.7 p99=16.7 max=16.7 over25=0 stalls=0 stall_sum=0 stall_max=0  t0_us=47944420529
+memory rss_mb=677 hwm_mb=883 heap_mb=89 anon_mb=406 gpu_mb=47 file_mb=133
