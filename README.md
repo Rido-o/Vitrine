@@ -176,6 +176,9 @@ src/
   main.tsx          Gtk.Application: CSS, icon path, command line, windows
   jsx.ts            registers lowercase JSX tags (box, entry, …) with gnim
   Window.tsx        layout: top bar, grid, info bar, full-screen view
+  ActionsMenu.ts    the ⋯ menu: its model and window actions
+  AutoHide.ts       fading the full-screen view's controls when idle
+  PropertiesPopover.ts  the i button's popover
   Library.ts        async folder scanning, sorting, list model, mtime/size
   Thumbnails.ts     thumbnail cache (disk + memory), loading, concurrency
   History.ts        folder history file

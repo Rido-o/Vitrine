@@ -1,14 +1,14 @@
 import Gdk from "gi://Gdk?version=4.0"
-import Gio from "gi://Gio"
 import GLib from "gi://GLib"
 import GObject from "gi://GObject"
 import Graphene from "gi://Graphene"
 import Gtk from "gi://Gtk?version=4.0"
-import Pango from "gi://Pango"
+import ActionsMenu from "./ActionsMenu"
+import AutoHide from "./AutoHide"
 import History from "./History"
 import Library, { type SortKey } from "./Library"
 import { decodeImage } from "./decode"
-import { imageProperties } from "./Properties"
+import { propertiesPopover } from "./PropertiesPopover"
 import { showShortcuts } from "./Shortcuts"
 import { getImageInfo, loadThumbnail, peekThumbnail } from "./Thumbnails"
 import { moveToTrash, restore, trashAvailable, type TrashedItem } from "./Trash"
@@ -63,13 +63,6 @@ export default function ViewerWindow(
   // Set when the view made the window fullscreen, so leaving it restores it.
   let fullscreenedByPreview = false
   let previewMoreButton: Gtk.MenuButton
-  const previewControls: Array<{
-    box: Gtk.Box
-    motion: Gtk.EventControllerMotion
-  }> = []
-  let hideControlsTimeout = 0
-  let lastPointerX = -1
-  let lastPointerY = -1
   const sortButtons = new Map<SortKey, Gtk.Button>()
   let gridPropertiesButton: Gtk.MenuButton
   let previewPropertiesButton: Gtk.MenuButton
@@ -193,48 +186,6 @@ export default function ViewerWindow(
   }
 
   // --- properties panel ----------------------------------------------------
-
-  function renderProperties(content: Gtk.Box) {
-    let child: Gtk.Widget | null
-    while ((child = content.get_first_child())) content.remove(child)
-    const path = getSelectedPath()
-    if (!path) {
-      content.append(new Gtk.Label({ label: "No image selected" }))
-      return
-    }
-    for (const section of imageProperties(path)) {
-      content.append(
-        new Gtk.Label({
-          label: section.title,
-          xalign: 0,
-          cssClasses: ["viewer-properties-heading"],
-        }),
-      )
-      const grid = new Gtk.Grid({ columnSpacing: 16, rowSpacing: 4 })
-      section.rows.forEach(([key, value], row) => {
-        const keyLabel = new Gtk.Label({
-          label: key,
-          xalign: 1,
-          yalign: 0,
-          cssClasses: ["viewer-properties-key"],
-        })
-        // Selectable for copying, but not focusable: the popover would focus
-        // the first value and select all of it on opening.
-        const valueLabel = new Gtk.Label({
-          label: value,
-          xalign: 0,
-          selectable: true,
-          focusable: false,
-          wrap: true,
-          wrapMode: Pango.WrapMode.WORD_CHAR,
-          maxWidthChars: 48,
-        })
-        grid.attach(keyLabel, 0, row, 1, 1)
-        grid.attach(valueLabel, 1, row, 1, 1)
-      })
-      content.append(grid)
-    }
-  }
 
   function toggleProperties() {
     const button =
@@ -586,61 +537,12 @@ export default function ViewerWindow(
 
   // --- auto-hiding controls (full-screen view, fullscreen window) ------------
 
-  function addPreviewControls(box: Gtk.Box) {
-    const motion = new Gtk.EventControllerMotion()
-    box.add_controller(motion)
-    previewControls.push({ box, motion })
-  }
-
-  function controlsAutoHide() {
-    return win.fullscreened && stack.visibleChildName === "preview"
-  }
-
-  // Shows the controls and cursor, and (when they auto-hide) hides them again
-  // after HIDE_CONTROLS_SECONDS without the mouse moving.
-  function showControls() {
-    for (const { box } of previewControls) {
-      box.remove_css_class("hidden")
-      box.canTarget = true
-    }
-    preview.setCursorHidden(false)
-    if (hideControlsTimeout) GLib.source_remove(hideControlsTimeout)
-    hideControlsTimeout = 0
-    if (!controlsAutoHide()) return
-    hideControlsTimeout = GLib.timeout_add_seconds(
-      GLib.PRIORITY_DEFAULT,
-      HIDE_CONTROLS_SECONDS,
-      () => {
-        hideControlsTimeout = 0
-        hideControls()
-        return GLib.SOURCE_REMOVE
-      },
-    )
-  }
-
-  // Waits while a menu is open or the pointer is on the controls.
-  function hideControls() {
-    if (!controlsAutoHide()) return
-    const busy =
-      previewPropertiesButton.active ||
-      previewMoreButton.active ||
-      previewControls.some(({ motion }) => motion.containsPointer)
-    if (busy) return showControls()
-    for (const { box } of previewControls) {
-      box.add_css_class("hidden")
-      box.canTarget = false
-    }
-    preview.setCursorHidden(true)
-  }
-
-  // GTK also reports motion when widgets change under a still pointer (as
-  // when the controls stop taking input), so only a real move counts.
-  function onPreviewMotion(x: number, y: number) {
-    if (x === lastPointerX && y === lastPointerY) return
-    lastPointerX = x
-    lastPointerY = y
-    showControls()
-  }
+  const autoHide = new AutoHide({
+    seconds: HIDE_CONTROLS_SECONDS,
+    active: () => win.fullscreened && stack.visibleChildName === "preview",
+    busy: () => previewPropertiesButton.active || previewMoreButton.active,
+    setCursorHidden: (hidden) => preview.setCursorHidden(hidden),
+  })
 
   function hidePreview() {
     const index = selection.selected
@@ -792,69 +694,69 @@ export default function ViewerWindow(
     )
   }
 
-  // The ⋯ menu's actions are window actions ("win.…"); the keys are handled
-  // in onKey (so Ctrl+C still copies text in the folder entry), and "accel"
-  // only labels them in the menu.
-  const actions: Array<[string, () => void]> = [
-    ["copy-image", copySelectedImage],
-    ["copy-path", copySelectedPath],
-    ["show-in-file-manager", () => withSelectedPath(showInFileManager)],
-    ["rescan", rescan],
-    ["shortcuts", openShortcuts],
-    ["rotate-left", () => preview.rotate(false)],
-    ["rotate-right", () => preview.rotate(true)],
-    ["flip-horizontally", () => preview.flip(true)],
-    ["flip-vertically", () => preview.flip(false)],
-  ]
-  // Only enabled in the full-screen view.
-  const VIEW_ACTIONS = new Set([
-    "rotate-left",
-    "rotate-right",
-    "flip-horizontally",
-    "flip-vertically",
+  // The ⋯ menu.
+  const actionsMenu = new ActionsMenu([
+    [
+      {
+        name: "copy-image",
+        label: "Copy image",
+        accel: "<Control>c",
+        activate: copySelectedImage,
+      },
+      {
+        name: "copy-path",
+        label: "Copy path",
+        accel: "<Control><Shift>c",
+        activate: copySelectedPath,
+      },
+    ],
+    [
+      {
+        name: "rotate-left",
+        label: "Rotate left",
+        accel: "bracketleft",
+        activate: () => preview.rotate(false),
+        viewOnly: true,
+      },
+      {
+        name: "rotate-right",
+        label: "Rotate right",
+        accel: "bracketright",
+        activate: () => preview.rotate(true),
+        viewOnly: true,
+      },
+      {
+        name: "flip-horizontally",
+        label: "Flip horizontally",
+        accel: "h",
+        activate: () => preview.flip(true),
+        viewOnly: true,
+      },
+      {
+        name: "flip-vertically",
+        label: "Flip vertically",
+        accel: "v",
+        activate: () => preview.flip(false),
+        viewOnly: true,
+      },
+    ],
+    [
+      {
+        name: "show-in-file-manager",
+        label: "Show in file manager",
+        activate: () => withSelectedPath(showInFileManager),
+      },
+      { name: "rescan", label: "Rescan folder", accel: "r", activate: rescan },
+    ],
+    [
+      {
+        name: "shortcuts",
+        label: "Keyboard shortcuts",
+        accel: "question",
+        activate: openShortcuts,
+      },
+    ],
   ])
-  const viewActions: Gio.SimpleAction[] = []
-
-  function menuItem(label: string, action: string, accel?: string) {
-    const item = Gio.MenuItem.new(label, `win.${action}`)
-    if (accel) item.set_attribute_value("accel", new GLib.Variant("s", accel))
-    return item
-  }
-
-  function menuSection(...items: Gio.MenuItem[]) {
-    const section = new Gio.Menu()
-    for (const item of items) section.append_item(item)
-    return section
-  }
-
-  const actionsMenu = new Gio.Menu()
-  actionsMenu.append_section(
-    null,
-    menuSection(
-      menuItem("Copy image", "copy-image", "<Control>c"),
-      menuItem("Copy path", "copy-path", "<Control><Shift>c"),
-    ),
-  )
-  actionsMenu.append_section(
-    null,
-    menuSection(
-      menuItem("Rotate left", "rotate-left", "bracketleft"),
-      menuItem("Rotate right", "rotate-right", "bracketright"),
-      menuItem("Flip horizontally", "flip-horizontally", "h"),
-      menuItem("Flip vertically", "flip-vertically", "v"),
-    ),
-  )
-  actionsMenu.append_section(
-    null,
-    menuSection(
-      menuItem("Show in file manager", "show-in-file-manager"),
-      menuItem("Rescan folder", "rescan", "r"),
-    ),
-  )
-  actionsMenu.append_section(
-    null,
-    menuSection(menuItem("Keyboard shortcuts", "shortcuts", "question")),
-  )
 
   function MoreButton({
     ref,
@@ -875,7 +777,7 @@ export default function ViewerWindow(
         }}
         class={cssClass}
         tooltipText="More actions"
-        menuModel={actionsMenu}
+        menuModel={actionsMenu.model}
       />
     )
   }
@@ -889,15 +791,6 @@ export default function ViewerWindow(
     cssClass?: string
     pixelSize: number
   }) {
-    const content = new Gtk.Box({
-      orientation: Gtk.Orientation.VERTICAL,
-      spacing: 8,
-    })
-    const popover = new Gtk.Popover({
-      child: content,
-      cssClasses: ["viewer-properties"],
-    })
-    popover.connect("show", () => renderProperties(content))
     return (
       <Gtk.MenuButton
         $={(self) => {
@@ -911,7 +804,7 @@ export default function ViewerWindow(
         }}
         class={cssClass}
         tooltipText="Image properties (i)"
-        popover={popover}
+        popover={propertiesPopover(getSelectedPath)}
       />
     )
   }
@@ -1097,18 +990,14 @@ export default function ViewerWindow(
             vexpand
           >
             <Gtk.Overlay
-              $={(self) => {
-                const motion = new Gtk.EventControllerMotion()
-                motion.connect("motion", (_c, x, y) => onPreviewMotion(x, y))
-                self.add_controller(motion)
-              }}
+              $={(self) => autoHide.watch(self)}
               hexpand
               vexpand
             >
               {preview}
               <box
                 $type="overlay"
-                $={addPreviewControls}
+                $={(self) => autoHide.add(self)}
                 class="preview-controls"
                 halign={Gtk.Align.END}
                 valign={Gtk.Align.START}
@@ -1143,7 +1032,7 @@ export default function ViewerWindow(
               </box>
               <box
                 $type="overlay"
-                $={addPreviewControls}
+                $={(self) => autoHide.add(self)}
                 class="preview-image-info preview-controls"
                 halign={Gtk.Align.CENTER}
                 valign={Gtk.Align.END}
@@ -1183,30 +1072,21 @@ export default function ViewerWindow(
     </Gtk.ApplicationWindow>
   ) as Gtk.ApplicationWindow
 
-  for (const [name, activate] of actions) {
-    const action = new Gio.SimpleAction({ name })
-    action.connect("activate", activate)
-    win.add_action(action)
-    if (VIEW_ACTIONS.has(name)) {
-      action.enabled = false
-      viewActions.push(action)
-    }
-  }
+  actionsMenu.addTo(win)
 
   win.connect("notify::fullscreened", () => {
     syncFullscreenButton()
-    showControls()
+    autoHide.show()
   })
   stack.connect("notify::visible-child-name", () => {
-    showControls()
-    const inView = stack.visibleChildName === "preview"
-    for (const action of viewActions) action.enabled = inView
+    autoHide.show()
+    actionsMenu.setInView(stack.visibleChildName === "preview")
   })
   syncFullscreenButton()
 
   win.connect("close-request", () => {
     if (toastTimeout) GLib.source_remove(toastTimeout)
-    if (hideControlsTimeout) GLib.source_remove(hideControlsTimeout)
+    autoHide.dispose()
     library.dispose()
     return false
   })
