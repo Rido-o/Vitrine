@@ -576,14 +576,25 @@ export default function ViewerWindow(
   function hidePreview() {
     const index = selection.selected
     if (fullscreenedByPreview) win.unfullscreen()
-    preview.setFile(null)
     stack.visibleChildName = "grid"
+    clearPreviewAfterPaint()
     GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
       if (index !== Gtk.INVALID_LIST_POSITION) {
         grid.scroll_to(index, Gtk.ListScrollFlags.FOCUS, null)
       }
       grid.grab_focus()
       return GLib.SOURCE_REMOVE
+    })
+  }
+
+  // Clearing the view drops its images and nudges a GC (up to ~110 ms), which
+  // could run before the grid's first frame, so it waits until that's drawn.
+  function clearPreviewAfterPaint() {
+    const clock = win.get_frame_clock()
+    if (!clock) return preview.setFile(null)
+    const id = clock.connect("after-paint", () => {
+      clock.disconnect(id)
+      if (stack.visibleChildName === "grid") preview.setFile(null)
     })
   }
 
@@ -870,13 +881,7 @@ export default function ViewerWindow(
       <Gtk.GestureClick onReleased={onClick} />
 
       <overlay>
-        <stack
-          $={(self) => (stack = self)}
-          transitionType={Gtk.StackTransitionType.CROSSFADE}
-          transitionDuration={150}
-          hexpand
-          vexpand
-        >
+        <stack $={(self) => (stack = self)} hexpand vexpand>
           <box
             $type="named"
             name="grid"

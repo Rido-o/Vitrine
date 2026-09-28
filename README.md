@@ -300,6 +300,13 @@ Things that broke and look like harmless cleanups:
   when first drawn (~200 ms for 34 MP). Uploading the texture itself still
   takes ~50–80 ms for 8–14 MP (~180 ms for 34 MP), after the thumbnail
   placeholder is already on screen.
+- **Clear the full-screen view after the grid's first frame**
+  (`clearPreviewAfterPaint` in `Window.tsx`). Clearing drops the decoded
+  images and nudges a GC (up to ~110 ms), which could otherwise run before the
+  grid is drawn.
+- **No transition between the grid and the full-screen view.** A 150 ms
+  crossfade rendered cleanly but still looked laggy (both pages blended for a
+  few frames), so the switch is instant.
 - **Preloads are cancelled and queued (`ImageCache.ts`).** Dropping a preload
   from the cache must cancel its decode, and at most two decodes run with the
   shown image first: otherwise holding an arrow key (~30 presses/s) piled up
