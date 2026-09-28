@@ -131,7 +131,7 @@ export default function ViewerWindow(
       })
       .catch(() => {})
   })
-  factory.connect("unbind", (_, object) => {
+  const unbindHandler = factory.connect("unbind", (_, object) => {
     const bound = boundThumbnails.get(object as Gtk.ListItem)
     if (!bound) return
     boundThumbnails.delete(object as Gtk.ListItem)
@@ -1114,6 +1114,10 @@ export default function ViewerWindow(
     autoHide.dispose()
     library.dispose()
     stopBackgroundGeneration(backgroundImages)
+    // GTK unbinds the tiles when the grid is finalized, which happens during
+    // GJS's garbage collection, where a JS handler can't run (GJS logs a
+    // critical for each tile); nothing needs releasing by then anyway.
+    factory.disconnect(unbindHandler)
     return false
   })
 

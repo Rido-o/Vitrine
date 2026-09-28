@@ -276,6 +276,11 @@ Things that broke and look like harmless cleanups:
   thumbnail generation got ~6% slower, and every texture allocation would
   mmap on the main thread; frame times weren't measured, and responsiveness
   matters more than memory here.
+- **Disconnect the grid factory's `unbind` handler on close** (`Window.tsx`).
+  The grid is finalized during GJS's garbage collection after the window
+  closes, and GTK unbinds its tiles then; GJS blocks JS callbacks during a
+  collection and logged "Attempting to call back into JSAPI during the sweeping
+  phase of GC … The offending signal was unbind" once per tile.
 - **Decode with GdkPixbuf's async API (`decode.ts`), not
   `Gdk.Texture.new_from_bytes`.** The latter decodes on the main thread and
   froze the window for the whole decode (up to ~150 ms for a 12 MP WebP, ~90
