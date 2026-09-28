@@ -240,10 +240,7 @@ fn connect_preview(
     // the neighbours instead.)
     let (window_, stack_, preview_) = (window.clone(), stack.clone(), preview.clone());
     selection.connect_selected_item_notify(move |selection| {
-        if stack_.visible_child_name().as_deref() != Some("grid")
-            // VITRINE_NO_PRELOAD=1: for comparing (spike only).
-            || std::env::var_os("VITRINE_NO_PRELOAD").is_some()
-        {
+        if stack_.visible_child_name().as_deref() != Some("grid") {
             return;
         }
         if let Some(object) = selection.selected_item() {

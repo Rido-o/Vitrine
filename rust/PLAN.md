@@ -143,6 +143,10 @@ Own app ID (`io.github.Rido_o.Vitrine.Spike`) and cache
   texture (~55 ms), preloaded or not.
   To do: keep the automatic selection on the first image while a scan runs
   (it follows the first image found as sorting moves it).
+- **Selection style:** the default theme's animated highlight looked choppy
+  on a mouse click, next to 144 Hz scrolling (in the headless session GTK drew
+  such short animations at ~60 fps). For now an outline fades in over 120 ms;
+  revisit in the styling pass.
 
 ## Phase 3b (only if needed): full-resolution zoom
 
