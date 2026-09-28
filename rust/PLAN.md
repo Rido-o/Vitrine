@@ -136,6 +136,11 @@ Own app ID (`io.github.Rido_o.Vitrine.Spike`) and cache
 - **Preloading the grid's selection:** the image selected in the grid is
   decoded in the background (each change replaces the queue), and closing the
   view keeps it; select, wait 300 ms, open: sharp at once (was ~20–56 ms).
+  Dropping the previous preload freed its buffer (33 MB at 4K) on the main
+  thread, in the selection handler (0.7 ms median, 4 ms worst: the highlight
+  lagged a frame at 144 Hz); buffers over 1 MB are now freed on a janitor
+  thread (8 µs). Still: the frame that first shows a 4K image uploads its
+  texture (~55 ms), preloaded or not.
   To do: keep the automatic selection on the first image while a scan runs
   (it follows the first image found as sorting moves it).
 

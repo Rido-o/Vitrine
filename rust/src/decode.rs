@@ -4,7 +4,10 @@
 //! GdkPixbuf. EXIF orientation is applied.
 
 use gtk::{gdk, gdk_pixbuf::Pixbuf, glib};
-use std::path::Path;
+use std::{
+    path::Path,
+    sync::{OnceLock, mpsc},
+};
 
 /// Straight (not premultiplied) RGBA, rows packed.
 pub struct Rgba {
@@ -18,7 +21,41 @@ pub struct Rgba {
 pub struct Pixels {
     pub width: i32,
     pub height: i32,
-    data: Vec<u8>,
+    data: Buffer,
+}
+
+// Buffers this big are freed on a background thread: returning a
+// full-screen image's 33 MB to the system (munmap) took 1–4 ms, and happened
+// on the main thread when a texture was dropped (in the grid's selection
+// handler, delaying the highlight by a frame at 144 Hz).
+const FREE_ELSEWHERE: usize = 1 << 20;
+
+/// Pixel memory that frees itself off the main thread when large.
+struct Buffer(Option<Vec<u8>>);
+
+impl AsRef<[u8]> for Buffer {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_deref().unwrap_or_default()
+    }
+}
+
+impl Drop for Buffer {
+    fn drop(&mut self) {
+        let Some(data) = self.0.take() else { return };
+        if data.len() >= FREE_ELSEWHERE {
+            // If the thread is gone, the buffer is freed here as usual.
+            let _ = janitor().send(data);
+        }
+    }
+}
+
+fn janitor() -> &'static mpsc::Sender<Vec<u8>> {
+    static SENDER: OnceLock<mpsc::Sender<Vec<u8>>> = OnceLock::new();
+    SENDER.get_or_init(|| {
+        let (sender, receiver) = mpsc::channel::<Vec<u8>>();
+        std::thread::spawn(move || receiver.into_iter().for_each(drop));
+        sender
+    })
 }
 
 impl Pixels {
@@ -78,7 +115,7 @@ impl Rgba {
         Pixels {
             width: self.width as i32,
             height: self.height as i32,
-            data: self.data,
+            data: Buffer(Some(self.data)),
         }
     }
 }
