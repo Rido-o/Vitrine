@@ -673,6 +673,15 @@ export default function ViewerWindow(
                   onToggled={({ active }) => setRecursive(active)}
                 />
               </box>
+              <box hexpand halign={Gtk.Align.END} spacing={8}>
+                <button
+                  class="viewer-toolbar-button"
+                  tooltipText="Close (Esc)"
+                  onClicked={() => win.close()}
+                >
+                  <image iconName="xmark-awesome-symbolic" pixelSize={16} />
+                </button>
+              </box>
             </box>
             <Gtk.Separator
               class="viewer-toolbar-separator"

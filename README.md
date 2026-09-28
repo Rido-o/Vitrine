@@ -17,7 +17,7 @@ your wallpaper with a command of your choice.
 - **Top bar**: a folder entry (`~` works) with a history of the last 10
   folders; a sort pill with Name (full path), Date modified, Size and Random
   (click again to reshuffle), and ↑/↓ to flip the direction (Date and Size
-  start descending); a Subfolders toggle.
+  start descending); a Subfolders toggle; and a close button on the right.
 - **Info bar**: the filename (click to show it in your file manager over
   `org.freedesktop.FileManager1`), resolution, rescan, view and Set wallpaper.
 - **Full-screen view**: scroll to zoom around the cursor (from fit up to 8×

@@ -121,6 +121,26 @@ window {
         @include pill-button;
       }
     }
+
+    .viewer-toolbar-button {
+      padding: 8px 10px;
+      border: 1px solid t.$border;
+      border-radius: 8px;
+      background-color: t.$bg-surface;
+      color: t.$fg-muted;
+      transition: t.$transition;
+
+      &:hover {
+        background-color: t.$bg-raised;
+        color: t.$fg-bright;
+      }
+
+      &:active,
+      &:checked {
+        background-color: t.$bg-elevated;
+        color: t.$fg-bright;
+      }
+    }
   }
 
   .viewer-info {
