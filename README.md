@@ -107,6 +107,9 @@ Files:
   deleted images don't pile up.
 - Folder history: `~/.local/state/vitrine/history`
 
+With NVIDIA's driver loaded, Vitrine uses GTK's GL renderer (see "Gotchas");
+set `GSK_RENDERER` to override it (e.g. `GSK_RENDERER=vulkan`).
+
 (The shard-view era's folder history is moved over once. Older thumbnail
 caches, `~/.cache/vitrine/thumbnails` and `~/.cache/shard-view`, held unrotated
 thumbnails and are deleted in the background.)
@@ -257,6 +260,14 @@ Things that broke and look like harmless cleanups:
 - **While a scan is running, keep the auto-selection on the first image**
   (`onLibraryChanged` in `Window.tsx`): batches insert images ahead of it, and
   GTK would otherwise keep it selected and scroll the grid down after it.
+- **Use GTK's GL renderer with NVIDIA's driver** (`main.tsx`, when
+  `/proc/driver/nvidia` exists and `GSK_RENDERER` isn't set). With GTK's
+  default Vulkan renderer, NVIDIA's driver costs several ms of main-thread time
+  per new texture (`ioctl`s in `perf`/`strace`): about 12 ms per row of new
+  thumbnails while scrolling, and 100–300 ms when a screenful arrives at once.
+  With GL, a warm 20 s scroll through 3,000 images dropped 13 frames instead
+  of 33, and holding → in the full-screen view 4 instead of 11. It's a known
+  driver problem; other GPUs keep GTK's default.
 - **Keep the `System.gc()` nudge in `Thumbnails.ts`.** At most 300 thumbnails
   are kept in memory, but dropped textures (and every decode's pixbuf) are only
   freed when GJS collects their wrappers, and its GC doesn't see their native

@@ -12,6 +12,17 @@ import ViewerWindow from "./Window"
 
 const PRUNE_DELAY_SECONDS = 5
 
+// With NVIDIA's driver, GTK's default Vulkan renderer spends several ms of
+// main-thread time on each new texture (a row of thumbnails while scrolling);
+// its GL renderer doesn't. Only when the driver is loaded, and never over an
+// explicit GSK_RENDERER.
+if (
+  GLib.getenv("GSK_RENDERER") === null &&
+  GLib.file_test("/proc/driver/nvidia", GLib.FileTest.IS_DIR)
+) {
+  GLib.setenv("GSK_RENDERER", "gl", false)
+}
+
 GLib.set_prgname(APP_NAME)
 GLib.set_application_name(APP_NAME)
 
