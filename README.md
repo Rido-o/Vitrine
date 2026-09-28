@@ -10,7 +10,8 @@ your wallpaper with a command of your choice.
 ## Features
 
 - **Thumbnail grid** with an on-disk thumbnail cache and lazy,
-  concurrency-limited loading; at most 300 decoded thumbnails stay in memory,
+  concurrency-limited loading; the thumbnails of the tiles the grid has bound
+  (the rows around the viewport, ~390) plus at most 100 more stay in memory,
   so memory stays bounded in huge folders. Thumbnails being generated go
   newest first and are skipped once scrolled past, so the tiles you stop on
   appear straight away; once a folder is scanned, its other missing thumbnails
@@ -106,6 +107,9 @@ Files:
   Vitrine deletes any not used for 90 days, so thumbnails of edited, moved or
   deleted images don't pile up.
 - Folder history: `~/.local/state/vitrine/history`
+
+With NVIDIA's driver loaded, Vitrine uses GTK's GL renderer (see "Gotchas");
+set `GSK_RENDERER` to override it (e.g. `GSK_RENDERER=vulkan`).
 
 (The shard-view era's folder history is moved over once. Older thumbnail
 caches, `~/.cache/vitrine/thumbnails` and `~/.cache/shard-view`, held unrotated
@@ -257,10 +261,24 @@ Things that broke and look like harmless cleanups:
 - **While a scan is running, keep the auto-selection on the first image**
   (`onLibraryChanged` in `Window.tsx`): batches insert images ahead of it, and
   GTK would otherwise keep it selected and scroll the grid down after it.
-- **Keep the `System.gc()` nudge in `Thumbnails.ts`.** At most 300 thumbnails
-  are kept in memory, but dropped textures (and every decode's pixbuf) are only
-  freed when GJS collects their wrappers, and its GC doesn't see their native
-  memory. Without the nudge, memory kept growing past the cap: 526 MB after
+- **Use GTK's GL renderer with NVIDIA's driver** (`main.tsx`, when
+  `/proc/driver/nvidia` exists and `GSK_RENDERER` isn't set). With GTK's
+  default Vulkan renderer, NVIDIA's driver costs several ms of main-thread time
+  per new texture (`ioctl`s in `perf`/`strace`): about 12 ms per row of new
+  thumbnails while scrolling, and 100–300 ms when a screenful arrives at once.
+  With GL, a warm 20 s scroll through 3,000 images dropped 13 frames instead
+  of 33, and holding → in the full-screen view 4 instead of 11. It's a known
+  driver problem; other GPUs keep GTK's default.
+- **Never evict the thumbnails of bound tiles** (`rememberTexture` in
+  `Thumbnails.ts`). The grid keeps ~390 tiles bound (rows around the
+  viewport, not only the visible ones); with a cap of 300 on every texture,
+  off-screen tiles evicted visible ones, and the full-screen view opened
+  without its placeholder (~130 ms, now 0). Only textures of tiles no longer
+  bound are capped (100).
+- **Keep the `System.gc()` nudge in `Thumbnails.ts`.** Thumbnails in memory
+  are capped (these numbers are from a cap of 300), but dropped textures (and
+  every decode's pixbuf) are only freed when GJS collects their wrappers, and
+  its GC doesn't see their native memory. Without the nudge, memory kept growing past the cap: 526 MB after
   1,000 cached thumbnails versus a flat ~230 MB with it (~405 MB once
   full-size originals are being decoded, a high-water mark that then stays
   flat). Generating thumbnails needs its own nudge (every 5): each decode of a

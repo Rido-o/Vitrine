@@ -28,9 +28,13 @@ const PRUNE_AFTER_DAYS = 90
 const TOUCH_AFTER_SECONDS = 24 * 60 * 60
 const CACHE_FILE = /^[0-9a-f]{32}\.(jpg|png)$/
 
-// Decoded thumbnails kept in memory (~0.5 MB each), least recently used
-// dropped first; a dropped tile that scrolls back into view reloads from disk.
-const MAX_TEXTURES = 300
+// Decoded thumbnails kept for tiles no longer shown (~0.5 MB each), least
+// recently used dropped first; a dropped tile that scrolls back into view
+// reloads from disk. Shown tiles' textures are never dropped: the grid keeps
+// ~390 tiles bound (rows around the viewport), and a cap of 300 on all of them
+// had off-screen tiles evicting visible ones (the full-screen view then opened
+// without its placeholder).
+const MAX_UNWANTED = 100
 // Dropped textures and each decode's native memory are only freed when GJS
 // collects their wrappers, and its GC doesn't see that memory, so it's nudged.
 // Without it, memory kept growing past the cap (526 MB vs 271 MB after 1,000
@@ -80,8 +84,13 @@ let generated = 0
 function rememberTexture(key: string, texture: Gdk.Texture) {
   textures.delete(key)
   textures.set(key, texture)
-  while (textures.size > MAX_TEXTURES) {
-    textures.delete(textures.keys().next().value!)
+  let unwanted = 0
+  for (const kept of textures.keys()) if (!wanted.has(kept)) unwanted++
+  for (const kept of textures.keys()) {
+    if (unwanted <= MAX_UNWANTED) break
+    if (wanted.has(kept)) continue
+    textures.delete(kept)
+    unwanted--
     if (++evictions === GC_AFTER_EVICTIONS) {
       evictions = 0
       requestGc()
@@ -335,7 +344,7 @@ export function peekThumbnail(file: string, mtime: number) {
   return textures.get(memoryKey(file, mtime)) ?? null
 }
 
-// Drops every version of `file` (at most MAX_TEXTURES entries to look through).
+// Drops every version of `file`.
 export function evictThumbnail(file: string) {
   const prefix = memoryKey(file, 0).slice(0, -1)
   for (const key of textures.keys()) {
