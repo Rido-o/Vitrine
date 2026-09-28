@@ -1,11 +1,27 @@
 import Gio from "gi://Gio"
 import GLib from "gi://GLib"
+import System from "system"
 
 export const APP_NAME = "vitrine"
 export const APP_TITLE = "Vitrine"
 export const APP_ID = "io.github.Rido_o.Vitrine"
 // Name before the rename; its cache and history are moved over once.
 export const OLD_APP_NAME = "shard-view"
+
+// GJS's GC doesn't see the native memory behind textures and pixbufs, so
+// code that drops a lot of it asks for a collection; requests made before it
+// runs share one.
+let gcPending = false
+
+export function requestGc() {
+  if (gcPending) return
+  gcPending = true
+  GLib.idle_add(GLib.PRIORITY_LOW, () => {
+    gcPending = false
+    System.gc()
+    return GLib.SOURCE_REMOVE
+  })
+}
 
 export function cached<T>(
   map: Map<string, T>,

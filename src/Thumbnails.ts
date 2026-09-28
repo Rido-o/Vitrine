@@ -2,9 +2,8 @@ import Gdk from "gi://Gdk?version=4.0"
 import GdkPixbuf from "gi://GdkPixbuf"
 import Gio from "gi://Gio"
 import GLib from "gi://GLib"
-import System from "system"
 import { decodeImage } from "./decode"
-import { APP_NAME, basename, cached, OLD_APP_NAME } from "./util"
+import { APP_NAME, basename, cached, OLD_APP_NAME, requestGc } from "./util"
 
 // Decoded size of cached thumbnails (changing it means a new cache folder).
 const THUMBNAIL_WIDTH = 440
@@ -61,18 +60,6 @@ function getTexture(file: string) {
 
 let evictions = 0
 let generated = 0
-let gcPending = false
-
-function requestGc() {
-  if (gcPending) return
-  gcPending = true
-  GLib.idle_add(GLib.PRIORITY_LOW, () => {
-    gcPending = false
-    System.gc()
-    return GLib.SOURCE_REMOVE
-  })
-}
-
 function rememberTexture(file: string, texture: Gdk.Texture) {
   textures.delete(file)
   textures.set(file, texture)

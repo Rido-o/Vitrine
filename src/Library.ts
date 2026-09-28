@@ -6,7 +6,15 @@ import { cached } from "./util"
 
 export type SortKey = "name" | "date" | "size" | "random"
 
-const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp"])
+const IMAGE_EXTENSIONS = new Set([
+  "gif",
+  "jpeg",
+  "jpg",
+  "png",
+  "tif",
+  "tiff",
+  "webp",
+])
 const ATTRIBUTES =
   "standard::name,standard::type,standard::is-symlink,standard::size,time::modified"
 const BATCH_SIZE = 200

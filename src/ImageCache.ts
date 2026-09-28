@@ -1,18 +1,25 @@
 import Gdk from "gi://Gdk?version=4.0"
 import Gio from "gi://Gio"
-import GLib from "gi://GLib"
-import System from "system"
-import { decodeImage } from "./decode"
+import GdkPixbuf from "gi://GdkPixbuf"
+import { copyToTexture, decodeAnimation, decodeImage } from "./decode"
+import { requestGc } from "./util"
 
 // At most this many full-size decodes run at once; the rest wait in a queue,
 // so the image being shown never waits behind preloads.
 const MAX_DECODES = 2
 
+// `animation` is set for images with more than one frame (GIFs); `texture` is
+// the first frame.
+export type DecodedImage = {
+  texture: Gdk.Texture
+  animation: GdkPixbuf.PixbufAnimation | null
+}
+
 // Rejection of an entry dropped before its image was needed.
 export class Cancelled extends Error {}
 
 type Entry = {
-  promise: Promise<Gdk.Texture>
+  promise: Promise<DecodedImage>
   start: () => void
   // Stops a running decode, or settles a queued one that never started.
   drop: () => void
@@ -25,6 +32,25 @@ type Entry = {
 // before they start, so holding an arrow key doesn't build a backlog of
 // images already passed. Full-size textures are large (33 MB for 4K) and, like
 // thumbnails, only freed when GJS collects them, so dropping one nudges the GC.
+function isAnimated(path: string) {
+  return path.toLowerCase().endsWith(".gif")
+}
+
+async function decode(
+  path: string,
+  cancellable: Gio.Cancellable,
+): Promise<DecodedImage> {
+  if (!isAnimated(path)) {
+    const pixbuf = await decodeImage(path, undefined, cancellable)
+    return { texture: Gdk.Texture.new_for_pixbuf(pixbuf), animation: null }
+  }
+  const animation = await decodeAnimation(path, cancellable)
+  return {
+    texture: copyToTexture(animation.get_static_image()),
+    animation: animation.is_static_image() ? null : animation,
+  }
+}
+
 export default class ImageCache {
   private entries = new Map<string, Entry>()
   private queue: string[] = []
@@ -32,9 +58,9 @@ export default class ImageCache {
 
   private create(path: string): Entry {
     const cancellable = new Gio.Cancellable()
-    let resolve!: (texture: Gdk.Texture) => void
+    let resolve!: (image: DecodedImage) => void
     let reject!: (error: unknown) => void
-    const promise = new Promise<Gdk.Texture>((res, rej) => {
+    const promise = new Promise<DecodedImage>((res, rej) => {
       resolve = res
       reject = rej
     })
@@ -48,8 +74,8 @@ export default class ImageCache {
       start: () => {
         entry.started = true
         this.active++
-        decodeImage(path, undefined, cancellable)
-          .then((pixbuf) => resolve(Gdk.Texture.new_for_pixbuf(pixbuf)))
+        decode(path, cancellable)
+          .then(resolve)
           .catch((error) =>
             reject(cancellable.is_cancelled() ? new Cancelled() : error),
           )
@@ -89,15 +115,10 @@ export default class ImageCache {
     this.queue = paths.filter((path) => !this.entries.get(path)!.started)
     for (const entry of this.entries.values()) entry.promise.catch(() => {})
     this.pump()
-    if (dropped) {
-      GLib.idle_add(GLib.PRIORITY_LOW, () => {
-        System.gc()
-        return GLib.SOURCE_REMOVE
-      })
-    }
+    if (dropped) requestGc()
   }
 
-  // The texture for `path`, which must be in the last `keep`. Rejects with
+  // The image for `path`, which must be in the last `keep`. Rejects with
   // `Cancelled` if a later `keep` drops it.
   get(path: string) {
     const entry = this.entries.get(path)

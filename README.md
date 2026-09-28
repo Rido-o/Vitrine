@@ -42,7 +42,9 @@ your wallpaper with a command of your choice.
   restores it, repeatedly back through every delete in the window. Both need
   [GVfs](https://gitlab.gnome.org/GNOME/gvfs) (its `trash:///`), which most
   full desktops run; without it they're disabled.
-- JPEG, PNG and WebP; a desktop entry registers Vitrine for those types.
+- JPEG, PNG, WebP, TIFF and GIF (animated GIFs play in the full-screen view;
+  thumbnails show the first frame); a desktop entry registers Vitrine for
+  those types.
   Photos are shown upright: the EXIF orientation is applied.
 
 ## Usage
@@ -117,7 +119,7 @@ In a Home Manager configuration:
 | `programs.vitrine.enable` | Installs Vitrine. |
 | `programs.vitrine.package` | The package to use. |
 | `programs.vitrine.wallpaperCommand` | Command run with the image path appended; sets `VITRINE_WALLPAPER_COMMAND` as a default in a wrapper. Null (the default) hides the Set wallpaper action. |
-| `programs.vitrine.defaultViewer` | Runs `xdg-mime default io.github.Rido_o.Vitrine.desktop` for JPEG, PNG and WebP on each activation. `~/.config/mimeapps.list` stays unmanaged, so other defaults and your file manager's "Open With" keep working. |
+| `programs.vitrine.defaultViewer` | Runs `xdg-mime default io.github.Rido_o.Vitrine.desktop` for JPEG, PNG, WebP, TIFF and GIF on each activation. `~/.config/mimeapps.list` stays unmanaged, so other defaults and your file manager's "Open With" keep working. |
 
 Without the module, set `VITRINE_WALLPAPER_COMMAND` yourself; it's parsed like
 a shell command and the image path is appended.
@@ -162,7 +164,8 @@ src/
   ZoomableImage.ts  full-screen image widget (zoom, pan, sharp mode)
   Properties.ts     the properties panel's contents (file info, GdkPixbuf, EXIF)
   ImageCache.ts     full-size images: the one shown plus ±2 preloaded
-  decode.ts         threaded image decoding (GdkPixbuf), shared with thumbnails
+  decode.ts         threaded image and GIF decoding (GdkPixbuf), shared with
+                    thumbnails
   Trash.ts          trash and exact-item restore through GVfs (trash:///)
   util.ts           names, folder helpers, file-manager D-Bus call, wallpaper
   style.scss        styles
@@ -255,6 +258,12 @@ Things that broke and look like harmless cleanups:
   shown image first: otherwise holding an arrow key (~30 presses/s) piled up
   decodes of images already passed, and the one stopped on appeared ~925 ms
   after release instead of ~40 ms.
+- **Copy each GIF frame (`copyToTexture` in `decode.ts`).** GdkPixbuf's
+  animation iterator draws every frame into the same pixbuf, and
+  `Gdk.Texture.new_for_pixbuf` shares its pixels, so a texture made from it
+  would change under GTK. Frames are played live on the widget's frame clock
+  (GdkPixbuf can't say how many frames there are), each as a new texture,
+  with a GC nudge every 64 MB of them.
 - **Undo restores an exact trash item, never "the newest".** GVfs's deletion
   dates have one-second resolution, so two deletes of the same path in a
   second can't be told apart by date (restoring the "newest" picked the wrong

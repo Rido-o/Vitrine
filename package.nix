@@ -17,6 +17,7 @@
   gnim,
 }: let
   appId = "io.github.Rido_o.Vitrine";
+  mimeTypes = ["image/gif" "image/jpeg" "image/png" "image/tiff" "image/webp"];
 
   desktopItem = makeDesktopItem {
     name = appId;
@@ -25,7 +26,7 @@
     exec = "vitrine %f";
     icon = "image-x-generic";
     categories = ["Graphics" "Viewer"];
-    mimeTypes = ["image/jpeg" "image/png" "image/webp"];
+    inherit mimeTypes;
     startupWMClass = appId;
   };
 in
@@ -111,7 +112,7 @@ in
         --set GDK_PIXBUF_MODULE_FILE $out/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
     '';
 
-    passthru = {inherit appId;};
+    passthru = {inherit appId mimeTypes;};
 
     meta = {
       description = "GTK4 image viewer and wallpaper picker";

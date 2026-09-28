@@ -13,8 +13,10 @@ const FILE_ATTRIBUTES =
 
 // GdkPixbuf's descriptions are inconsistent ("The WebP image format").
 const FORMATS: Record<string, string> = {
+  gif: "GIF",
   jpeg: "JPEG",
   png: "PNG",
+  tiff: "TIFF",
   webp: "WebP",
 }
 

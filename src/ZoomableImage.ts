@@ -1,14 +1,20 @@
 import Gdk from "gi://Gdk?version=4.0"
+import GLib from "gi://GLib"
 import Gtk from "gi://Gtk?version=4.0"
+import GdkPixbuf from "gi://GdkPixbuf"
 import GObject from "gi://GObject"
 import Graphene from "gi://Graphene"
 import Gsk from "gi://Gsk"
-import ImageCache, { Cancelled } from "./ImageCache"
+import { copyToTexture } from "./decode"
+import ImageCache, { Cancelled, type DecodedImage } from "./ImageCache"
+import { requestGc } from "./util"
 
 const ZOOM_STEP = 1.2
 const MAX_ZOOM = 8
 // Share of the width at each side that navigates when clicked (at fit).
 const NAV_EDGE = 1 / 6
+// Each animation frame is a new texture; collect after this many bytes of them.
+const GC_AFTER_FRAME_BYTES = 64 * 1024 * 1024
 
 const ZoomableImage = GObject.registerClass(
   class ZoomableImage extends Gtk.Widget {
@@ -26,6 +32,9 @@ const ZoomableImage = GObject.registerClass(
     declare private showingPlaceholder: boolean
     declare private pointerX: number
     declare private pointerY: number
+    declare private frames: GdkPixbuf.PixbufAnimationIter | null
+    declare private tickId: number
+    declare private frameBytes: number
     // Called with -1/1 when the left/right edge is clicked at fit-to-screen.
     declare onNavigate: (offset: number) => void
 
@@ -45,6 +54,9 @@ const ZoomableImage = GObject.registerClass(
       this.showingPlaceholder = false
       this.pointerX = 0
       this.pointerY = 0
+      this.frames = null
+      this.tickId = 0
+      this.frameBytes = 0
       this.onNavigate = () => {}
       this.overflow = Gtk.Overflow.HIDDEN
 
@@ -106,6 +118,7 @@ const ZoomableImage = GObject.registerClass(
       if (path !== null && path === this.path) return
       this.path = path
       const id = ++this.loadId
+      this.stopAnimation()
       this.showingPlaceholder = false
       if (!path) {
         this.texture = null
@@ -119,8 +132,8 @@ const ZoomableImage = GObject.registerClass(
       }
       this.images
         .get(path)
-        .then((texture) => {
-          if (id === this.loadId) this.showTexture(texture)
+        .then((image) => {
+          if (id === this.loadId) this.showImage(image)
         })
         .catch((error) => {
           if (error instanceof Cancelled) return
@@ -133,7 +146,8 @@ const ZoomableImage = GObject.registerClass(
     }
 
     // Replacing the placeholder keeps its on-screen size if zoomed.
-    private showTexture(texture: Gdk.Texture) {
+    private showImage({ texture, animation }: DecodedImage) {
+      if (animation) this.animate(animation)
       const previous = this.texture
       const keepZoom = this.showingPlaceholder && !this.fitted && previous
       this.texture = texture
@@ -142,6 +156,36 @@ const ZoomableImage = GObject.registerClass(
       this.scale *= previous.get_width() / texture.get_width()
       this.clampOffsets()
       this.queue_draw()
+    }
+
+    // Plays from the first frame on the frame clock, so it only runs while the
+    // view is on screen; stops for good at a finite GIF's last frame.
+    private animate(animation: GdkPixbuf.PixbufAnimation) {
+      this.frames = animation.get_iter(null)
+      this.tickId = this.add_tick_callback(() => {
+        const frames = this.frames
+        if (!frames) return GLib.SOURCE_REMOVE
+        if (frames.advance(null)) {
+          const pixbuf = frames.get_pixbuf()
+          this.texture = copyToTexture(pixbuf)
+          this.queue_draw()
+          this.frameBytes += pixbuf.get_byte_length()
+          if (this.frameBytes >= GC_AFTER_FRAME_BYTES) {
+            this.frameBytes = 0
+            requestGc()
+          }
+        }
+        if (frames.get_delay_time() >= 0) return GLib.SOURCE_CONTINUE
+        this.tickId = 0
+        this.frames = null
+        return GLib.SOURCE_REMOVE
+      })
+    }
+
+    private stopAnimation() {
+      if (this.tickId) this.remove_tick_callback(this.tickId)
+      this.tickId = 0
+      this.frames = null
     }
 
     toggleSharp() {

@@ -53,7 +53,7 @@ in {
     home.activation.vitrine-default-viewer = lib.mkIf cfg.defaultViewer (
       lib.hm.dag.entryAfter ["writeBoundary"] ''
         run ${pkgs.xdg-utils}/bin/xdg-mime default ${cfg.package.appId}.desktop \
-          image/jpeg image/png image/webp
+          ${lib.concatStringsSep " " cfg.package.mimeTypes}
       ''
     );
   };
