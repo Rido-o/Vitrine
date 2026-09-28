@@ -53,4 +53,4 @@ fi
 
 echo "# $app $mode $(date -Iseconds) $(git rev-parse --short HEAD)"
 XDG_CACHE_HOME=$home/cache XDG_STATE_HOME=$home/state WAYLAND_DISPLAY=$display \
-  VITRINE_PROBE=1 "$bin" "$corpus" 2>&1 | grep '^RESULT' | sed 's/^RESULT //'
+  VITRINE_PROBE=1 "$bin" "$corpus" 2>&1 | grep "^RESULT" | sed "s/^RESULT //"

@@ -1,0 +1,9 @@
+# rs cold 2026-09-28T19:18:35+10:00 cc978f2
+scan_detail first_us=172487 done_us=181645 batches=6 insert_max_us=8372 items=3000
+scan frames=52 p50=16.3 p95=17.4 p99=168.6 max=168.6 over25=2 stalls=2 stall_sum=264 stall_max=172 first_ms=0 done_ms=0 items=3000
+fill_first fill_ms=0
+scroll frames=1219 p50=16.6 p95=17.5 p99=18.1 max=19.2 over25=0 stalls=1 stall_sum=12 stall_max=12 scroll_ms=20367 fill_after_ms=0
+jump frames=0 p50=0.0 p95=0.0 p99=0.0 max=0.0 over25=0 stalls=0 stall_sum=0 stall_max=0 fill_ms=0
+skipped open hold (no full-screen view yet)
+idle frames=120 p50=16.7 p95=16.7 p99=16.7 max=16.7 over25=0 stalls=1 stall_sum=11 stall_max=11 
+memory rss_mb=232 hwm_mb=232

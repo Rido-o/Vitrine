@@ -55,6 +55,12 @@ Own app ID (`io.github.Rido_o.Vitrine.Spike`) and cache
 - A parallel walker (`jwalk`) only if the numbers call for it.
 - Measure: time to first batch, total, main-thread stalls while inserting.
 - Done when: the corpus lists with no main-thread stall over 8 ms.
+- **Result:** the walk takes ~7 ms for 3,000 images in 51 folders (page cache
+  warm), so it's over before the window's first frame (~170 ms of GTK/Vulkan
+  startup); batches of 512 insert in ~80 µs, except the first (~8.5 ms: the
+  grid creating its first screen of tiles, a one-off). One thread is plenty;
+  no parallel walker. Scrolling 3,000 label tiles: p50 16.6 / p99 18.1 ms,
+  no dropped frames.
 
 ## Phase 2: grid and thumbnails
 

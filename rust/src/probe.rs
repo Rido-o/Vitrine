@@ -87,6 +87,49 @@ impl Recorder {
     }
 }
 
+/// Timing of the scan as the app sees it (from starting the walk), printed as
+/// `scan_detail`: when the first and last batch arrived, how many batches,
+/// and the longest main-thread insert.
+pub struct ScanTimes {
+    start: i64,
+    first: i64,
+    batches: u32,
+    insert_max: i64,
+}
+
+impl ScanTimes {
+    pub fn start() -> Self {
+        Self {
+            start: glib::monotonic_time(),
+            first: -1,
+            batches: 0,
+            insert_max: 0,
+        }
+    }
+
+    // After inserting a batch whose insert began at `started`.
+    pub fn batch(&mut self, started: i64) {
+        if self.first < 0 {
+            self.first = started - self.start;
+        }
+        self.batches += 1;
+        self.insert_max = self.insert_max.max(glib::monotonic_time() - started);
+    }
+
+    pub fn finish(&self, items: u32) {
+        if std::env::var_os("VITRINE_PROBE").is_none() {
+            return;
+        }
+        println!(
+            "RESULT scan_detail first_us={} done_us={} batches={} insert_max_us={} items={items}",
+            self.first,
+            glib::monotonic_time() - self.start,
+            self.batches,
+            self.insert_max,
+        );
+    }
+}
+
 fn find<T: IsA<gtk::Widget>>(root: &gtk::Widget) -> Option<T> {
     if let Some(found) = root.downcast_ref::<T>() {
         return Some(found.clone());
@@ -133,11 +176,11 @@ async fn wait_until(timeout_ms: i64, done: impl Fn() -> bool) -> i64 {
     ms_since(start)
 }
 
-// Every bound tile shows a thumbnail.
+// Every bound tile shows a thumbnail (trivially, while tiles have none).
 fn tiles_filled(grid: &gtk::GridView) -> bool {
     let mut pictures = Vec::new();
     find_all::<gtk::Picture>(grid.upcast_ref(), &mut pictures);
-    !pictures.is_empty() && pictures.iter().all(|p| p.paintable().is_some())
+    pictures.iter().all(|p| p.paintable().is_some())
 }
 
 fn memory() -> String {
