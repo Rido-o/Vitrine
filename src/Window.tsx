@@ -54,6 +54,9 @@ export default function ViewerWindow(
   let emptyLabel: Gtk.Label
   let pendingSelection: string | null = null
   let autoSelected: string | null = null
+  // The last selected image and its position: a rescan that replaces or
+  // removes it makes GTK drop the selection, which is then put back.
+  let lastSelected: { path: string; index: number } | null = null
   let directionButton: Gtk.Button
   let fullscreenButton: Gtk.Button
   let fullscreenIcon: Gtk.Image
@@ -370,6 +373,7 @@ export default function ViewerWindow(
   // otherwise the first image (after the scan when waiting for a file, so the
   // full-screen view doesn't jump to another image).
   function onLibraryChanged() {
+    restoreSelection()
     if (pendingSelection) {
       const index = library.paths.indexOf(pendingSelection)
       if (index !== -1) {
@@ -395,6 +399,23 @@ export default function ViewerWindow(
     }
     syncInfoLabels()
   }
+  // After a rescan: the same image if it's still there, else the one now in its
+  // place. Without scrolling, so browsing the grid isn't interrupted.
+  function restoreSelection() {
+    if (
+      library.loading ||
+      pendingSelection ||
+      !lastSelected ||
+      selection.selected !== Gtk.INVALID_LIST_POSITION ||
+      library.paths.length === 0
+    )
+      return
+    const index = library.paths.indexOf(lastSelected.path)
+    selection.selected =
+      index !== -1
+        ? index
+        : Math.min(lastSelected.index, library.paths.length - 1)
+  }
   library.onChanged = onLibraryChanged
   library.onRescanned = () => refreshPreviewIfOpen()
 
@@ -405,6 +426,7 @@ export default function ViewerWindow(
       return false
     }
     pendingSelection = selectFile
+    lastSelected = null
     library.load(path)
     resetDirectoryEntry()
     history.remember(path)
@@ -632,6 +654,11 @@ export default function ViewerWindow(
   grid.connect("activate", (_, position) => {
     const item = library.model.get_item(position) as Gtk.StringObject | null
     if (item) showPreview(item.get_string())
+  })
+
+  selection.connect("notify::selected", () => {
+    const path = getSelectedPath()
+    if (path) lastSelected = { path, index: selection.selected }
   })
 
   selection.connect("selection-changed", () => {
