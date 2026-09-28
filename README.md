@@ -189,7 +189,8 @@ src/
   decode.ts         threaded image and GIF decoding (GdkPixbuf), shared with
                     thumbnails
   Trash.ts          trash and exact-item restore through GVfs (trash:///)
-  util.ts           names, folder helpers, file-manager D-Bus call, wallpaper
+  util.ts           names, folder listing, GC nudge, file-manager D-Bus call,
+                    wallpaper
   style.scss        styles
   theme.scss        colour palette
   env.d.ts          gi:// module and GJS global types (@girs), ICONS_DIR
@@ -309,7 +310,7 @@ caches expired):
 
 ## Roadmap
 
-- Show file size.
+- Show file size in the info bar (the properties panel has it).
 - More CSS improvements.
 - Thumbnails at the image's own aspect ratio, and account for margins when
   calculating thumbnail width (they end up too wide).

@@ -24,11 +24,12 @@ There are no tests, so:
 - `nix flake check` type-checks `src/` with `tsc` (esbuild alone strips types). Keep it passing; don't silence errors with `any` or `@ts-ignore` without a comment saying why. The `@girs` packages are deliberately pinned to the `4.0.0-rc.17` generation (see "Build" in the README).
 - `nix build`, then `$(nix build --print-out-paths)/bin/vitrine --help`: GApplication prints help only after the whole bundle has loaded, so this catches import and load-time errors without opening a window.
 - Logic that doesn't need a window (scanning, sorting, thumbnails) can be tested headless: bundle a small entry that imports the module with esbuild and run it with the package's own `gjs` and `GI_TYPELIB_PATH` (both from the wrapper, `bin/.vitrine-wrapped` and `strings bin/vitrine`); a different gjs mismatches the typelibs. See "Gotchas" in the README.
+- Behaviour that needs a window (selection, the full-screen view, menus) can be driven the same way when a display is available: an untracked entry that creates a `Gtk.Application`, builds `ViewerWindow` inside `createRoot`, finds widgets by type (`Gtk.GridView`, `ZoomableImage`) and checks state such as the window title; bundle it with `package.nix`'s esbuild flags. It opens a real window briefly.
 - Anything visual needs the user to run it; say what to check.
 
 ## Code
 
-- `src/main.tsx` owns the `Gtk.Application` and command line; `src/Window.tsx` owns layout and interaction; `Library.ts` (async scanning, sorting, the list model), `Thumbnails.ts`, `History.ts` and `ZoomableImage.ts` are the pieces. Names, the app ID and the old-name migration live in `src/util.ts`.
+- `src/main.tsx` owns the `Gtk.Application` and command line; `src/Window.tsx` owns layout and interaction; `Library.ts` (async scanning, sorting, the list model, watching), `Thumbnails.ts`, `ZoomableImage.ts` (the full-screen image) with `ImageCache.ts` and `decode.ts`, `Properties.ts`, `Trash.ts` and `History.ts` are the pieces; `ActionsMenu.ts`, `AutoHide.ts`, `PropertiesPopover.ts` and `Shortcuts.ts` hold UI split out of `Window.tsx`. The README's "Layout" lists them all. Names, the app ID and the old-name migration live in `src/util.ts`.
 - TypeScript style: no semicolons, 2-space indent, double quotes, trailing commas, ~80 columns (prettier defaults with `semi: false`). Nix: alejandra.
 - GTK/GLib come from `gi://` imports; gnim's lowercase JSX tags are registered in `src/jsx.ts` (add new ones there).
 - Keep comments sparse: explain why, not what.
