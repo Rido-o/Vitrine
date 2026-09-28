@@ -133,6 +133,12 @@ Own app ID (`io.github.Rido_o.Vitrine.Spike`) and cache
   (the view opened without its placeholder). Bound tiles' textures are now
   never evicted, plus up to 100 for tiles scrolled away.
 
+- **Preloading the grid's selection:** the image selected in the grid is
+  decoded in the background (each change replaces the queue), and closing the
+  view keeps it; select, wait 300 ms, open: sharp at once (was ~20–56 ms).
+  To do: keep the automatic selection on the first image while a scan runs
+  (it follows the first image found as sorting moves it).
+
 ## Phase 3b (only if needed): full-resolution zoom
 
 Tiles of ~1024² at full resolution, created only for the visible region and a

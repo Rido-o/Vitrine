@@ -206,10 +206,7 @@ fn connect_preview(
                 .filter_map(at)
                 .map(|image| image.path)
                 .collect();
-            // In device pixels (integer scale; fractional scaling is later).
-            let scale = window.scale_factor().max(1) as u32;
-            let width = window.width().max(1) as u32 * scale;
-            let height = window.height().max(1) as u32 * scale;
+            let (width, height) = view_size(&window);
             preview.show(
                 shown.path.clone(),
                 neighbours,
@@ -223,6 +220,20 @@ fn connect_preview(
 
     let open = show_at.clone();
     grid.connect_activate(move |_, position| open(position as i64));
+
+    // The image selected in the grid is decoded in the background, so
+    // opening it shows it sharp straight away. (In the view, `show` preloads
+    // the neighbours instead.)
+    let (window_, stack_, preview_) = (window.clone(), stack.clone(), preview.clone());
+    selection.connect_selected_item_notify(move |selection| {
+        if stack_.visible_child_name().as_deref() != Some("grid") {
+            return;
+        }
+        if let Some(object) = selection.selected_item() {
+            let (width, height) = view_size(&window_);
+            preview_.preload(image(&object).path.clone(), width, height);
+        }
+    });
 
     let keys = gtk::EventControllerKey::builder()
         .propagation_phase(gtk::PropagationPhase::Capture)
@@ -240,7 +251,7 @@ fn connect_preview(
             gdk::Key::Escape => {
                 stack_.set_visible_child_name("grid");
                 grid_.scroll_to(selected as u32, gtk::ListScrollFlags::FOCUS, None);
-                clear_after_paint(&window_, &stack_, &preview_);
+                hide_after_paint(&window_, &stack_, &selection, &preview_);
             }
             _ => return glib::Propagation::Proceed,
         }
@@ -249,22 +260,59 @@ fn connect_preview(
     window.add_controller(keys);
 }
 
-// Dropping the view's textures once the grid's first frame is drawn, so
-// freeing them doesn't delay it.
-fn clear_after_paint(window: &gtk::ApplicationWindow, stack: &gtk::Stack, preview: &Rc<Preview>) {
+// The size the view decodes images at: the window's, in device pixels
+// (integer scale; fractional scaling is later). Before the window is first
+// shown (the grid's first selection), its default size.
+fn view_size(window: &gtk::ApplicationWindow) -> (u32, u32) {
+    let (width, height) = if window.width() > 0 {
+        (window.width(), window.height())
+    } else {
+        (window.default_width(), window.default_height())
+    };
+    let scale = window.scale_factor().max(1);
+    (
+        (width * scale).max(1) as u32,
+        (height * scale).max(1) as u32,
+    )
+}
+
+// Dropping the view's textures (all but the selected image's) once the grid's
+// first frame is drawn, so freeing them doesn't delay it.
+fn hide_after_paint(
+    window: &gtk::ApplicationWindow,
+    stack: &gtk::Stack,
+    selection: &gtk::SingleSelection,
+    preview: &Rc<Preview>,
+) {
+    let hide = {
+        let (window, stack, selection, preview) = (
+            window.clone(),
+            stack.clone(),
+            selection.clone(),
+            preview.clone(),
+        );
+        move || {
+            if stack.visible_child_name().as_deref() != Some("grid") {
+                return;
+            }
+            let keep = selection
+                .selected_item()
+                .map(|object| image(&object).path.clone());
+            let (width, height) = view_size(&window);
+            preview.hide(keep, width, height);
+        }
+    };
     let Some(clock) = window.frame_clock() else {
-        preview.clear();
+        hide();
         return;
     };
     let handler = Rc::new(RefCell::new(None));
-    let (stack, preview, handler_) = (stack.clone(), preview.clone(), handler.clone());
+    let handler_ = handler.clone();
     let id = clock.connect_after_paint(move |clock| {
         if let Some(id) = handler_.borrow_mut().take() {
             clock.disconnect(id);
         }
-        if stack.visible_child_name().as_deref() == Some("grid") {
-            preview.clear();
-        }
+        hide();
     });
     *handler.borrow_mut() = Some(id);
 }

@@ -68,6 +68,7 @@ In order, in one run:
 | `open` | activate the first image (from the top), 1.5 s | `placeholder_ms`, `sharp_ms` |
 | `hold` | → 60 times at 30/s, then until the last image is sharp | `last_sharp_ms` |
 | `close` | Esc, 1 s | |
+| `open_selected` | spike only: select the 11th image, wait 300 ms, open it | `dwell_ms`, `sharp_ms` |
 | `idle` | 2 s doing nothing | |
 | `memory` | at the end | `rss_mb`, `hwm_mb` (peak) |
 

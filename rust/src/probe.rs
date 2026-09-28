@@ -37,6 +37,10 @@ const FILL_TIMEOUT_MS: i64 = 60_000;
 const OPEN_POSITION: u32 = 0;
 const HOLD_PRESSES: u32 = 60;
 const HOLD_INTERVAL_MS: u64 = 33;
+// open_selected: an image well away from the others opened, and how long it's
+// selected before Enter.
+const SELECT_POSITION: u32 = 10;
+const SELECT_DWELL_MS: u64 = 300;
 
 thread_local! {
     // What the full-screen view shows, and whether it's the decoded image.
@@ -404,6 +408,27 @@ pub fn run(window: &gtk::ApplicationWindow) {
         press(&window, gdk::Key::Escape);
         sleep(1000).await;
         recorder.finish("close", "");
+
+        // open_selected: select an image in the grid, look at it for a
+        // moment, then open it (the selection is decoded in the background).
+        let selection = model
+            .downcast_ref::<gtk::SingleSelection>()
+            .expect("the grid's model is a SingleSelection");
+        selection.set_selected(SELECT_POSITION);
+        sleep(SELECT_DWELL_MS).await;
+        let recorder = Recorder::start(&window);
+        let open_start = glib::monotonic_time();
+        grid.emit_by_name::<()>("activate", &[&SELECT_POSITION]);
+        let selected = path_at(SELECT_POSITION);
+        let sharp = wait_until(5000, || is_sharp(&selected)).await;
+        let sharp_ms = if sharp < 0 { -1 } else { ms_since(open_start) };
+        sleep(1000u64.saturating_sub(ms_since(open_start) as u64)).await;
+        recorder.finish(
+            "open_selected",
+            &format!("dwell_ms={SELECT_DWELL_MS} sharp_ms={sharp_ms}"),
+        );
+        press(&window, gdk::Key::Escape);
+        sleep(500).await;
 
         idle(&window).await;
         finish(&window);

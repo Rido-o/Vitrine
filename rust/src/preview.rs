@@ -124,9 +124,7 @@ impl Preview {
     ) {
         let mut wanted = vec![path.clone()];
         wanted.extend(neighbours.into_iter().filter(|p| *p != path));
-        self.textures
-            .borrow_mut()
-            .retain(|kept, _| wanted.contains(kept));
+        self.want(wanted, width, height);
         let texture = self.textures.borrow().get(&path).cloned();
         let sharp = texture.is_some();
         match texture.or(placeholder) {
@@ -137,7 +135,28 @@ impl Preview {
         }
         crate::probe::preview_shown(&path, sharp);
         *self.shown.borrow_mut() = Some(path);
+    }
 
+    /// Decodes `path` in the background (the image selected in the grid),
+    /// so opening it shows it sharp at once.
+    pub fn preload(&self, path: PathBuf, width: u32, height: u32) {
+        self.want(vec![path], width, height);
+    }
+
+    /// Empties the view (it's hidden), keeping only `keep`'s image: the one
+    /// selected in the grid, which is usually the one just shown.
+    pub fn hide(&self, keep: Option<PathBuf>, width: u32, height: u32) {
+        *self.shown.borrow_mut() = None;
+        self.picture.set_paintable(None::<&gdk::Paintable>);
+        self.want(keep.into_iter().collect(), width, height);
+    }
+
+    // Keeps (and decodes, in order) exactly `wanted`; everything else is
+    // dropped, and queued decodes of it never start.
+    fn want(&self, wanted: Vec<PathBuf>, width: u32, height: u32) {
+        self.textures
+            .borrow_mut()
+            .retain(|kept, _| wanted.contains(kept));
         // A path counts as decoding from being queued until its result; the
         // queue is replaced, and requests no worker had taken yet stop
         // counting, so they can be asked for again later.
@@ -180,18 +199,5 @@ impl Preview {
             self.picture.set_paintable(Some(&texture));
             crate::probe::preview_shown(&path, true);
         }
-    }
-
-    /// Drops every image (the view is hidden).
-    pub fn clear(&self) {
-        let mut decoding = self.decoding.borrow_mut();
-        for dropped in self.shared.queue.lock().unwrap().requests.drain(..) {
-            decoding.remove(&dropped.path);
-        }
-        drop(decoding);
-        self.textures.borrow_mut().clear();
-        self.wanted.borrow_mut().clear();
-        *self.shown.borrow_mut() = None;
-        self.picture.set_paintable(None::<&gdk::Paintable>);
     }
 }
