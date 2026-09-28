@@ -9,10 +9,14 @@
   wrapGAppsHook4,
   gdk-pixbuf,
   gexiv2_0_16,
+  glycin-loaders,
   gjs,
   glib,
   gtk4,
   librsvg,
+  shared-mime-info,
+  libglycin,
+  libglycin-gtk4,
   webp-pixbuf-loader,
   gnim,
 }: let
@@ -49,6 +53,8 @@ in
     buildInputs = [
       gdk-pixbuf
       gexiv2_0_16
+      libglycin
+      libglycin-gtk4
       gjs
       glib
       gtk4
@@ -105,11 +111,14 @@ in
     '';
 
     # Wrap by hand so our loaders.cache comes after (and overrides) the hook's
-    # own GDK_PIXBUF_MODULE_FILE.
+    # own GDK_PIXBUF_MODULE_FILE. glycin finds its loaders on XDG_DATA_DIRS and
+    # needs the MIME database to pick one (the session's comes first).
     dontWrapGApps = true;
     postFixup = ''
       wrapProgram $out/bin/vitrine "''${gappsWrapperArgs[@]}" \
-        --set GDK_PIXBUF_MODULE_FILE $out/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
+        --set GDK_PIXBUF_MODULE_FILE $out/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache \
+        --prefix XDG_DATA_DIRS : ${glycin-loaders}/share \
+        --suffix XDG_DATA_DIRS : ${shared-mime-info}/share
     '';
 
     passthru = {inherit appId mimeTypes;};

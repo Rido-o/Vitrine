@@ -193,8 +193,8 @@ src/
   Properties.ts     the properties panel's contents (file info, GdkPixbuf, EXIF)
   Shortcuts.ts      the keyboard shortcuts window
   ImageCache.ts     full-size images: the one shown plus ±2 preloaded
-  decode.ts         threaded image and GIF decoding (GdkPixbuf), shared with
-                    thumbnails
+  decode.ts         image decoding: full-size with glycin (out of process),
+                    thumbnails and GIFs with GdkPixbuf
   Trash.ts          trash and exact-item restore through GVfs (trash:///)
   util.ts           names, folder listing, GC nudge, file-manager D-Bus call,
                     wallpaper
@@ -207,8 +207,8 @@ icons/              bundled symbolic icons
 
 - App ID `io.github.Rido_o.Vitrine`. The app is `NON_UNIQUE`: every launch is
   its own process and window; nothing stays running in the background.
-- Everything is plain GTK4/Gio/GdkPixbuf/GLib, plus gexiv2 for EXIF; the only
-  JS library is gnim.
+- Everything is plain GTK4/Gio/GdkPixbuf/GLib, plus gexiv2 for EXIF and
+  glycin for full-size images; the only JS library is gnim.
 
 ### Build
 
@@ -225,8 +225,11 @@ icons/              bundled symbolic icons
    `bin/vitrine` (`gjs -m main.js`), wrapped with `wrapGAppsHook4`'s arguments
    by hand (`dontWrapGApps`) so its own GdkPixbuf `loaders.cache` (gdk-pixbuf's
    loaders plus librsvg and `webp-pixbuf-loader`) overrides the hook's.
-   `gexiv2_0_16` (EXIF) is a build input so the wrapper puts its typelib on
-   `GI_TYPELIB_PATH`.
+   `gexiv2_0_16` (EXIF), `libglycin` and `libglycin-gtk4` are build inputs
+   so the wrapper puts their typelibs on `GI_TYPELIB_PATH`; `glycin-loaders`
+   is added to `XDG_DATA_DIRS`, where glycin looks for its loaders (it finds
+   `bwrap`, for its sandbox, by its store path), and `shared-mime-info` after
+   the session's own directories (glycin picks a loader by MIME type).
 
 esbuild strips types without checking them; `checks.typecheck` (run by
 `nix flake check`) does, with `tsc --noEmit` against the `@girs` type packages
@@ -281,13 +284,22 @@ Things that broke and look like harmless cleanups:
   closes, and GTK unbinds its tiles then; GJS blocks JS callbacks during a
   collection and logged "Attempting to call back into JSAPI during the sweeping
   phase of GC … The offending signal was unbind" once per tile.
-- **Decode with GdkPixbuf's async API (`decode.ts`), not
-  `Gdk.Texture.new_from_bytes`.** The latter decodes on the main thread and
-  froze the window for the whole decode (up to ~150 ms for a 12 MP WebP, ~90
-  ms for 8K JPEGs); preloading four neighbours with it would freeze on every
-  keypress. The async API takes the same time in a worker thread (measured
-  stalls ≤ 12 ms). With preloading, the next image shows in ~0 ms instead of
-  ~70 ms.
+- **Decode full-size images with glycin (`decodeTexture` in `decode.ts`).**
+  GdkPixbuf's `new_from_stream_async` only reads in the background: it feeds
+  each chunk to a loader on the main thread, so a 34 MP JPEG stalled the
+  window for ~240 ms in 20–70 ms bursts (`perf`: libjpeg under
+  `load_from_stream_async_cb`), and opening the full-screen view skipped
+  frames. `Gdk.Texture.new_from_bytes` is worse (one ~150 ms block for a
+  12 MP WebP). glycin decodes in a separate process: no stalls, and faster
+  (~240 vs ~360 ms for 34 MP). It isn't used for thumbnails, where
+  it can't scale while decoding (scaling on the main thread stalled up to
+  ~300 ms). If it fails (e.g. no user namespaces for its sandbox), GdkPixbuf
+  is used instead.
+- **Ask glycin for premultiplied RGBA (`set_accepted_memory_formats`).**
+  Given plain RGB (most JPEGs), GTK converted it to RGBX on the main thread
+  when first drawn (~200 ms for 34 MP). Uploading the texture itself still
+  takes ~50–80 ms for 8–14 MP (~180 ms for 34 MP), after the thumbnail
+  placeholder is already on screen.
 - **Preloads are cancelled and queued (`ImageCache.ts`).** Dropping a preload
   from the cache must cancel its decode, and at most two decodes run with the
   shown image first: otherwise holding an arrow key (~30 presses/s) piled up

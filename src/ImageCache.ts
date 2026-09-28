@@ -1,7 +1,12 @@
 import Gdk from "gi://Gdk?version=4.0"
 import Gio from "gi://Gio"
 import GdkPixbuf from "gi://GdkPixbuf"
-import { copyToTexture, decodeAnimation, decodeImage } from "./decode"
+import {
+  copyToTexture,
+  decodeAnimation,
+  decodeImage,
+  decodeTexture,
+} from "./decode"
 import { requestGc } from "./util"
 
 // At most this many full-size decodes run at once; the rest wait in a queue,
@@ -41,6 +46,15 @@ async function decode(
   cancellable: Gio.Cancellable,
 ): Promise<DecodedImage> {
   if (!isAnimated(path)) {
+    try {
+      const texture = await decodeTexture(path, cancellable)
+      return { texture, animation: null }
+    } catch (error) {
+      if (cancellable.is_cancelled()) throw error
+      // E.g. no user namespaces for glycin's sandbox; GdkPixbuf still works,
+      // only with stalls.
+      console.warn(`glycin could not load ${path}:`, error)
+    }
     const pixbuf = await decodeImage(path, undefined, cancellable)
     return { texture: Gdk.Texture.new_for_pixbuf(pixbuf), animation: null }
   }
