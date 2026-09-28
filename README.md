@@ -73,7 +73,7 @@ Keys (grid unless noted):
 
 | Key | Does |
 | --- | --- |
-| Enter, double-click | Open in the full-screen view |
+| Enter, `e`, double-click | Open in the full-screen view |
 | `w` | Set as wallpaper (grid and view) |
 | `i` | Image properties (grid and view) |
 | Ctrl+C, Ctrl+Shift+C | Copy the image, or its path (grid and view) |

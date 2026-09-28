@@ -23,7 +23,7 @@ function sections(wallpaper: boolean): Section[] {
     {
       title: "Grid",
       rows: [
-        ["Enter, double-click", "Open in the full-screen view"],
+        ["Enter, e, double-click", "Open in the full-screen view"],
         ["Esc, q", "Quit"],
       ],
     },
