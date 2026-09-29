@@ -1028,6 +1028,51 @@ pub fn ui(window: &gtk::ApplicationWindow) {
                 shot(&window, "ui-view-menu");
                 menu.popdown();
             }
+            // Colour assessment: b, the image decoded for the area inside the
+            // border, the menu's check; b again.
+            let assessment = |what: &str| {
+                let image = find::<crate::zoomable::ZoomableImage>(window.upcast_ref());
+                let checked = window
+                    .lookup_action("color-assessment")
+                    .and_then(|action| action.state())
+                    .and_then(|state| state.get::<bool>());
+                let texture = image
+                    .as_ref()
+                    .and_then(|image| image.base_texture())
+                    .map(|texture| (texture.width(), texture.height()));
+                let scale = window.surface().map_or(1.0, |surface| surface.scale());
+                println!(
+                    "RESULT ui {what} on={:?} checked={checked:?} texture={texture:?} view={:?}",
+                    image.map(|image| image.assessment()),
+                    (
+                        (window.width() as f64 * scale).round(),
+                        (window.height() as f64 * scale).round()
+                    ),
+                );
+            };
+            press(&window, gdk::Key::b);
+            sleep(1000).await;
+            assessment("assessment_on");
+            shot(&window, "ui-assessment");
+            if let Some(menu) = menus
+                .iter()
+                .filter(|m| m.tooltip_text().as_deref() == Some("More actions"))
+                .find(|m| !m.has_css_class("viewer-toolbar-menu"))
+            {
+                menu.popup();
+                sleep(300).await;
+                shot(&window, "ui-assessment-menu");
+                menu.popdown();
+            }
+            for _ in 0..4 {
+                press(&window, gdk::Key::plus);
+            }
+            sleep(1000).await;
+            shot(&window, "ui-assessment-zoomed");
+            press(&window, gdk::Key::_0);
+            press(&window, gdk::Key::b);
+            sleep(1000).await;
+            assessment("assessment_off");
             press(&window, gdk::Key::Escape);
             sleep(500).await;
         }

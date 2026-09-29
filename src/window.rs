@@ -358,7 +358,7 @@ impl Window {
         // A file opens in the full-screen view straight away; the scan
         // selects it in the grid when it turns up.
         if let Some(file) = &file {
-            let (width, height) = view_size(&this.window);
+            let (width, height) = view_size(&this.window, &this.preview.image);
             this.preview
                 .show(file.clone(), Vec::new(), None, width, height);
             this.stack.set_visible_child_name("preview");
@@ -794,7 +794,7 @@ impl Window {
             .filter_map(at)
             .map(|image| image.path)
             .collect();
-        let (width, height) = view_size(&self.window);
+        let (width, height) = view_size(&self.window, &self.preview.image);
         self.preview.show(
             shown.path.clone(),
             neighbours,
@@ -840,7 +840,7 @@ impl Window {
                     return;
                 }
                 if let Some(object) = selection.selected_item() {
-                    let (width, height) = view_size(&this.window);
+                    let (width, height) = view_size(&this.window, &this.preview.image);
                     this.preview
                         .preload(image(&object).path.clone(), width, height);
                 }
@@ -907,6 +907,15 @@ impl Window {
                     })
                     .accel("v")
                     .view_only(),
+                    action("color-assessment", "Colour assessment", |this| {
+                        this.view.toggle_assessment()
+                    })
+                    .accel("b")
+                    .view_only()
+                    .checked({
+                        let image = self.preview.image.clone();
+                        move || image.assessment()
+                    }),
                 ],
                 vec![
                     action("show-in-file-manager", "Show in file manager", |this| {
@@ -1247,6 +1256,10 @@ impl Window {
             gdk::Key::Right => self.show_at(selected + 1),
             gdk::Key::Left => self.show_at(selected - 1),
             gdk::Key::Escape | gdk::Key::q => self.close_view(),
+            // Through the action, so the menu's check follows.
+            gdk::Key::b | gdk::Key::B => {
+                WidgetExt::activate_action(&self.window, "win.color-assessment", None).ok();
+            }
             _ => return self.view.key(key),
         }
         true
@@ -1426,7 +1439,12 @@ pub fn show_in_file_manager(path: &Path) {
 // (fractional scales included), so at fit an image is drawn at exactly its
 // decoded pixels. Before the window is shown (the grid's first selection),
 // its default size; the view decodes again when its size changes.
-fn view_size(window: &gtk::ApplicationWindow) -> (u32, u32) {
+// The size an image fits within in the view, in device pixels (the view
+// fills the window).
+fn view_size(
+    window: &gtk::ApplicationWindow,
+    image: &crate::zoomable::ZoomableImage,
+) -> (u32, u32) {
     let (width, height) = if window.width() > 0 {
         (window.width(), window.height())
     } else {
@@ -1435,9 +1453,10 @@ fn view_size(window: &gtk::ApplicationWindow) -> (u32, u32) {
     let scale = window
         .surface()
         .map_or(window.scale_factor() as f64, |surface| surface.scale());
-    (
+    crate::zoomable::image_area(
         (width as f64 * scale).round().max(1.0) as u32,
         (height as f64 * scale).round().max(1.0) as u32,
+        image.assessment(),
     )
 }
 
@@ -1463,7 +1482,7 @@ fn hide_after_paint(
             let keep = selection
                 .selected_item()
                 .map(|object| image(&object).path.clone());
-            let (width, height) = view_size(&window);
+            let (width, height) = view_size(&window, &preview.image);
             preview.hide(keep, width, height);
         }
     };

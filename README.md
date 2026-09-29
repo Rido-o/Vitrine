@@ -48,6 +48,14 @@ command of your choice.
   thumbnail is shown, then swapped for the full image. Nothing decodes on the
   main thread.
 - **Image properties** (the i button on either screen, or `i`): name, folder,
+- **Colour assessment** (`b` in the full-screen view, or the ⋯ menu), after
+  darktable's, along the lines of ISO 12646: the image on middle grey (L\* 50,
+  sRGB 119,119,119) inside a white frame, a neutral surround for judging
+  exposure and a white reference for contrast, instead of black. The border
+  on each side is 20% of the view's shorter side, 40% of it white; the image
+  is decoded for the area inside it, and when zoomed in it stays clipped
+  within the frame. The buttons and info fade out as in fullscreen. It stays
+  on for the window until it's closed.
   size, type and dates; dimensions (as shown, after EXIF rotation), megapixels,
   format and orientation; and, when the file has EXIF, the camera, lens,
   exposure, aperture, ISO, focal length, flash, date taken, GPS location,
@@ -104,6 +112,7 @@ Keys (grid unless noted):
 | `s` (view) | Sharp pixels |
 | `[`, `]` (view) | Rotate left, right (only the view; resets for the next image) |
 | `h`, `v` (view) | Flip horizontally, vertically (only the view) |
+| `b` (view) | Colour assessment: grey surround, white frame |
 | `f` (view) | Toggle fullscreen; leaving the view restores the window |
 
 Files:
@@ -236,7 +245,7 @@ src/
   color.rs          embedded ICC profiles (JPEG, PNG, GdkPixbuf) converted to
                     sRGB (moxcms)
   zoomable.rs       the full-screen image widget (zoom, pan, rotate, flip,
-                    sharp mode, tiles)
+                    sharp mode, tiles, colour assessment)
   view.rs           the full-screen view's page and controls
   autohide.rs       fading the view's controls when idle
   actions.rs        the ⋯ menu: its model and window actions
@@ -289,7 +298,8 @@ Things that broke and look like harmless cleanups:
   (`view_size` in `window.rs`, `layout` in `zoomable.rs`). Decoding for the
   monitor and drawing it scaled to the window softened every image; the
   texture is resized with Lanczos3, and decoded again when the view's size
-  changes.
+  changes, and for the area inside the colour assessment border
+  (`zoomable::image_area`, used by both).
 - **Never evict the thumbnails of bound tiles** (`tiles.rs`). The grid keeps
   ~390 tiles bound (rows around the viewport, not only the visible ones); with
   a cap of 300 on every texture, off-screen tiles evicted visible ones, and the

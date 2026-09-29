@@ -90,11 +90,14 @@ impl View {
         page.add_overlay(&info);
 
         let (window_, stack_) = (window.clone(), stack.clone());
-        let image = preview.image.clone();
+        let (image, image_) = (preview.image.clone(), preview.image.clone());
+        // In fullscreen, and in colour assessment (the controls would sit in
+        // its neutral surround).
         let autohide = AutoHide::new(
             HIDE_CONTROLS_AFTER,
             move || {
-                window_.is_fullscreen() && stack_.visible_child_name().as_deref() == Some("preview")
+                (window_.is_fullscreen() || image_.assessment())
+                    && stack_.visible_child_name().as_deref() == Some("preview")
             },
             move |hidden| image.set_cursor_hidden(hidden),
         );
@@ -178,6 +181,13 @@ impl View {
             self.fullscreened_by_view.set(true);
             self.window.fullscreen();
         }
+    }
+
+    /// Colour assessment on or off, for this window until it closes.
+    pub fn toggle_assessment(&self) {
+        let image = &self.preview.image;
+        image.set_assessment(!image.assessment());
+        self.autohide.show();
     }
 
     /// Leaving the view: back to a window if the view made it fullscreen.

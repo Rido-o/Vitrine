@@ -11,6 +11,8 @@ pub struct MenuAction {
     pub accel: Option<&'static str>,
     // Only enabled in the full-screen view.
     pub view_only: bool,
+    // A check item, showing this after each activation.
+    pub checked: Option<Box<dyn Fn() -> bool>>,
     pub activate: Box<dyn Fn()>,
 }
 
@@ -21,6 +23,7 @@ impl MenuAction {
             label,
             accel: None,
             view_only: false,
+            checked: None,
             activate: Box::new(activate),
         }
     }
@@ -32,6 +35,11 @@ impl MenuAction {
 
     pub fn view_only(mut self) -> Self {
         self.view_only = true;
+        self
+    }
+
+    pub fn checked(mut self, checked: impl Fn() -> bool + 'static) -> Self {
+        self.checked = Some(Box::new(checked));
         self
     }
 }
@@ -55,10 +63,20 @@ impl ActionsMenu {
                     item.set_attribute_value("accel", Some(&accel.to_variant()));
                 }
                 menu.append_item(&item);
-                let simple = gio::SimpleAction::new(action.name, None);
+                let simple = match &action.checked {
+                    Some(checked) => {
+                        gio::SimpleAction::new_stateful(action.name, None, &checked().to_variant())
+                    }
+                    None => gio::SimpleAction::new(action.name, None),
+                };
                 simple.set_enabled(!action.view_only);
-                let activate = action.activate;
-                simple.connect_activate(move |_, _| activate());
+                let (activate, checked) = (action.activate, action.checked);
+                simple.connect_activate(move |simple, _| {
+                    activate();
+                    if let Some(checked) = &checked {
+                        simple.set_state(&checked().to_variant());
+                    }
+                });
                 window.add_action(&simple);
                 if action.view_only {
                     view_actions.push(simple);

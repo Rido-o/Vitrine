@@ -41,6 +41,7 @@ const SECTIONS: [(&str, &[Row]); 3] = [
             (&["s"], "Sharp pixels"),
             (&["[", "]"], "Rotate left, right (view only)"),
             (&["h", "v"], "Flip horizontally, vertically (view only)"),
+            (&["b"], "Colour assessment (grey surround, white frame)"),
             (&["f"], "Toggle fullscreen"),
             (&["Esc", "q"], "Back to the grid"),
         ],

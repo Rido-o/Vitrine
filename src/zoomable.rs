@@ -18,6 +18,43 @@ const NAV_EDGE: f64 = 1.0 / 6.0;
 // 512×512 tile is ~1 MB); the rest show the lower resolution until later.
 const NEW_TILES_PER_FRAME: usize = 3;
 
+// Colour assessment, after darktable's (along the lines of ISO 12646): the
+// image on middle grey inside a white frame, a neutral surround and a white
+// reference instead of black. The border on each side (grey and white) is
+// this share of the view's shorter side, and the white this share of it.
+const ASSESSMENT_BORDER: f64 = 0.2;
+const ASSESSMENT_WHITE: f64 = 0.4;
+// L* 50 in sRGB (18.4% luminance).
+const ASSESSMENT_GREY: f32 = 0.4663;
+
+/// The size the image fits within, in device pixels, for a view of
+/// `width`×`height` device pixels: less the border in colour assessment.
+pub fn image_area(width: u32, height: u32, assessment: bool) -> (u32, u32) {
+    let border = if assessment {
+        assessment_border(width, height)
+    } else {
+        0
+    };
+    (
+        width.saturating_sub(2 * border).max(1),
+        height.saturating_sub(2 * border).max(1),
+    )
+}
+
+// In device pixels, so the image stays on whole ones.
+fn assessment_border(width: u32, height: u32) -> u32 {
+    (width.min(height) as f64 * ASSESSMENT_BORDER).round() as u32
+}
+
+// Where the image goes, in logical pixels: the whole view, or inside the
+// colour assessment border; and that border's white part.
+struct Area {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    white: f64,
+}
 /// Full-resolution tiles of the shown image.
 pub struct Tiles {
     pub tiles: Vec<(Tile, gdk::Texture)>,
@@ -47,6 +84,7 @@ pub struct State {
     rotation: i32,
     flipped: bool,
     pointer: (f64, f64),
+    assessment: bool,
     cursor_hidden: bool,
 }
 
@@ -171,19 +209,7 @@ mod imp {
 
         fn size_allocate(&self, width: i32, height: i32, baseline: i32) {
             self.parent_size_allocate(width, height, baseline);
-            let obj = self.obj();
-            if let Some(resize) = self.on_resize.borrow().as_ref() {
-                let device = obj.device_scale();
-                resize(
-                    (width as f64 * device).round() as u32,
-                    (height as f64 * device).round() as u32,
-                );
-            }
-            if self.state.borrow().fitted {
-                obj.reset_zoom();
-            } else {
-                obj.clamp_offsets();
-            }
+            self.obj().relayout();
         }
 
         fn snapshot(&self, snapshot: &gtk::Snapshot) {
@@ -282,13 +308,18 @@ impl ZoomableImage {
     }
 
     pub fn zoom_in(&self) {
-        let (w, h) = (self.width() as f64, self.height() as f64);
-        self.zoom_at(ZOOM_STEP, w / 2.0, h / 2.0);
+        let (x, y) = self.centre();
+        self.zoom_at(ZOOM_STEP, x, y);
     }
 
     pub fn zoom_out(&self) {
-        let (w, h) = (self.width() as f64, self.height() as f64);
-        self.zoom_at(1.0 / ZOOM_STEP, w / 2.0, h / 2.0);
+        let (x, y) = self.centre();
+        self.zoom_at(1.0 / ZOOM_STEP, x, y);
+    }
+
+    fn centre(&self) -> (f64, f64) {
+        let area = self.area(&self.imp().state.borrow());
+        (area.x + area.width / 2.0, area.y + area.height / 2.0)
     }
 
     pub fn reset_zoom(&self) {
@@ -343,6 +374,62 @@ impl ZoomableImage {
         state.flipped = flipped;
         drop(state);
         self.reset_zoom();
+    }
+
+    /// Colour assessment: the image on middle grey inside a white frame.
+    pub fn set_assessment(&self, on: bool) {
+        self.imp().state.borrow_mut().assessment = on;
+        self.relayout();
+        self.queue_draw();
+    }
+
+    pub fn assessment(&self) -> bool {
+        self.imp().state.borrow().assessment
+    }
+
+    // The image's area changed: its size in device pixels to the resize
+    // callback (a new decode), and the zoom kept at fit or within bounds.
+    fn relayout(&self) {
+        if let Some(resize) = self.imp().on_resize.borrow().as_ref() {
+            let device = self.device_scale();
+            let (width, height) = image_area(
+                (self.width() as f64 * device).round() as u32,
+                (self.height() as f64 * device).round() as u32,
+                self.assessment(),
+            );
+            resize(width, height);
+        }
+        if self.imp().state.borrow().fitted {
+            self.reset_zoom();
+        } else {
+            self.clamp_offsets();
+        }
+    }
+
+    fn area(&self, state: &State) -> Area {
+        let (width, height) = (self.width() as f64, self.height() as f64);
+        if !state.assessment {
+            return Area {
+                x: 0.0,
+                y: 0.0,
+                width,
+                height,
+                white: 0.0,
+            };
+        }
+        let device = self.device_scale();
+        let border = assessment_border(
+            (width * device).round() as u32,
+            (height * device).round() as u32,
+        ) as f64;
+        let inset = border / device;
+        Area {
+            x: inset,
+            y: inset,
+            width: (width - 2.0 * inset).max(1.0),
+            height: (height - 2.0 * inset).max(1.0),
+            white: (border * ASSESSMENT_WHITE).round() / device,
+        }
     }
 
     /// Hides the cursor over the image (while controls auto-hide).
@@ -405,7 +492,8 @@ impl ZoomableImage {
             return 1.0;
         }
         let (w, h) = Self::shown_size(&state);
-        (self.width() as f64 / w).min(self.height() as f64 / h)
+        let area = self.area(&state);
+        (area.width / w).min(area.height / h)
     }
 
     pub fn zoom_at(&self, factor: f64, x: f64, y: f64) {
@@ -443,23 +531,25 @@ impl ZoomableImage {
     }
 
     fn clamp_offsets(&self) {
-        let (view_w, view_h) = (self.width() as f64, self.height() as f64);
         let mut state = self.imp().state.borrow_mut();
         if state.base.is_none() {
             return;
         }
+        let area = self.area(&state);
         let (w, h) = Self::shown_size(&state);
         let (size_w, size_h) = (w * state.scale, h * state.scale);
         let fitted = state.fitted;
-        let clamp = |offset: f64, view: f64, size: f64| {
+        // Centred at fit; zoomed in, the image's edge may come to the
+        // middle of the area, no further.
+        let clamp = |offset: f64, start: f64, view: f64, size: f64| {
             if fitted {
-                (view - size) / 2.0
+                start + (view - size) / 2.0
             } else {
-                offset.clamp(view / 2.0 - size, view / 2.0)
+                offset.clamp(start + view / 2.0 - size, start + view / 2.0)
             }
         };
-        state.offset_x = clamp(state.offset_x, view_w, size_w);
-        state.offset_y = clamp(state.offset_y, view_h, size_h);
+        state.offset_x = clamp(state.offset_x, area.x, area.width, size_w);
+        state.offset_y = clamp(state.offset_y, area.y, area.height, size_h);
     }
 
     // -1/1 for the left/right edge at fit, otherwise 0 (so when zoomed in,
@@ -546,8 +636,9 @@ impl ZoomableImage {
             if (bw * device - tw).abs() <= 2.0 && (bh * device - th).abs() <= 2.0 {
                 bw = tw / device;
                 bh = th / device;
-                left = snap((self.width() as f64 - bw) / 2.0);
-                top = snap((self.height() as f64 - bh) / 2.0);
+                let area = self.area(state);
+                left = snap(area.x + (area.width - bw) / 2.0);
+                top = snap(area.y + (area.height - bh) / 2.0);
             }
         }
         let (dw, dh) = if state.rotation % 180 != 0 {
@@ -596,8 +687,10 @@ impl ZoomableImage {
             return Vec::new();
         };
         let (bounds, dw, dh) = self.layout(state);
-        let (vw, vh) = (self.width() as f64, self.height() as f64);
-        let corners = [(0.0, 0.0), (vw, 0.0), (0.0, vh), (vw, vh)]
+        let area = self.area(state);
+        let (x0, y0) = (area.x, area.y);
+        let (x1, y1) = (area.x + area.width, area.y + area.height);
+        let corners = [(x0, y0), (x1, y0), (x0, y1), (x1, y1)]
             .map(|(x, y)| Self::to_image(state, &bounds, dw, dh, x, y));
         let min_x = corners
             .iter()
@@ -640,6 +733,27 @@ impl ZoomableImage {
         };
         let mut state = self.imp().state.borrow_mut();
         let (bounds, dw, dh) = self.layout(&state);
+        let assessment = state.assessment;
+        if assessment {
+            let area = self.area(&state);
+            let grey = gdk::RGBA::new(ASSESSMENT_GREY, ASSESSMENT_GREY, ASSESSMENT_GREY, 1.0);
+            let view = graphene::Rect::new(0.0, 0.0, self.width() as f32, self.height() as f32);
+            snapshot.append_color(&grey, &view);
+            // The white frame around the part of the image in view, with grey
+            // under the image itself (for transparent pixels).
+            let shown = graphene::Rect::new(
+                area.x as f32,
+                area.y as f32,
+                area.width as f32,
+                area.height as f32,
+            )
+            .intersection(&bounds)
+            .unwrap_or(bounds);
+            let white = area.white as f32;
+            snapshot.append_color(&gdk::RGBA::WHITE, &shown.inset_r(-white, -white));
+            snapshot.append_color(&grey, &shown);
+            snapshot.push_clip(&shown);
+        }
         // GTK's default filter (a plain texture node) unless sharp: a scaled
         // texture node with the linear filter came out blurred at display
         // scales of 1.5 and 2 even when drawn 1:1 (58% of the texture's edge
@@ -698,6 +812,9 @@ impl ZoomableImage {
             }
         }
         snapshot.restore();
+        if assessment {
+            snapshot.pop();
+        }
         drop(state);
         if deferred {
             // Next frame, the next few.
