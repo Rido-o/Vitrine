@@ -920,6 +920,104 @@ pub fn ui(window: &gtk::ApplicationWindow) {
             button.emit_clicked();
         }
 
+        // The ⋯ menu's actions, the clipboard, the toast, the shortcuts
+        // window, and the menu in the view.
+        {
+            let enabled = |name: &str| {
+                window
+                    .lookup_action(name)
+                    .is_some_and(|action| action.is_enabled())
+            };
+            let toast = || {
+                let mut boxes = Vec::new();
+                find_all::<gtk::Box>(&root, &mut boxes);
+                boxes
+                    .iter()
+                    .find(|b| b.has_css_class("viewer-toast"))
+                    .filter(|b| b.is_visible())
+                    .and_then(|b| b.first_child().and_downcast::<gtk::Label>())
+                    .map(|label| label.label().to_string())
+            };
+            println!(
+                "RESULT ui menu_grid copy={} rotate={}",
+                enabled("copy-image"),
+                enabled("rotate-left")
+            );
+            let clipboard = window.clipboard();
+            WidgetExt::activate_action(&window, "win.copy-path", None).ok();
+            let text = clipboard.read_text_future().await.ok().flatten();
+            println!("RESULT ui copy_path text={text:?} toast={:?}", toast());
+            WidgetExt::activate_action(&window, "win.copy-image", None).ok();
+            sleep(1000).await;
+            let texture = clipboard.read_texture_future().await.ok().flatten();
+            println!(
+                "RESULT ui copy_image size={:?} toast={:?}",
+                texture.map(|t| (t.width(), t.height())),
+                toast()
+            );
+            sleep(2200).await;
+            println!("RESULT ui toast_gone toast={:?}", toast());
+
+            let mut menus = Vec::new();
+            find_all::<gtk::MenuButton>(&root, &mut menus);
+            if let Some(menu) = menus
+                .iter()
+                .find(|m| m.has_css_class("viewer-toolbar-menu"))
+            {
+                menu.popup();
+                sleep(300).await;
+                shot(&window, "ui-menu");
+                menu.popdown();
+            }
+
+            WidgetExt::activate_action(&window, "win.shortcuts", None).ok();
+            sleep(500).await;
+            let shortcuts = gtk::Window::list_toplevels()
+                .into_iter()
+                .filter_map(|w| w.downcast::<gtk::Window>().ok())
+                .find(|w| w.has_css_class("viewer-shortcuts"));
+            println!("RESULT ui shortcuts open={}", shortcuts.is_some());
+            if let Some(shortcuts) = shortcuts {
+                shot(&window, "ui-shortcuts");
+                let controllers = shortcuts.observe_controllers();
+                for i in 0..controllers.n_items() {
+                    if let Some(keys) = controllers
+                        .item(i)
+                        .and_downcast::<gtk::EventControllerKey>()
+                    {
+                        keys.emit_by_name::<bool>(
+                            "key-pressed",
+                            &[&gdk::Key::q.into_glib(), &0u32, &gdk::ModifierType::empty()],
+                        );
+                    }
+                }
+                sleep(300).await;
+                println!(
+                    "RESULT ui shortcuts_closed visible={}",
+                    shortcuts.is_visible()
+                );
+            }
+
+            grid.emit_by_name::<()>("activate", &[&0u32]);
+            sleep(800).await;
+            println!(
+                "RESULT ui menu_view copy={} rotate={}",
+                enabled("copy-image"),
+                enabled("rotate-left")
+            );
+            if let Some(menu) = menus
+                .iter()
+                .find(|m| !m.has_css_class("viewer-toolbar-menu"))
+            {
+                menu.popup();
+                sleep(300).await;
+                shot(&window, "ui-view-menu");
+                menu.popdown();
+            }
+            press(&window, gdk::Key::Escape);
+            sleep(500).await;
+        }
+
         let count = selection.n_items();
         if let Some(subfolders) = button(&root, "Subfolders").and_downcast::<gtk::ToggleButton>() {
             subfolders.set_active(true);

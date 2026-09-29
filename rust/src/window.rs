@@ -4,6 +4,7 @@
 //! opening, closing, the keys. As Window.tsx.
 
 use crate::{
+    actions::{self, ActionsMenu, MenuAction},
     history::History,
     library::{Finished, Folder, SortKey, image},
     preview::Preview,
@@ -22,6 +23,7 @@ const APP_TITLE: &str = "Vitrine (spike)";
 // As in the TypeScript app (Window.tsx, style.scss).
 const TILE_WIDTH: i32 = 272;
 const TILE_HEIGHT: i32 = 153;
+const TOAST_DURATION: std::time::Duration = std::time::Duration::from_secs(2);
 const SORTS: [(SortKey, &str, &str); 4] = [
     (SortKey::Name, "Name", "Sort by path"),
     (SortKey::Date, "Date", "Sort by date modified"),
@@ -62,6 +64,11 @@ pub struct Window {
     rescan_selected: RefCell<Option<(PathBuf, u32)>>,
     // Width × height from each file's header, read off the main thread.
     resolutions: RefCell<HashMap<PathBuf, Option<(i32, i32)>>>,
+    // The ⋯ menu (its actions are the window's), made once the window is.
+    actions: RefCell<Option<ActionsMenu>>,
+    toast: gtk::Box,
+    toast_label: gtk::Label,
+    toast_timeout: RefCell<Option<glib::SourceId>>,
 }
 
 impl Window {
@@ -221,12 +228,25 @@ impl Window {
 
         let stack = gtk::Stack::builder().hexpand(true).vexpand(true).build();
         stack.add_named(&library_page, Some("grid"));
+        // Brief messages (copied, failed) over both pages.
+        let toast_label = gtk::Label::new(None);
+        let toast = gtk::Box::builder()
+            .css_classes(["viewer-toast"])
+            .halign(gtk::Align::Center)
+            .valign(gtk::Align::Start)
+            .margin_top(72)
+            .spacing(12)
+            .visible(false)
+            .build();
+        toast.append(&toast_label);
+        let overlay = gtk::Overlay::builder().child(&stack).build();
+        overlay.add_overlay(&toast);
         let window = gtk::ApplicationWindow::builder()
             .application(app)
             .title(APP_TITLE)
             .default_width(1600)
             .default_height(1000)
-            .child(&stack)
+            .child(&overlay)
             .build();
         let view = View::new(&window, &stack, &preview);
         stack.add_named(&view.page, Some("preview"));
@@ -253,6 +273,10 @@ impl Window {
             touched: Cell::new(false),
             rescan_selected: RefCell::default(),
             resolutions: RefCell::default(),
+            actions: RefCell::default(),
+            toast,
+            toast_label,
+            toast_timeout: RefCell::default(),
         });
 
         this.connect_toolbar(&subfolders_button, &close_button);
@@ -260,6 +284,7 @@ impl Window {
         this.connect_info(&filename_button, &rescan_button, &view_button);
         this.connect_preview();
         this.connect_keys();
+        this.build_menu(&end);
         this.keep_first_while_loading();
         let weak = Rc::downgrade(&this);
         this.folder.connect_finished(move |finished| {
@@ -759,6 +784,131 @@ impl Window {
         });
     }
 
+    // --- menu and actions ----------------------------------------------------
+
+    // The ⋯ menu, in the toolbar and in the view; the view's own actions
+    // (rotate, flip) only there.
+    fn build_menu(self: &Rc<Self>, toolbar_end: &gtk::Box) {
+        let action = |name, label, run: fn(&Rc<Self>)| {
+            let weak = Rc::downgrade(self);
+            MenuAction::new(name, label, move || {
+                if let Some(this) = weak.upgrade() {
+                    run(&this);
+                }
+            })
+        };
+        let menu = ActionsMenu::new(
+            &self.window,
+            vec![
+                vec![
+                    action("copy-image", "Copy image", Self::copy_image).accel("<Control>c"),
+                    action("copy-path", "Copy path", Self::copy_path).accel("<Control><Shift>c"),
+                ],
+                vec![
+                    action("rotate-left", "Rotate left", |this| {
+                        this.preview.image.rotate(false)
+                    })
+                    .accel("bracketleft")
+                    .view_only(),
+                    action("rotate-right", "Rotate right", |this| {
+                        this.preview.image.rotate(true)
+                    })
+                    .accel("bracketright")
+                    .view_only(),
+                    action("flip-horizontally", "Flip horizontally", |this| {
+                        this.preview.image.flip(true)
+                    })
+                    .accel("h")
+                    .view_only(),
+                    action("flip-vertically", "Flip vertically", |this| {
+                        this.preview.image.flip(false)
+                    })
+                    .accel("v")
+                    .view_only(),
+                ],
+                vec![
+                    action("show-in-file-manager", "Show in file manager", |this| {
+                        if let Some(path) = this.selected_path() {
+                            show_in_file_manager(&path);
+                        }
+                    }),
+                    action("rescan", "Rescan folder", |this| this.rescan()).accel("r"),
+                ],
+                vec![
+                    action("shortcuts", "Keyboard shortcuts", |this| {
+                        crate::shortcuts::show(&this.window)
+                    })
+                    .accel("question"),
+                ],
+            ],
+        );
+        let button = actions::more_button(&menu.model, 16);
+        button.add_css_class("viewer-toolbar-menu");
+        toolbar_end.prepend(&button);
+        self.view.add_menu(&menu.model);
+        let weak = Rc::downgrade(self);
+        self.stack.connect_visible_child_name_notify(move |_| {
+            if let Some(this) = weak.upgrade()
+                && let Some(menu) = this.actions.borrow().as_ref()
+            {
+                menu.set_in_view(!this.in_grid());
+            }
+        });
+        *self.actions.borrow_mut() = Some(menu);
+    }
+
+    // Decodes the whole image (a GIF's first frame) on a worker for the
+    // clipboard.
+    fn copy_image(self: &Rc<Self>) {
+        let Some(path) = self.selected_path() else {
+            return;
+        };
+        let weak = Rc::downgrade(self);
+        glib::spawn_future_local(async move {
+            let read = path.clone();
+            let decoded = gio::spawn_blocking(move || {
+                crate::decode::to_fit(&read, u32::MAX, u32::MAX)
+                    .map(|fitted| fitted.rgba.premultiplied())
+            })
+            .await
+            .unwrap_or_else(|_| Err("the decode panicked".into()));
+            let Some(this) = weak.upgrade() else { return };
+            match decoded {
+                Ok(pixels) => {
+                    this.window.clipboard().set_texture(&pixels.texture());
+                    this.show_toast("Copied image");
+                }
+                Err(error) => {
+                    eprintln!("Could not copy {}: {error}", path.display());
+                    this.show_toast("Could not copy image");
+                }
+            }
+        });
+    }
+
+    fn copy_path(self: &Rc<Self>) {
+        if let Some(path) = self.selected_path() {
+            self.window.clipboard().set_text(&path.to_string_lossy());
+            self.show_toast("Copied path");
+        }
+    }
+
+    fn show_toast(self: &Rc<Self>, text: &str) {
+        self.toast_label.set_label(text);
+        self.toast.set_visible(true);
+        if let Some(id) = self.toast_timeout.borrow_mut().take() {
+            id.remove();
+        }
+        let weak = Rc::downgrade(self);
+        let id = glib::timeout_add_local_once(TOAST_DURATION, move || {
+            if let Some(this) = weak.upgrade() {
+                this.toast_timeout.borrow_mut().take();
+                this.toast.set_visible(false);
+            }
+        });
+        *self.toast_timeout.borrow_mut() = Some(id);
+    }
+
     // --- keys ------------------------------------------------------------------
 
     fn connect_keys(self: &Rc<Self>) {
@@ -774,13 +924,23 @@ impl Window {
     }
 
     // Whether `key` was handled.
-    fn key(&self, key: gdk::Key, state: gdk::ModifierType) -> bool {
+    fn key(self: &Rc<Self>, key: gdk::Key, state: gdk::ModifierType) -> bool {
         if self.editing_directory() {
             if key != gdk::Key::Escape {
                 return false;
             }
             self.reset_entry();
             self.grid.grab_focus();
+            return true;
+        }
+        if state.contains(gdk::ModifierType::CONTROL_MASK)
+            && matches!(key, gdk::Key::c | gdk::Key::C)
+        {
+            if state.contains(gdk::ModifierType::SHIFT_MASK) {
+                self.copy_path();
+            } else {
+                self.copy_image();
+            }
             return true;
         }
         if state.contains(gdk::ModifierType::CONTROL_MASK)
@@ -799,6 +959,10 @@ impl Window {
         }
         if matches!(key, gdk::Key::r | gdk::Key::R) {
             self.rescan();
+            return true;
+        }
+        if key == gdk::Key::question {
+            crate::shortcuts::show(&self.window);
             return true;
         }
         let selected = self.selection.selected() as i64;

@@ -14,6 +14,8 @@ pub struct AutoHide {
     // Whether the controls hide at all (the full-screen view, fullscreen).
     active: Box<dyn Fn() -> bool>,
     set_cursor_hidden: Box<dyn Fn(bool)>,
+    // Whether something keeps the controls up (an open menu).
+    busy: RefCell<Option<Box<dyn Fn() -> bool>>>,
     controls: RefCell<Vec<(gtk::Widget, gtk::EventControllerMotion)>>,
     timeout: RefCell<Option<glib::SourceId>>,
     last: Cell<(f64, f64)>,
@@ -30,11 +32,17 @@ impl AutoHide {
             delay,
             active: Box::new(active),
             set_cursor_hidden: Box::new(set_cursor_hidden),
+            busy: RefCell::default(),
             controls: RefCell::default(),
             timeout: RefCell::default(),
             last: Cell::new((-1.0, -1.0)),
             this: this.clone(),
         })
+    }
+
+    /// While `busy` is true the controls stay (checked when they'd hide).
+    pub fn set_busy(&self, busy: impl Fn() -> bool + 'static) {
+        *self.busy.borrow_mut() = Some(Box::new(busy));
     }
 
     /// A control to hide; its "hidden" CSS class fades it.
@@ -94,7 +102,8 @@ impl AutoHide {
             .borrow()
             .iter()
             .any(|(_, motion)| motion.contains_pointer());
-        if on_control {
+        let busy = self.busy.borrow().as_ref().is_some_and(|busy| busy());
+        if on_control || busy {
             return self.show();
         }
         for (widget, _) in self.controls.borrow().iter() {

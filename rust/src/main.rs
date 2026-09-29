@@ -1,9 +1,11 @@
+mod actions;
 mod autohide;
 mod decode;
 mod history;
 mod library;
 mod preview;
 mod probe;
+mod shortcuts;
 mod thumbnails;
 mod tiles;
 mod view;

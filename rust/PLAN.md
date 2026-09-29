@@ -17,9 +17,10 @@ In: recursive scan of a folder given on the command line; a scrollable grid
 with generated, disk-cached thumbnails; a full-screen view (Enter or
 double-click, Esc back, ←/→ with preloading).
 
-Since ported: the full-screen view (batch 2) and the grid's chrome (batch 1).
-Out until later: trash and undo, properties, wallpaper, menus and shortcuts,
-file watching, the Home Manager module, the styling pass.
+Since ported: the full-screen view (batch 2), the grid's chrome (batch 1),
+the menus and shortcuts (batch 3). Out until later: trash and undo,
+properties, wallpaper, file watching, the Home Manager module, the styling
+pass.
 
 Own app ID (`io.github.Rido_o.Vitrine.Spike`), cache
 (`~/.cache/vitrine-spike/`) and history (`~/.local/state/vitrine-spike/`),
@@ -254,6 +255,30 @@ As the TypeScript app (Window.tsx, Library.ts, History.ts, main.tsx):
   that work into the first frames: 40–80 ms of stalls while the window
   appears, the same with or without the stylesheet. The rest as batch 2 or
   better (holding →: last image sharp 60 ms after the last press, was 105).
+
+## Port batch 3: menus and shortcuts
+
+As the TypeScript app (ActionsMenu.ts, Shortcuts.ts, the menus in
+Window.tsx):
+
+- `actions.rs`: the ⋯ menu, window actions in sections (copy image and path;
+  rotate and flip, only enabled in the view; show in file manager, rescan;
+  keyboard shortcuts). Its keys only label the items; the window's key
+  handler handles them, so Ctrl+C still copies text in the folder entry. One
+  button in the toolbar, one in the view's controls, which don't auto-hide
+  while its menu is open.
+- Copy image decodes the whole image (a GIF's first frame) on a worker (the
+  TypeScript app decoded on the main thread); copy path copies text. Either
+  shows a toast for 2 s (`viewer-toast`; Undo comes with trash).
+- `shortcuts.rs`: the modal shortcuts window (Esc, q or ? closes it), listing
+  only the keys the spike has; properties, wallpaper, Delete and Ctrl+Z join
+  with their batches.
+- Keys: ?, Ctrl+C, Ctrl+Shift+C in the grid and the view.
+- Checked by `VITRINE_PROBE=ui` (actions enabled per page, the clipboard's
+  contents, the toast appearing and going, the shortcuts window opening and
+  closing) and device screenshots of both menus and the window. The 4K
+  benchmark is unchanged (holding → varies run to run: 0–17 frames over
+  25 ms, as before).
 
 ## Maybe: uploading off the main thread
 

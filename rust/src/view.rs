@@ -21,6 +21,7 @@ pub struct View {
     fullscreen_button: gtk::Button,
     fullscreen_icon: gtk::Image,
     close_button: gtk::Button,
+    controls: gtk::Box,
     // The view went fullscreen (f or the button), so leaving it restores the
     // window.
     fullscreened_by_view: Cell<bool>,
@@ -126,6 +127,7 @@ impl View {
             fullscreen_button,
             fullscreen_icon,
             close_button,
+            controls,
             fullscreened_by_view: Cell::new(false),
             autohide,
         });
@@ -150,6 +152,14 @@ impl View {
         });
         view.sync_fullscreen();
         view
+    }
+
+    /// The ⋯ menu's button, first in the controls; the controls stay while
+    /// it's open.
+    pub fn add_menu(&self, model: &gtk::gio::Menu) {
+        let button = crate::actions::more_button(model, 20);
+        self.controls.prepend(&button);
+        self.autohide.set_busy(move || button.is_active());
     }
 
     /// What the close button does (leaving the view).
