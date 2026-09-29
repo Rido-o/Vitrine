@@ -19,8 +19,8 @@ double-click, Esc back, ←/→ with preloading).
 
 Since ported: the full-screen view (batch 2), the grid's chrome (batch 1),
 the menus and shortcuts (batch 3), file watching (batch 4), trash and undo
-(batch 5). Out until later: properties, wallpaper, the Home Manager module,
-the styling pass.
+(batch 5), properties (batch 6). Out until later: wallpaper, the Home Manager
+module, the styling pass.
 
 Own app ID (`io.github.Rido_o.Vitrine.Spike`), cache
 (`~/.cache/vitrine-spike/`) and history (`~/.local/state/vitrine-spike/`),
@@ -330,6 +330,26 @@ As Trash.ts and Window.tsx:
   right after trashing, which the TypeScript app would share; the toast then
   says it can't be undone. Also fixed: closing the view on an emptied folder
   scrolled to no image (a GTK critical).
+
+## Port batch 6: properties
+
+As Properties.ts and PropertiesPopover.ts:
+
+- `properties.rs`: the i popover (`viewer-properties`): File (name, folder,
+  size, type, dates), Image (dimensions as shown, megapixels, format,
+  orientation) and, with EXIF, Camera (camera, lens, exposure, aperture, ISO,
+  focal length, flash, taken, location, software, artist, copyright); rows
+  without a value left out. Read on a worker each time it opens (the
+  TypeScript app read on the main thread).
+- EXIF through kamadak-exif (already used for orientation; reads JPEG, TIFF,
+  PNG and WebP) instead of gexiv2, with values written as exiv2 prints them
+  ("1/200 s", "F2.8", "50.0 mm", exiv2's flash wording); checked against
+  `exiv2 -Pkt` on a synthetic photo with every tag.
+- An i button in the toolbar and in the view's controls (which stay while
+  it's open); i toggles the current page's.
+- Kept from the TypeScript app: the info bar's resolution is the stored size,
+  so a rotated photo reads 1188 × 574 there and 574 × 1188 in the view and
+  the popover.
 
 ## Maybe: uploading off the main thread
 

@@ -72,6 +72,8 @@ pub struct Window {
     resolutions: RefCell<HashMap<PathBuf, Option<(i32, i32)>>>,
     // The ⋯ menu (its actions are the window's), made once the window is.
     actions: RefCell<Option<ActionsMenu>>,
+    // The i buttons: the grid's and the view's.
+    properties_buttons: RefCell<Option<(gtk::MenuButton, gtk::MenuButton)>>,
     toast: gtk::Box,
     toast_label: gtk::Label,
     toast_undo: gtk::Button,
@@ -290,6 +292,7 @@ impl Window {
             modified: RefCell::default(),
             resolutions: RefCell::default(),
             actions: RefCell::default(),
+            properties_buttons: RefCell::default(),
             toast,
             toast_label,
             toast_undo,
@@ -893,7 +896,15 @@ impl Window {
         let button = actions::more_button(&menu.model, 16);
         button.add_css_class("viewer-toolbar-menu");
         toolbar_end.prepend(&button);
-        self.view.add_menu(&menu.model);
+        self.view
+            .add_menu_button(&actions::more_button(&menu.model, 20));
+        // The i buttons, before the menus.
+        let grid_properties = self.properties_button(16);
+        grid_properties.add_css_class("viewer-toolbar-menu");
+        toolbar_end.prepend(&grid_properties);
+        let view_properties = self.properties_button(20);
+        self.view.add_menu_button(&view_properties);
+        *self.properties_buttons.borrow_mut() = Some((grid_properties, view_properties));
         let weak = Rc::downgrade(self);
         self.stack.connect_visible_child_name_notify(move |_| {
             if let Some(this) = weak.upgrade()
@@ -903,6 +914,24 @@ impl Window {
             }
         });
         *self.actions.borrow_mut() = Some(menu);
+    }
+
+    fn properties_button(self: &Rc<Self>, pixel_size: i32) -> gtk::MenuButton {
+        let weak = Rc::downgrade(self);
+        let popover = crate::properties::popover(move || weak.upgrade()?.selected_path());
+        let button = gtk::MenuButton::builder()
+            .tooltip_text("Image properties (i)")
+            .popover(&popover)
+            .build();
+        button.set_child(Some(&icon("circle-info-awesome-symbolic", pixel_size)));
+        button
+    }
+
+    fn toggle_properties(&self) {
+        if let Some((grid, view)) = self.properties_buttons.borrow().as_ref() {
+            let button = if self.in_grid() { grid } else { view };
+            button.set_active(!button.is_active());
+        }
     }
 
     // Decodes the whole image (a GIF's first frame) on a worker for the
@@ -1135,6 +1164,10 @@ impl Window {
         }
         if matches!(key, gdk::Key::Delete | gdk::Key::KP_Delete) {
             self.delete_selected();
+            return true;
+        }
+        if matches!(key, gdk::Key::i | gdk::Key::I) {
+            self.toggle_properties();
             return true;
         }
         if key == gdk::Key::question {

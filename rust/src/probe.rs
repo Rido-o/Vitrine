@@ -1275,6 +1275,66 @@ pub fn ui(window: &gtk::ApplicationWindow) {
                         || focus == *entry.upcast_ref::<gtk::Widget>())
             );
         }
+        // Properties: the i popover in the grid and the view, on a photo with
+        // EXIF and a PNG without.
+        let props = directory.join("props");
+        if props.is_dir() {
+            entry.set_text(&props.to_string_lossy());
+            entry.emit_activate();
+            sleep(500).await;
+            let rows = |view: bool| {
+                let mut buttons = Vec::new();
+                find_all::<gtk::MenuButton>(&root, &mut buttons);
+                let button = buttons
+                    .into_iter()
+                    .filter(|b| b.tooltip_text().as_deref() == Some("Image properties (i)"))
+                    .find(|b| b.has_css_class("viewer-toolbar-menu") != view)?;
+                let popover = button.popover()?;
+                let mut labels = Vec::new();
+                find_all::<gtk::Label>(popover.upcast_ref(), &mut labels);
+                Some(
+                    labels
+                        .iter()
+                        .map(|label| label.label().to_string())
+                        .collect::<Vec<_>>()
+                        .join(" | "),
+                )
+            };
+            for (name, view) in [
+                ("camera.jpg", false),
+                ("plain.png", false),
+                ("camera.jpg", true),
+            ] {
+                let position = (0..selection.n_items())
+                    .find(|&i| name_at(i) == name)
+                    .unwrap_or(0);
+                selection.set_selected(position);
+                if view {
+                    grid.emit_by_name::<()>("activate", &[&position]);
+                    sleep(500).await;
+                }
+                press(&window, gdk::Key::i);
+                sleep(600).await;
+                println!(
+                    "RESULT ui properties {name} view={view} rows={:?}",
+                    rows(view)
+                );
+                shot(
+                    &window,
+                    &format!(
+                        "ui-properties-{}{}",
+                        name.replace('.', "-"),
+                        if view { "-view" } else { "" }
+                    ),
+                );
+                press(&window, gdk::Key::i);
+                sleep(200).await;
+                if view {
+                    press(&window, gdk::Key::Escape);
+                    sleep(300).await;
+                }
+            }
+        }
         // Deleting the last image in the view goes back to the (empty) grid.
         let single = directory.join("single");
         if single.is_dir()

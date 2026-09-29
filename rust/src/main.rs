@@ -5,6 +5,7 @@ mod history;
 mod library;
 mod preview;
 mod probe;
+mod properties;
 mod shortcuts;
 mod thumbnails;
 mod tiles;

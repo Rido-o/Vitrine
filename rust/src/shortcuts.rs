@@ -1,6 +1,6 @@
 //! The keyboard shortcuts window. As Shortcuts.ts, listing only what the
-//! spike has so far: properties (i) and wallpaper (w) join when they're
-//! ported. Keep in step with `Window::key` and the view's keys.
+//! spike has so far: wallpaper (w) joins when it's ported. Keep in step with
+//! `Window::key` and the view's keys.
 
 use gtk::{gdk, glib, prelude::*};
 
@@ -8,6 +8,7 @@ const SECTIONS: [(&str, &[(&str, &str)]); 3] = [
     (
         "Grid and full-screen view",
         &[
+            ("i", "Image properties"),
             ("Ctrl+C", "Copy image"),
             ("Ctrl+Shift+C", "Copy path"),
             ("r", "Rescan folder"),

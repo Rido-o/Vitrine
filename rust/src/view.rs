@@ -22,6 +22,7 @@ pub struct View {
     fullscreen_icon: gtk::Image,
     close_button: gtk::Button,
     controls: gtk::Box,
+    menu_buttons: Rc<RefCell<Vec<gtk::MenuButton>>>,
     // The view went fullscreen (f or the button), so leaving it restores the
     // window.
     fullscreened_by_view: Cell<bool>,
@@ -97,6 +98,9 @@ impl View {
             },
             move |hidden| image.set_cursor_hidden(hidden),
         );
+        let menu_buttons: Rc<RefCell<Vec<gtk::MenuButton>>> = Rc::default();
+        let open = menu_buttons.clone();
+        autohide.set_busy(move || open.borrow().iter().any(|button| button.is_active()));
         autohide.add(&controls);
         autohide.add(&info);
         autohide.watch(&page);
@@ -128,6 +132,7 @@ impl View {
             fullscreen_icon,
             close_button,
             controls,
+            menu_buttons: menu_buttons.clone(),
             fullscreened_by_view: Cell::new(false),
             autohide,
         });
@@ -154,12 +159,11 @@ impl View {
         view
     }
 
-    /// The ⋯ menu's button, first in the controls; the controls stay while
-    /// it's open.
-    pub fn add_menu(&self, model: &gtk::gio::Menu) {
-        let button = crate::actions::more_button(model, 20);
-        self.controls.prepend(&button);
-        self.autohide.set_busy(move || button.is_active());
+    /// A menu or popover button, first in the controls; the controls stay
+    /// while any of these is open.
+    pub fn add_menu_button(&self, button: &gtk::MenuButton) {
+        self.controls.prepend(button);
+        self.menu_buttons.borrow_mut().push(button.clone());
     }
 
     /// What the close button does (leaving the view).
