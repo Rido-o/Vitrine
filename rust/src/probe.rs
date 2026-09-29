@@ -963,12 +963,24 @@ pub fn ui(window: &gtk::ApplicationWindow) {
             find_all::<gtk::MenuButton>(&root, &mut menus);
             if let Some(menu) = menus
                 .iter()
+                .filter(|m| m.tooltip_text().as_deref() == Some("More actions"))
                 .find(|m| m.has_css_class("viewer-toolbar-menu"))
             {
                 menu.popup();
                 sleep(300).await;
                 shot(&window, "ui-menu");
                 menu.popdown();
+            }
+
+            // The wallpaper command (VITRINE_WALLPAPER_COMMAND), in the menu only.
+            println!(
+                "RESULT ui wallpaper action={}",
+                window.lookup_action("set-wallpaper").is_some()
+            );
+            if window.lookup_action("set-wallpaper").is_some() {
+                press(&window, gdk::Key::w);
+                sleep(1000).await;
+                println!("RESULT ui wallpaper_set toast={:?}", toast());
             }
 
             WidgetExt::activate_action(&window, "win.shortcuts", None).ok();
@@ -1008,6 +1020,7 @@ pub fn ui(window: &gtk::ApplicationWindow) {
             );
             if let Some(menu) = menus
                 .iter()
+                .filter(|m| m.tooltip_text().as_deref() == Some("More actions"))
                 .find(|m| !m.has_css_class("viewer-toolbar-menu"))
             {
                 menu.popup();

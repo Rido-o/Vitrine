@@ -77,6 +77,8 @@ pub struct Window {
     toast: gtk::Box,
     toast_label: gtk::Label,
     toast_undo: gtk::Button,
+    // VITRINE_WALLPAPER_COMMAND, split into arguments; the image is appended.
+    wallpaper_argv: Option<Vec<std::ffi::OsString>>,
     can_trash: bool,
     // The deletes to undo, most recent last; undos run one at a time, in
     // order (`undo_requests`).
@@ -296,6 +298,7 @@ impl Window {
             toast,
             toast_label,
             toast_undo,
+            wallpaper_argv: wallpaper_command(),
             can_trash: trash::available(),
             undo_stack: RefCell::default(),
             undo_requests,
@@ -846,13 +849,18 @@ impl Window {
                 }
             })
         };
+        let mut image = vec![
+            action("copy-image", "Copy image", Self::copy_image).accel("<Control>c"),
+            action("copy-path", "Copy path", Self::copy_path).accel("<Control><Shift>c"),
+        ];
+        // Only in the menu (the TypeScript app also has buttons at the bottom).
+        if self.wallpaper_argv.is_some() {
+            image.push(action("set-wallpaper", "Set as wallpaper", Self::set_wallpaper).accel("w"));
+        }
         let menu = ActionsMenu::new(
             &self.window,
             vec![
-                vec![
-                    action("copy-image", "Copy image", Self::copy_image).accel("<Control>c"),
-                    action("copy-path", "Copy path", Self::copy_path).accel("<Control><Shift>c"),
-                ],
+                image,
                 vec![
                     action("rotate-left", "Rotate left", |this| {
                         this.preview.image.rotate(false)
@@ -885,7 +893,7 @@ impl Window {
                 ],
                 vec![
                     action("shortcuts", "Keyboard shortcuts", |this| {
-                        crate::shortcuts::show(&this.window)
+                        crate::shortcuts::show(&this.window, this.wallpaper_argv.is_some())
                     })
                     .accel("question"),
                 ],
@@ -956,6 +964,29 @@ impl Window {
                 Err(error) => {
                     eprintln!("Could not copy {}: {error}", path.display());
                     this.show_toast("Could not copy image", false);
+                }
+            }
+        });
+    }
+
+    fn set_wallpaper(self: &Rc<Self>) {
+        let (Some(argv), Some(path)) = (self.wallpaper_argv.clone(), self.selected_path()) else {
+            return;
+        };
+        let weak = Rc::downgrade(self);
+        glib::spawn_future_local(async move {
+            let mut argv: Vec<&std::ffi::OsStr> = argv.iter().map(|arg| arg.as_os_str()).collect();
+            argv.push(path.as_os_str());
+            let result = match gio::Subprocess::newv(&argv, gio::SubprocessFlags::NONE) {
+                Ok(process) => process.wait_check_future().await,
+                Err(error) => Err(error),
+            };
+            let Some(this) = weak.upgrade() else { return };
+            match result {
+                Ok(()) => this.show_toast("Wallpaper set", false),
+                Err(error) => {
+                    eprintln!("Could not set wallpaper {}: {error}", path.display());
+                    this.show_toast("Could not set wallpaper", false);
                 }
             }
         });
@@ -1164,12 +1195,16 @@ impl Window {
             self.delete_selected();
             return true;
         }
+        if matches!(key, gdk::Key::w | gdk::Key::W) && self.wallpaper_argv.is_some() {
+            self.set_wallpaper();
+            return true;
+        }
         if matches!(key, gdk::Key::i | gdk::Key::I) {
             self.toggle_properties();
             return true;
         }
         if key == gdk::Key::question {
-            crate::shortcuts::show(&self.window);
+            crate::shortcuts::show(&self.window, self.wallpaper_argv.is_some());
             return true;
         }
         let selected = self.selection.selected() as i64;
@@ -1309,6 +1344,23 @@ fn normalize_directory(input: &str) -> PathBuf {
         }
     }
     path
+}
+
+// VITRINE_WALLPAPER_COMMAND, e.g. "set-wallpaper"; the image path is appended
+// as the last argument. Unset hides "Set as wallpaper". As util.ts.
+fn wallpaper_command() -> Option<Vec<std::ffi::OsString>> {
+    let command = std::env::var_os("VITRINE_WALLPAPER_COMMAND")?;
+    if command.to_string_lossy().trim().is_empty() {
+        return None;
+    }
+    match glib::shell_parse_argv(&command) {
+        Ok(argv) if !argv.is_empty() => Some(argv),
+        Ok(_) => None,
+        Err(error) => {
+            eprintln!("Invalid VITRINE_WALLPAPER_COMMAND: {error}");
+            None
+        }
+    }
 }
 
 pub fn show_in_file_manager(path: &Path) {

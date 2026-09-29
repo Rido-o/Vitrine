@@ -19,8 +19,8 @@ double-click, Esc back, ←/→ with preloading).
 
 Since ported: the full-screen view (batch 2), the grid's chrome (batch 1),
 the menus and shortcuts (batch 3), file watching (batch 4), trash and undo
-(batch 5), properties (batch 6). Out until later: wallpaper, the Home Manager
-module, the styling pass.
+(batch 5), properties (batch 6), wallpaper (batch 7). Out until later: the Home
+Manager module, the styling pass.
 
 Own app ID (`io.github.Rido_o.Vitrine.Spike`), cache
 (`~/.cache/vitrine-spike/`) and history (`~/.local/state/vitrine-spike/`),
@@ -350,6 +350,17 @@ As Properties.ts and PropertiesPopover.ts:
 - The info bar's resolution is the size as shown too (the TypeScript app
   gives the stored size, so a rotated photo read 1188 × 574 there and
   574 × 1188 in the view and the popover).
+
+## Port batch 7: wallpaper
+
+- `VITRINE_WALLPAPER_COMMAND` (split like a shell would, the image path
+  appended), as util.ts: "Set as wallpaper" in the ⋯ menu's first section and
+  `w` in the grid and the view; a toast says whether it worked. Unset, neither
+  exists and the shortcuts window leaves out w.
+- Only in the menu: no Set wallpaper buttons in the info bar or the view (the
+  TypeScript app has both).
+- Checked with a stand-in command (it got its own arguments and the path), a
+  failing one, and none.
 
 ## Maybe: uploading off the main thread
 

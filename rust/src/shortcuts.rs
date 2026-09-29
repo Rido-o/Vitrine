@@ -1,5 +1,4 @@
-//! The keyboard shortcuts window. As Shortcuts.ts, listing only what the
-//! spike has so far: wallpaper (w) joins when it's ported. Keep in step with
+//! The keyboard shortcuts window. As Shortcuts.ts. Keep in step with
 //! `Window::key` and the view's keys.
 
 use gtk::{gdk, glib, prelude::*};
@@ -11,6 +10,7 @@ const SECTIONS: [(&str, &[(&str, &str)]); 3] = [
             ("i", "Image properties"),
             ("Ctrl+C", "Copy image"),
             ("Ctrl+Shift+C", "Copy path"),
+            ("w", "Set as wallpaper"),
             ("r", "Rescan folder"),
             ("Delete", "Move to trash"),
             ("Ctrl+Z", "Undo delete"),
@@ -41,8 +41,9 @@ const SECTIONS: [(&str, &[(&str, &str)]); 3] = [
     ),
 ];
 
-/// A modal window listing the keys; Esc, q or ? closes it.
-pub fn show(parent: &impl IsA<gtk::Window>) {
+/// A modal window listing the keys (w only with a wallpaper command); Esc, q
+/// or ? closes it.
+pub fn show(parent: &impl IsA<gtk::Window>, wallpaper: bool) {
     let content = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
         .spacing(8)
@@ -60,7 +61,8 @@ pub fn show(parent: &impl IsA<gtk::Window>) {
             .column_spacing(16)
             .row_spacing(6)
             .build();
-        for (row, (keys, description)) in rows.iter().enumerate() {
+        let rows = rows.iter().filter(|(keys, _)| wallpaper || *keys != "w");
+        for (row, (keys, description)) in rows.enumerate() {
             let row = row as i32;
             grid.attach(
                 &gtk::Label::builder()
