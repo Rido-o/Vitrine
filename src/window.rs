@@ -8,7 +8,7 @@ use crate::{
     history::History,
     library::{Finished, Folder, SortKey, image},
     preview::Preview,
-    tiles::Tiles,
+    tiles::{TILE_HEIGHT, TILE_WIDTH, Tiles},
     trash::{self, TrashedItem},
     view::View,
 };
@@ -21,9 +21,6 @@ use std::{
 };
 
 const APP_TITLE: &str = "Vitrine";
-// A grid tile's thumbnail (see style.scss).
-const TILE_WIDTH: i32 = 272;
-const TILE_HEIGHT: i32 = 153;
 const TOAST_DURATION: std::time::Duration = std::time::Duration::from_secs(2);
 const UNDO_TOAST_DURATION: std::time::Duration = std::time::Duration::from_secs(5);
 const NO_GVFS: &str = "Moving to the trash needs GVfs, which isn't available";
@@ -54,6 +51,7 @@ pub struct Window {
     empty: gtk::Label,
     filename: gtk::Label,
     resolution: gtk::Label,
+    file_size: gtk::Label,
     sort_buttons: Vec<(SortKey, gtk::Button)>,
     direction: gtk::Button,
     // An image to select once the scan finds it: the file opened, or the
@@ -195,11 +193,18 @@ impl Window {
             .ellipsize(pango::EllipsizeMode::End)
             .build();
         let filename_button = gtk::Button::builder()
-            .css_classes(["flat", "viewer-filename-button"])
+            .css_classes(["viewer-filename-button"])
             .tooltip_text("Show in file manager")
             .child(&filename)
             .build();
-        let resolution = gtk::Label::new(Some("0 × 0"));
+        let resolution = gtk::Label::builder()
+            .label("0 × 0")
+            .css_classes(["viewer-chip"])
+            .build();
+        let file_size = gtk::Label::builder()
+            .css_classes(["viewer-chip"])
+            .visible(false)
+            .build();
         let labels = gtk::Box::builder()
             .hexpand(true)
             .halign(gtk::Align::Start)
@@ -207,6 +212,7 @@ impl Window {
             .build();
         labels.append(&filename_button);
         labels.append(&resolution);
+        labels.append(&file_size);
         let view_button = gtk::Button::builder()
             .label("View")
             .tooltip_text("Full-screen view (Enter)")
@@ -286,6 +292,7 @@ impl Window {
             empty,
             filename,
             resolution,
+            file_size,
             sort_buttons,
             direction,
             pending: RefCell::default(),
@@ -623,9 +630,13 @@ impl Window {
         self.history_panel.popdown();
     }
 
-    // Opens the panel with the current folder's entry focused.
+    // Opens the panel, as wide as the entry, with the current folder's entry
+    // marked and focused.
     fn show_history(&self) {
-        self.history_list.set_width_request(self.entry.width());
+        // The popover's padding and border (style.scss) on each side.
+        const INSET: i32 = 2 * (6 + 1);
+        self.history_list
+            .set_width_request(self.entry.width() - INSET);
         self.history_panel.popup();
         let directory = self.folder.directory();
         let current = self
@@ -633,13 +644,20 @@ impl Window {
             .borrow()
             .entries
             .iter()
-            .position(|entry| *entry == directory)
-            .unwrap_or(0);
+            .position(|entry| *entry == directory);
         let mut button = self.history_list.first_child();
-        for _ in 0..current {
-            button = button.and_then(|button| button.next_sibling());
+        let mut focus = None;
+        for index in 0.. {
+            let Some(widget) = button else { break };
+            if Some(index) == current {
+                widget.add_css_class("current");
+                focus = Some(widget.clone());
+            } else {
+                widget.remove_css_class("current");
+            }
+            button = widget.next_sibling();
         }
-        if let Some(button) = button.or_else(|| self.history_list.first_child()) {
+        if let Some(button) = focus.or_else(|| self.history_list.first_child()) {
             button.grab_focus();
         }
     }
@@ -706,6 +724,14 @@ impl Window {
             Some(path) => self.resolution_of(path),
             None => "0 × 0".into(),
         });
+        let size = self
+            .selection
+            .selected_item()
+            .map(|object| image(&object).size);
+        self.file_size.set_visible(size.is_some());
+        if let Some(size) = size {
+            self.file_size.set_label(&glib::format_size(size));
+        }
         self.window.set_title(Some(&match &name {
             Some(name) => format!("{name} — {APP_TITLE}"),
             None => APP_TITLE.into(),
@@ -1284,32 +1310,34 @@ fn build_grid(selection: &gtk::SingleSelection, tiles: &Rc<Tiles>) -> gtk::GridV
     let factory = gtk::SignalListItemFactory::new();
     factory.connect_setup(|_, item| {
         let picture = gtk::Picture::builder()
-            .css_classes(["viewer-thumbnail"])
+            .css_classes(["viewer-thumbnail", "empty"])
+            .content_fit(gtk::ContentFit::Fill)
+            .can_shrink(true)
+            .overflow(gtk::Overflow::Hidden)
+            .build();
+        // Keeps every cell the same size, whatever the image's shape; the
+        // picture takes the image's (`Tiles::show`).
+        let frame = gtk::AspectFrame::builder()
+            .ratio(TILE_WIDTH as f32 / TILE_HEIGHT as f32)
+            .obey_child(false)
             .width_request(TILE_WIDTH)
             .height_request(TILE_HEIGHT)
-            .content_fit(gtk::ContentFit::Contain)
-            .can_shrink(true)
+            .child(&picture)
             .build();
         item.downcast_ref::<gtk::ListItem>()
             .expect("a ListItem")
-            .set_child(Some(&picture));
+            .set_child(Some(&frame));
     });
     let bind_tiles = tiles.clone();
     factory.connect_bind(move |_, item| {
         let item = item.downcast_ref::<gtk::ListItem>().expect("a ListItem");
-        let picture = item
-            .child()
-            .and_downcast::<gtk::Picture>()
-            .expect("a Picture");
         let object = item.item().expect("a bound item");
-        bind_tiles.bind(&picture, &image(&object));
+        bind_tiles.bind(&tile_picture(item), &image(&object));
     });
     let unbind_tiles = tiles.clone();
     factory.connect_unbind(move |_, item| {
         let item = item.downcast_ref::<gtk::ListItem>().expect("a ListItem");
-        if let Some(picture) = item.child().and_downcast::<gtk::Picture>() {
-            unbind_tiles.unbind(&picture);
-        }
+        unbind_tiles.unbind(&tile_picture(item));
     });
     gtk::GridView::builder()
         .css_classes(["viewer-grid"])
@@ -1318,6 +1346,14 @@ fn build_grid(selection: &gtk::SingleSelection, tiles: &Rc<Tiles>) -> gtk::GridV
         .min_columns(1)
         .max_columns(12)
         .build()
+}
+
+fn tile_picture(item: &gtk::ListItem) -> gtk::Picture {
+    item.child()
+        .and_downcast::<gtk::AspectFrame>()
+        .and_then(|frame| frame.child())
+        .and_downcast::<gtk::Picture>()
+        .expect("a tile's Picture")
 }
 
 // Surrounding space trimmed, ~ expanded, relative to the current

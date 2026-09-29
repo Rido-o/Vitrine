@@ -1,52 +1,117 @@
 @use "theme" as t;
 
-window {
-  background-color: t.$bg;
-  color: t.$fg;
+:root {
+  @include t.palette(t.$dark, 1);
 }
 
-@mixin toolbar-button {
-  padding: 8px 10px;
-  border: 1px solid t.$border;
+@media (prefers-color-scheme: light) {
+  :root {
+    @include t.palette(t.$light, -1);
+  }
+}
+
+// Over a colour, $amount% of it (for the view's controls over the image).
+@function translucent($color, $amount) {
+  @return color-mix(in srgb, $color $amount, transparent);
+}
+
+window {
+  background-color: var(--bg);
+  color: var(--fg);
+}
+
+tooltip {
+  border: 1px solid var(--border-solid);
   border-radius: 8px;
-  background-color: t.$bg-surface;
-  color: t.$fg-muted;
+  background-color: var(--bg);
+  box-shadow: none;
+  color: var(--fg);
+
+  > box {
+    padding: 2px 4px;
+  }
+}
+
+// Toolbar controls are 34px tall: the entry, the pills (3px padding around
+// 26px buttons) and the square icon buttons.
+@mixin toolbar-button {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background-color: var(--bg-surface);
+  background-image: none;
+  box-shadow: none;
+  color: var(--fg-muted);
   transition: t.$transition;
 
   &:hover {
-    background-color: t.$bg-raised;
-    color: t.$fg-bright;
+    background-color: var(--bg-raised);
+    color: var(--fg-bright);
   }
 
   &:active,
   &:checked {
-    background-color: t.$bg-elevated;
-    color: t.$fg-bright;
+    background-color: var(--bg-elevated);
+    color: var(--fg-bright);
   }
 }
 
 @mixin pill-button {
-  padding: 4px 12px;
+  min-height: 26px;
+  padding: 0 12px;
   border: none;
   border-radius: 6px;
   background-color: transparent;
-  color: t.$fg-muted;
+  background-image: none;
+  box-shadow: none;
+  color: var(--fg-muted);
   transition: t.$transition;
 
   &:hover {
-    background-color: t.$bg-raised;
-    color: t.$fg-bright;
+    background-color: var(--bg-raised);
+    color: var(--fg-bright);
   }
 
   &.active,
   &:checked {
-    background-color: t.$bg-elevated;
-    color: t.$fg-bright;
+    background-color: var(--bg-elevated);
+    color: var(--fg-bright);
   }
 
   &:disabled {
     opacity: 0.4;
   }
+}
+
+// A popover's box: menus, properties, the folder history.
+@mixin popover-contents($padding) {
+  > contents {
+    padding: $padding;
+    border: 1px solid var(--border-solid);
+    border-radius: 12px;
+    background-color: var(--bg);
+    box-shadow: t.$window-shadow;
+    color: var(--fg);
+  }
+
+  > arrow {
+    border: 1px solid var(--border-solid);
+    background-color: var(--bg);
+  }
+}
+
+// An info bar value, or a button that looks like one.
+@mixin chip {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background-color: var(--bg-surface);
+  background-image: none;
+  box-shadow: none;
+  color: var(--fg);
 }
 
 .viewer-library {
@@ -55,35 +120,38 @@ window {
   .viewer-grid {
     background-color: transparent;
 
-    // The selection's outline fades in. The default theme's animated
-    // highlight looked choppy next to scrolling, and none at all felt abrupt;
-    // only the outline's colour changes, briefly, so a lower frame rate
-    // barely shows.
     > child {
-      padding: 6px;
+      padding: 8px;
       background: none;
-      outline: 3px solid transparent;
-      outline-offset: -7px;
-      border-radius: 12px;
-      transition: outline-color 120ms ease-out;
-    }
-
-    > child:selected {
-      outline-color: t.$accent;
     }
   }
 
-  picture {
-    background-color: t.$bg-surface;
-  }
-
+  // The thumbnail, at the image's shape (tiles.rs). The selection is a ring
+  // that fades in while settling onto it: only the outline changes, so it
+  // stays smooth at 144 Hz, where the default theme's animated highlight
+  // looked choppy and none at all felt abrupt.
   .viewer-thumbnail {
-    border-radius: 8px;
-    transition: t.$transition;
+    border-radius: 6px;
+    outline: 3px solid transparent;
+    outline-offset: 7px;
+    transition:
+      outline-color 160ms cubic-bezier(0.33, 1, 0.68, 1),
+      outline-offset 160ms cubic-bezier(0.33, 1, 0.68, 1),
+      filter 150ms t.$ease;
+
+    // Before its thumbnail arrives, or if the image couldn't be read.
+    &.empty {
+      background-color: var(--bg-surface);
+    }
 
     &:hover {
-      opacity: 0.8;
+      filter: brightness(1.1);
     }
+  }
+
+  .viewer-grid > child:selected .viewer-thumbnail {
+    outline-color: var(--accent);
+    outline-offset: 2px;
   }
 
   scrollbar {
@@ -93,10 +161,10 @@ window {
       min-width: 6px;
       min-height: 6px;
       border-radius: 999px;
-      background-color: t.$hover;
+      background-color: var(--hover);
 
       &:hover {
-        background-color: t.$active;
+        background-color: var(--active);
       }
     }
   }
@@ -104,44 +172,58 @@ window {
   separator {
     min-height: 1px;
     margin-top: 16px;
-    background-color: t.$separator;
+    background-color: var(--separator);
 
     &.viewer-toolbar-separator {
-      margin-top: 8px;
+      margin-top: 12px;
       margin-bottom: 10px;
     }
   }
 
   .viewer-toolbar {
     .viewer-directory {
+      min-height: 32px;
       padding: 0 12px;
-      border: 1px solid t.$border;
+      border: 1px solid var(--border);
       border-radius: 8px;
-      background-color: t.$bg-surface;
+      background-color: var(--bg-surface);
       background-image: none;
-      color: t.$fg;
+      box-shadow: none;
+      color: var(--fg);
       outline: none;
       transition: t.$transition;
 
       image {
-        margin-right: 8px;
-        color: t.$fg-muted;
+        color: var(--fg-muted);
+
+        &.left {
+          margin-right: 8px;
+        }
+
+        &.right:hover {
+          color: var(--fg-bright);
+        }
       }
 
       &:focus-within {
-        border-color: t.$accent;
+        border-color: var(--accent);
       }
 
       &.error {
-        border-color: t.$red;
+        border-color: var(--red);
+      }
+
+      selection {
+        background-color: var(--active);
+        color: var(--fg-bright);
       }
     }
 
     .viewer-pill {
       padding: 3px;
-      border: 1px solid t.$border;
+      border: 1px solid var(--border);
       border-radius: 8px;
-      background-color: t.$bg-surface;
+      background-color: var(--bg-surface);
 
       button {
         @include pill-button;
@@ -155,89 +237,60 @@ window {
   }
 
   .viewer-info {
-    margin-top: 8px;
+    margin-top: 10px;
 
-    label {
-      background-color: t.$bg-surface;
-      border: 1px solid t.$border;
-      border-radius: 8px;
-      padding: 8px 16px;
-      color: t.$fg;
-    }
-
-    button label {
-      padding: 0;
-      border: none;
-      background-color: transparent;
-      color: inherit;
+    .viewer-chip {
+      @include chip;
+      color: var(--fg-muted);
     }
 
     button {
-      padding: 8px 14px;
-      border: 1px solid t.$border;
-      border-radius: 8px;
-      background-color: t.$bg-surface;
-      color: t.$fg;
+      @include chip;
       transition: t.$transition;
 
       &:hover {
-        background-color: t.$bg-raised;
-        color: t.$fg-bright;
+        background-color: var(--bg-raised);
+        color: var(--fg-bright);
       }
 
       &:active {
-        background-color: t.$bg-elevated;
-      }
-    }
-
-    .viewer-filename-button {
-      padding: 0;
-      border: none;
-      background-color: transparent;
-
-      label {
-        padding: 8px 16px;
-        border: 1px solid t.$border;
-        background-color: t.$bg-surface;
-      }
-
-      &:hover label {
-        background-color: t.$bg-raised;
-        color: t.$fg-bright;
+        background-color: var(--bg-elevated);
       }
     }
   }
 }
 
-// The folder history, a popover under the entry.
 popover.viewer-history {
-  > contents {
-    padding: 6px;
-    border: 1px solid t.$border-solid;
-    border-radius: 12px;
-    background-color: t.$bg;
-    box-shadow: t.$window-shadow;
-    color: t.$fg;
-  }
+  margin-top: 4px;
+
+  @include popover-contents(6px);
 
   button {
-    padding: 8px 12px;
+    padding: 7px 12px;
     border: none;
     border-radius: 8px;
     background-color: transparent;
-    color: t.$fg;
+    background-image: none;
+    box-shadow: none;
+    color: var(--fg);
+    font-weight: normal;
     outline: none;
     transition: t.$transition;
 
     &:hover {
-      background-color: t.$bg-raised;
-      color: t.$fg-bright;
+      background-color: var(--bg-raised);
+      color: var(--fg-bright);
     }
 
     &:focus-visible,
     &:focus {
-      background-color: t.$bg-elevated;
-      color: t.$fg-bright;
+      background-color: var(--bg-elevated);
+      color: var(--fg-bright);
+    }
+
+    // The folder shown now, also while focused.
+    &.current {
+      color: var(--accent);
     }
   }
 }
@@ -245,168 +298,209 @@ popover.viewer-history {
 .viewer-preview {
   background: black;
 
-  label,
-  button {
-    min-height: 40px;
-    border: 1px solid t.$border;
+  .preview-image-info {
+    padding: 0 4px;
+    border: 1px solid var(--border);
     border-radius: 10px;
-    background-color: rgba(t.$bg, 0.85);
-    color: t.$fg;
+    background-color: translucent(var(--bg), 85%);
+    box-shadow: t.$card-shadow;
+
+    label {
+      min-height: 40px;
+      padding: 0 10px;
+      color: var(--fg);
+    }
+
+    button {
+      padding: 0;
+      border: none;
+      border-radius: 8px;
+      margin: 4px 0;
+      background: none;
+      box-shadow: none;
+
+      label {
+        min-height: 32px;
+      }
+
+      &:hover {
+        background-color: translucent(var(--bg-raised), 95%);
+
+        label {
+          color: var(--fg-bright);
+        }
+      }
+    }
   }
 
-  button {
-    padding: 0 12px;
+  .preview-controls:not(.preview-image-info) > button,
+  .preview-controls:not(.preview-image-info) > menubutton > button {
+    min-width: 40px;
+    min-height: 40px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background-color: translucent(var(--bg), 85%);
+    background-image: none;
     box-shadow: t.$card-shadow;
+    color: var(--fg);
     transition: t.$transition;
 
     &:hover {
-      background-color: rgba(t.$bg-raised, 0.95);
-      border-color: t.$separator;
-      color: t.$fg-bright;
+      background-color: translucent(var(--bg-raised), 95%);
+      border-color: var(--separator);
+      color: var(--fg-bright);
     }
 
-    &:active {
-      background-color: rgba(t.$bg-elevated, 0.95);
-    }
-  }
-
-  .preview-image-info {
-    button {
-      padding: 0;
-
-      label {
-        background-color: transparent;
-        border: none;
-      }
-    }
-
-    label {
-      padding: 0 12px;
+    &:active,
+    &:checked {
+      background-color: translucent(var(--bg-elevated), 95%);
     }
   }
 }
 
 .viewer-toast {
   padding: 8px 16px;
-  border: 1px solid t.$border-solid;
+  border: 1px solid var(--border-solid);
   border-radius: 10px;
-  background-color: rgba(t.$bg, 0.92);
+  background-color: translucent(var(--bg), 92%);
   box-shadow: t.$card-shadow;
-  color: t.$fg-bright;
+  color: var(--fg-bright);
 
   button {
     margin: -4px -8px -4px 0;
     padding: 4px 12px;
     border: none;
     border-radius: 6px;
-    background-color: t.$bg-raised;
-    color: t.$accent;
+    background-color: var(--bg-raised);
+    background-image: none;
+    box-shadow: none;
+    color: var(--accent);
     font-weight: bold;
     transition: t.$transition;
 
     &:hover {
-      background-color: t.$bg-elevated;
+      background-color: var(--bg-elevated);
     }
   }
 }
 
 .viewer-empty {
-  color: t.$fg-muted;
+  color: var(--fg-muted);
 }
 
-// Also inside .viewer-preview, whose label rules it overrides.
 popover.viewer-properties {
-  > contents {
-    padding: 12px 16px;
-    border: 1px solid t.$border-solid;
-    border-radius: 12px;
-    background-color: t.$bg;
-    box-shadow: t.$window-shadow;
-    color: t.$fg;
-  }
+  @include popover-contents(12px 16px);
 
   label {
-    min-height: 0;
-    padding: 0;
-    border: none;
-    background-color: transparent;
-    color: t.$fg;
+    color: var(--fg);
   }
 
   label.viewer-properties-heading {
     margin-top: 4px;
-    color: t.$fg-bright;
+    color: var(--fg-bright);
     font-weight: bold;
   }
 
   label.viewer-properties-key {
-    color: t.$fg-muted;
+    color: var(--fg-muted);
+  }
+
+  selection {
+    background-color: var(--active);
+    color: var(--fg-bright);
   }
 }
 
-// The ⋯ menu; inside .viewer-preview too, whose label rules it overrides.
+// The ⋯ menu.
 popover.menu {
-  > contents {
-    padding: 6px;
-    border: 1px solid t.$border-solid;
-    border-radius: 12px;
-    background-color: t.$bg;
-    box-shadow: t.$window-shadow;
-    color: t.$fg;
-  }
+  @include popover-contents(6px);
 
   modelbutton {
-    padding: 8px 12px;
+    min-height: 0;
+    padding: 7px 12px;
     border-radius: 8px;
-    color: t.$fg;
+    color: var(--fg);
     transition: t.$transition;
 
-    &:hover {
-      background-color: t.$bg-raised;
-      color: t.$fg-bright;
+    &:hover,
+    &:focus {
+      background-color: var(--bg-raised);
+      color: var(--fg-bright);
+    }
+
+    &:disabled {
+      color: var(--fg-muted);
+      opacity: 0.6;
     }
   }
 
-  label {
-    min-height: 0;
-    padding: 0;
-    border: none;
-    background-color: transparent;
-    color: inherit;
-  }
-
   accelerator {
-    color: t.$fg-muted;
+    color: var(--fg-muted);
   }
 
   separator {
     min-height: 1px;
     margin: 4px 0;
-    background-color: t.$separator;
+    background-color: var(--separator);
   }
 }
 
 .viewer-shortcuts {
-  background-color: t.$bg;
-  color: t.$fg;
+  background-color: var(--bg);
+  color: var(--fg);
+
+  headerbar {
+    min-height: 40px;
+    border-bottom: 1px solid var(--border);
+    background-color: var(--bg);
+    background-image: none;
+    box-shadow: none;
+    color: var(--fg-bright);
+
+    button {
+      min-width: 24px;
+      min-height: 24px;
+      padding: 2px;
+      border-radius: 999px;
+      background-color: transparent;
+      background-image: none;
+      box-shadow: none;
+      color: var(--fg-muted);
+
+      &:hover {
+        background-color: var(--bg-raised);
+        color: var(--fg-bright);
+      }
+    }
+  }
 
   .viewer-shortcuts-content {
-    padding: 20px 24px;
+    padding: 16px 24px 24px;
   }
 
   .viewer-shortcuts-heading {
     margin-top: 8px;
-    color: t.$fg-bright;
+    color: var(--fg-bright);
     font-weight: bold;
   }
 
   .key {
-    padding: 2px 8px;
-    border: 1px solid t.$border;
+    padding: 1px 7px;
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
     border-radius: 6px;
-    background-color: t.$bg-surface;
-    color: t.$fg-bright;
+    background-color: var(--bg-surface);
+    color: var(--fg-bright);
     font-family: monospace;
+
+    // A pointer action (click, scroll, drag), not a key.
+    &.pointer {
+      border-color: transparent;
+      background-color: transparent;
+      color: var(--fg-muted);
+      font-family: inherit;
+    }
   }
 }
 

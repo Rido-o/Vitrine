@@ -11,6 +11,10 @@ use std::{
     rc::Rc,
 };
 
+/// The box a grid tile's thumbnail fits in, in logical pixels.
+pub const TILE_WIDTH: i32 = 272;
+pub const TILE_HEIGHT: i32 = 153;
+
 // Textures kept for tiles no longer bound (~450 KB each at 440×320), least
 // recently used dropped first. Bound tiles' textures are never dropped: the
 // grid keeps ~390 tiles bound (rows around the viewport), and a cap below
@@ -113,7 +117,7 @@ impl Tiles {
             .push(picture.clone());
         self.pool.want(&key);
         let texture = self.cache.borrow_mut().get(&key);
-        picture.set_paintable(texture.as_ref());
+        self.show(picture, texture.as_ref());
         if texture.is_none() && self.loading.borrow_mut().insert(key.clone()) {
             self.pool.request(Job {
                 key,
@@ -183,8 +187,28 @@ impl Tiles {
             .insert(key.clone(), texture.clone(), &self.pictures.borrow());
         if let Some(pictures) = self.pictures.borrow().get(&key) {
             for picture in pictures {
-                picture.set_paintable(Some(&texture));
+                self.show(picture, Some(&texture));
             }
+        }
+    }
+
+    // The thumbnail at its own shape (its tile's frame takes the ratio), or,
+    // without one yet or for an unreadable image, an empty box.
+    fn show(&self, picture: &gtk::Picture, texture: Option<&gdk::Texture>) {
+        picture.set_paintable(texture);
+        let texture = texture.filter(|texture| **texture != self.failed);
+        let ratio = texture.map_or(TILE_WIDTH as f32 / TILE_HEIGHT as f32, |texture| {
+            texture.width() as f32 / texture.height() as f32
+        });
+        if let Some(frame) = picture.parent().and_downcast::<gtk::AspectFrame>()
+            && frame.ratio() != ratio
+        {
+            frame.set_ratio(ratio);
+        }
+        if texture.is_some() {
+            picture.remove_css_class("empty");
+        } else {
+            picture.add_css_class("empty");
         }
     }
 

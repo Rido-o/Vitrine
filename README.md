@@ -9,7 +9,8 @@ command of your choice.
 
 ## Features
 
-- **Thumbnail grid** with an on-disk thumbnail cache. Thumbnails are loaded or
+- **Thumbnail grid**, each thumbnail at its image's own shape in equal cells,
+  with an on-disk thumbnail cache. Thumbnails are loaded or
   generated on worker threads (one per core but one, at low priority): the
   tiles you stop on come first, and ones scrolled past are skipped. Once a
   folder is scanned, its other missing thumbnails are generated in the
@@ -29,7 +30,7 @@ command of your choice.
   (i), more actions (⋯) and close.
 - **Info bar**: the filename (click to show it in your file manager over
   `org.freedesktop.FileManager1`), its resolution (as shown, after EXIF
-  rotation) and View.
+  rotation), its file size and View.
 - **Full-screen view**: scroll to zoom around the cursor (from fit up to 8×
   actual pixels), drag to pan, click the left/right edge (a sixth of the width)
   for the previous/next image, double-click (the middle) to toggle fit/100%,
@@ -110,6 +111,7 @@ Files:
   seconds after launch Vitrine deletes any not used for 90 days, so
   thumbnails of edited, moved or deleted images don't pile up.
 - Folder history: `~/.local/state/vitrine/history`.
+- Your own styles (optional): `~/.config/vitrine/style.css`, see "Theming".
 
 With NVIDIA's driver loaded, Vitrine uses GTK's GL renderer (see "Gotchas");
 set `GSK_RENDERER` to override it (e.g. `GSK_RENDERER=vulkan`).
@@ -153,9 +155,30 @@ In a Home Manager configuration:
 | `programs.vitrine.package` | The package to use. |
 | `programs.vitrine.wallpaperCommand` | Command run with the image path appended; sets `VITRINE_WALLPAPER_COMMAND` as a default in a wrapper. Null (the default) hides Set as wallpaper. |
 | `programs.vitrine.defaultViewer` | Runs `xdg-mime default io.github.Rido_o.Vitrine.desktop` for JPEG, PNG, WebP, TIFF and GIF on each activation. `~/.config/mimeapps.list` stays unmanaged, so other defaults and your file manager's "Open With" keep working. |
+| `programs.vitrine.style` | CSS written to `~/.config/vitrine/style.css` (see "Theming"). Empty (the default) leaves the file unmanaged. |
 
 Without the module, set `VITRINE_WALLPAPER_COMMAND` yourself; it's parsed like
 a shell command and the image path is appended.
+
+### Theming
+
+Vitrine is dark, and light when the desktop prefers light (the
+`org.freedesktop.appearance` colour scheme; no preference stays dark). Its
+colours are CSS variables (`--bg`, `--bg-surface`, `--bg-raised`,
+`--bg-elevated`, `--fg`, `--fg-muted`, `--fg-bright`, `--border`,
+`--border-solid`, `--separator`, `--accent`, `--accent-fg`, `--red`, `--hover`,
+`--active`, `--shadow`; `style/theme.scss` has the palettes), so
+`~/.config/vitrine/style.css`, loaded after the built-in styles, can change
+them or any rule:
+
+```css
+:root { --accent: #d69094; }
+@media (prefers-color-scheme: light) {
+  :root { --accent: #a0525a; }
+}
+```
+
+It's read at startup; parse errors are printed to stderr.
 
 ## Development
 
@@ -285,9 +308,10 @@ Things that broke and look like harmless cleanups:
 - **A rescan re-shows the view's image only if it changed or went**
   (`finished` in `window.rs`): rescans start on their own when anything in the
   folder changes, and re-showing resets the zoom.
-- **The selection is an outline that fades in (120 ms)**, in `style.scss`: the
-  default theme's animated highlight looked choppy next to 144 Hz scrolling,
-  and none at all felt abrupt.
+- **The selection is a ring that fades in while settling onto the thumbnail**
+  (160 ms, `outline-color` and `outline-offset` in `style.scss`): the default
+  theme's animated highlight looked choppy next to 144 Hz scrolling, and none
+  at all felt abrupt. Only the outline changes, so it stays cheap.
 - **WebP thumbnails need the package's own `loaders.cache`.** `wrapGAppsHook4`
   sets `GDK_PIXBUF_MODULE_FILE` to librsvg's cache, which has no WebP. Adding
   a `--set` to `gappsWrapperArgs` isn't enough: the hook's comes later and
@@ -311,11 +335,6 @@ Things that broke and look like harmless cleanups:
 
 ## Roadmap
 
-- A styling pass (the selection's style included).
-- Show file size in the info bar (the properties panel has it).
-- Thumbnails at the image's own aspect ratio, and account for margins when
-  calculating thumbnail width (they end up too wide).
-- A colour theme that isn't hardcoded (`style/theme.scss`).
 - Maybe: uploading textures off the main thread, if screen-size textures and
   tiles stop being enough (a shared GL context, or dmabufs filled on a
   worker; both fragile).

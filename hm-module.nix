@@ -45,10 +45,26 @@ in {
       xdg-mime on each activation, so ~/.config/mimeapps.list stays unmanaged
       and other defaults keep working
     '';
+
+    style = lib.mkOption {
+      type = lib.types.lines;
+      default = "";
+      example = ''
+        :root { --accent: #d69094; }
+      '';
+      description = ''
+        CSS loaded after Vitrine's own styles, as ~/.config/vitrine/style.css:
+        override the colour variables (--bg, --fg, --accent, …; see
+        style/theme.scss) or any rule. Empty (the default) leaves the file
+        unmanaged.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
     home.packages = [wrapped];
+
+    xdg.configFile."vitrine/style.css" = lib.mkIf (cfg.style != "") {text = cfg.style;};
 
     home.activation.vitrine-default-viewer = lib.mkIf cfg.defaultViewer (
       lib.hm.dag.entryAfter ["writeBoundary"] ''

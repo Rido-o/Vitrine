@@ -73,7 +73,7 @@ impl View {
             .max_width_chars(60)
             .build();
         let filename_button = gtk::Button::builder()
-            .css_classes(["flat", "viewer-filename-button"])
+            .css_classes(["viewer-filename-button"])
             .tooltip_text("Show in file manager")
             .child(&filename)
             .build();

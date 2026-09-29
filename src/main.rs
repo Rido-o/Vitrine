@@ -56,13 +56,34 @@ fn main() -> glib::ExitCode {
     });
     app.connect_startup(|_| {
         let display = gdk::Display::default().expect("a display");
-        let provider = gtk::CssProvider::new();
-        provider.load_from_string(CSS);
+        // Ours, then the user's own style.css over it; the colour scheme is
+        // set before loading, as changing it parses a provider again.
+        let ours = gtk::CssProvider::new();
+        let user_css = glib::user_config_dir().join(APP_NAME).join("style.css");
+        let user = user_css.is_file().then(gtk::CssProvider::new);
+        follow_color_scheme(
+            [Some(ours.clone()), user.clone()]
+                .into_iter()
+                .flatten()
+                .collect(),
+        );
+        ours.load_from_string(CSS);
         gtk::style_context_add_provider_for_display(
             &display,
-            &provider,
+            &ours,
             gtk::STYLE_PROVIDER_PRIORITY_USER,
         );
+        if let Some(user) = user {
+            user.connect_parsing_error(|_, section, error| {
+                eprintln!("vitrine: style.css: {section}: {error}");
+            });
+            user.load_from_path(&user_css);
+            gtk::style_context_add_provider_for_display(
+                &display,
+                &user,
+                gtk::STYLE_PROVIDER_PRIORITY_USER + 1,
+            );
+        }
         gtk::IconTheme::for_display(&display).add_search_path(ICONS_DIR);
         // After the first thumbnails.
         glib::timeout_add_seconds_local_once(HOUSEKEEPING_DELAY_SECONDS, thumbnails::housekeeping);
@@ -90,6 +111,25 @@ fn main() -> glib::ExitCode {
         }
     });
     app.run()
+}
+
+// The styles' light palette only when the desktop prefers light: GTK treats
+// no preference as light, and Vitrine has always been dark.
+fn follow_color_scheme(providers: Vec<gtk::CssProvider>) {
+    let Some(settings) = gtk::Settings::default() else {
+        return;
+    };
+    let apply = move |settings: &gtk::Settings| {
+        let scheme = match settings.gtk_interface_color_scheme() {
+            gtk::InterfaceColorScheme::Light => gtk::InterfaceColorScheme::Light,
+            _ => gtk::InterfaceColorScheme::Dark,
+        };
+        for provider in &providers {
+            provider.set_prefers_color_scheme(scheme);
+        }
+    };
+    apply(&settings);
+    settings.connect_gtk_interface_color_scheme_notify(apply);
 }
 
 // glibc raises its mmap threshold each time a large block is freed, so the

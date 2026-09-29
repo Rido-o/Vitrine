@@ -1,47 +1,64 @@
 @use "sass:color";
+@use "sass:map";
 
-$background: #101010;
-$dark00: #232323;
-$dark01: #222222;
-$grey00: #333333;
-$grey01: #999999;
-$foreground: #b7b7b7;
-$light00: #c1c1c1;
-$light01: #d5d5d5;
-$red: #de6e6e;
-$orange: #dab083;
-$yellow: #ffc799;
-$green: #5f8787;
-$cyan: #60a592;
-$blue: #8eaaaa;
-$magenta: #d69094;
-$extra: #876c4f;
+// The palettes are worked out here and emitted as CSS custom properties
+// (`palette`), so the rules use var(--…) and a user's style.css can override
+// any of them. The dark one is the default; the light one applies when the
+// desktop prefers light (`main.rs`).
 
-$bg: $background;
-$bg-surface: color.adjust($background, $lightness: 4%);
-$bg-raised: color.adjust($background, $lightness: 7.5%);
-$bg-elevated: color.adjust($background, $lightness: 13.75%);
+$dark: (
+  background: #101010,
+  foreground: #b7b7b7,
+  light: #c1c1c1,
+  accent: #8eaaaa,
+  red: #de6e6e,
+  shadow: rgba(0, 0, 0, 0.35),
+);
 
-$fg: $foreground;
-$fg-muted: color.adjust($foreground, $lightness: -12%);
-$fg-bright: color.adjust($foreground, $lightness: 12%);
+$light: (
+  background: #f2f0ec,
+  foreground: #3a3a3a,
+  light: #2a2a2a,
+  accent: #4f7d7d,
+  red: #b84a4a,
+  shadow: rgba(0, 0, 0, 0.14),
+);
 
-$border: rgba($light00, 0.12);
-$border-solid: color.mix($light00, $background, 12%);
-$separator: rgba($light00, 0.22);
+// $toward: 1 when surfaces get lighter than the background (dark), -1 when
+// they get darker (light).
+@mixin palette($p, $toward) {
+  $background: map.get($p, background);
+  $foreground: map.get($p, foreground);
+  $light: map.get($p, light);
+  $accent: map.get($p, accent);
 
-$accent: $blue;
-$accent-hover: color.adjust($accent, $lightness: 8%);
-$accent-fg: $background;
+  --bg: #{$background};
+  --bg-surface: #{color.adjust($background, $lightness: $toward * 4%)};
+  --bg-raised: #{color.adjust($background, $lightness: $toward * 7.5%)};
+  --bg-elevated: #{color.adjust($background, $lightness: $toward * 13.75%)};
 
-$hover: rgba($foreground, 0.12);
-$active: rgba($foreground, 0.2);
+  --fg: #{$foreground};
+  --fg-muted: #{color.adjust($foreground, $lightness: $toward * -12%)};
+  --fg-bright: #{color.adjust($foreground, $lightness: $toward * 12%)};
+
+  --border: #{color.change($light, $alpha: 0.12)};
+  --border-solid: #{color.mix($light, $background, 12%)};
+  --separator: #{color.change($light, $alpha: 0.22)};
+
+  --accent: #{$accent};
+  --accent-fg: #{$background};
+  --red: #{map.get($p, red)};
+
+  --hover: #{color.change($foreground, $alpha: 0.12)};
+  --active: #{color.change($foreground, $alpha: 0.2)};
+  --shadow: #{map.get($p, shadow)};
+}
 
 $ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
 $transition: all 200ms $ease;
 
-$card-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+$card-shadow: 0 2px 8px var(--shadow);
 
 $window-shadow:
-  0 2px 20px rgba(0, 0, 0, 0.4),
-  10px 20px 48px rgba(0, 0, 0, 0.35);
+  0 2px 20px var(--shadow),
+  10px 20px 48px var(--shadow);
