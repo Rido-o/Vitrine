@@ -14,6 +14,10 @@ BENCH_DISPLAY=$WAYLAND_DISPLAY bench/run.sh rs   # watch it in a real window
 BENCH_OUTPUT=3840x2160@144Hz BENCH_SCALE=1.5 bench/run.sh rs warm
 ```
 
+`VITRINE_PROBE_SHOTS=DIR` saves the spike's window as drawn at a few points
+(zoom-fit, zoom-100, pan, rotated-flipped) to DIR/NAME.png, to check what the
+view shows.
+
 `BENCH_REAL_CACHE=1` runs with the app's real cache and state instead of the
 benchmark's (e.g. `bench/run.sh rs warm ~/Pictures` on a folder whose
 thumbnails exist).
@@ -56,6 +60,7 @@ profile.
 | webp | 250 | 3840×2160 | WebP |
 | alpha | 200 | 1920×1080, transparent corners | PNG |
 | portrait | 250 | 4000×3000 stored, EXIF-rotated | JPEG |
+| gif | 10 | 960×540, 12 frames 80 ms apart | GIF |
 
 ## Scenarios
 
@@ -73,6 +78,10 @@ In order, in one run:
 | `hold` | → 60 times at 30/s, then until the last image is sharp | `last_sharp_ms` |
 | `close` | Esc, 1 s | |
 | `open_selected` | spike only: select the 11th image, wait 300 ms, open it | `dwell_ms`, `sharp_ms` |
+| `zoom` | spike only: open the first `huge-` image and zoom to 100% at the centre, 1.5 s | `detail_ms` (until every visible full-resolution tile is drawn) |
+| `pan` | spike only: then pan across it for 1.5 s | `pan_ms`, `detail_after_ms` |
+| `gif` | spike only: play the first GIF for 3 s | `frames_shown` |
+| `fullscreen` | spike only: f in the view, wait 2.5 s, Esc | `entered_ms`, `controls` and `hidden` (both 2: the controls auto-hid), `left_ms` |
 | `hold_key` | spike only: hold → for real for 3 s (a virtual keyboard, `wtype`; GTK repeats the key), then watch 6 s | `shows_held`, `shows_after`, `last_show_after_ms`, `settle_ms` (first 100 ms after release using under 10 ms of CPU), `cpu_held`/`cpu_after` (ms per thread: `main`, `preview`, `thumbnail`, `janitor`), `system_held`/`system_after` (ms, all cores) |
 | `idle` | 2 s doing nothing | |
 | `memory` | at the end | `rss_mb`, `hwm_mb` (peak) |

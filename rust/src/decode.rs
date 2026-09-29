@@ -62,6 +62,14 @@ fn janitor() -> &'static mpsc::Sender<Vec<u8>> {
 }
 
 impl Pixels {
+    fn empty() -> Self {
+        Self {
+            width: 0,
+            height: 0,
+            data: Buffer(None),
+        }
+    }
+
     pub fn texture(self) -> gdk::Texture {
         let stride = self.width as usize * 4;
         gdk::MemoryTexture::new(
@@ -76,7 +84,7 @@ impl Pixels {
 }
 
 impl Rgba {
-    fn from_pixbuf(pixbuf: &Pixbuf) -> Self {
+    pub fn from_pixbuf(pixbuf: &Pixbuf) -> Self {
         let width = pixbuf.width() as usize;
         let height = pixbuf.height() as usize;
         let channels = pixbuf.n_channels() as usize;
@@ -123,9 +131,16 @@ impl Rgba {
     }
 }
 
+/// An image decoded to fit a size, and the image's own (full) size, both as
+/// shown (after EXIF rotation).
+pub struct Fitted {
+    pub rgba: Rgba,
+    pub full: (u32, u32),
+}
+
 /// `path` decoded to fit within `max_w`×`max_h` (as shown, after EXIF
 /// rotation), never scaled up.
-pub fn to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Rgba, String> {
+pub fn to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> {
     let ext = path
         .extension()
         .and_then(|ext| ext.to_str())
@@ -146,7 +161,7 @@ pub fn to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Rgba, String> {
     }
 }
 
-fn fitted(width: u32, height: u32, max_w: u32, max_h: u32) -> (u32, u32) {
+pub fn fitted(width: u32, height: u32, max_w: u32, max_h: u32) -> (u32, u32) {
     let scale = (max_w as f64 / width as f64)
         .min(max_h as f64 / height as f64)
         .min(1.0);
@@ -158,7 +173,7 @@ fn fitted(width: u32, height: u32, max_w: u32, max_h: u32) -> (u32, u32) {
 
 // GdkPixbuf fits the stored size, before EXIF rotation (GIF, TIFF and WebP
 // rarely have one).
-fn pixbuf_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Rgba, String> {
+fn pixbuf_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> {
     let (_, width, height) = Pixbuf::file_info(path).ok_or("unknown format")?;
     let pixbuf = if width as u32 <= max_w && height as u32 <= max_h {
         Pixbuf::from_file(path)
@@ -167,10 +182,20 @@ fn pixbuf_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Rgba, String> {
     }
     .map_err(|error| error.to_string())?;
     let pixbuf = pixbuf.apply_embedded_orientation().unwrap_or(pixbuf);
-    Ok(Rgba::from_pixbuf(&pixbuf))
+    let (width, height) = (width as u32, height as u32);
+    // Rotated by its EXIF orientation if the shape turned.
+    let full = if (pixbuf.width() > pixbuf.height()) == (width > height) {
+        (width, height)
+    } else {
+        (height, width)
+    };
+    Ok(Fitted {
+        rgba: Rgba::from_pixbuf(&pixbuf),
+        full,
+    })
 }
 
-fn jpeg_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Rgba, String> {
+fn jpeg_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> {
     let data = std::fs::read(path).map_err(|error| error.to_string())?;
     let orientation = exif_orientation(&data);
     let mut decompressor = turbojpeg::Decompressor::new().map_err(|error| error.to_string())?;
@@ -220,18 +245,29 @@ fn jpeg_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Rgba, String> {
         height: decoded_h as u32,
         data: pixels,
     };
-    Ok(orient(resize(decoded, target_w, target_h)?, orientation))
+    Ok(Fitted {
+        rgba: orient(resize(decoded, target_w, target_h)?, orientation),
+        full: if swapped {
+            (stored_h, stored_w)
+        } else {
+            (stored_w, stored_h)
+        },
+    })
 }
 
 // PNG can't decode smaller: in full, then resized (alpha-aware).
-fn png_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Rgba, String> {
+fn png_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> {
     let data = std::fs::read(path).map_err(|error| error.to_string())?;
     let image = decode_png(&data)?;
+    let full = (image.width, image.height);
     let (width, height) = fitted(image.width, image.height, max_w, max_h);
-    resize(image, width, height)
+    Ok(Fitted {
+        rgba: resize(image, width, height)?,
+        full,
+    })
 }
 
-fn resize(image: Rgba, width: u32, height: u32) -> Result<Rgba, String> {
+pub fn resize(image: Rgba, width: u32, height: u32) -> Result<Rgba, String> {
     use fast_image_resize as fr;
     if image.width == width && image.height == height {
         return Ok(image);
@@ -341,4 +377,63 @@ pub fn decode_jpeg(data: &[u8]) -> Result<Rgba, String> {
         height: image.height as u32,
         data: image.pixels,
     })
+}
+
+/// A piece of a full-resolution image: `x`, `y`, `width`, `height` in the
+/// image, and its pixels with a `pad`-pixel border copied from the
+/// neighbours (none at the image's edges), so adjacent tiles overlap and
+/// smoothing shows no seams.
+pub struct Tile {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+    pub pad_left: u32,
+    pub pad_top: u32,
+    pub pixels: Pixels,
+}
+
+impl Tile {
+    /// The pixels, for a texture (the tile keeps its place).
+    pub fn take_pixels(&mut self) -> Pixels {
+        std::mem::replace(&mut self.pixels, Pixels::empty())
+    }
+}
+
+/// Splits `image` into tiles of at most `size` pixels square, row by row.
+pub fn split(image: Rgba, size: u32, pad: u32) -> (Vec<Tile>, u32, u32) {
+    let (width, height) = (image.width, image.height);
+    let pixels = image.premultiplied();
+    let source = pixels.data.as_ref();
+    let stride = width as usize * 4;
+    let mut tiles = Vec::new();
+    for y in (0..height).step_by(size as usize) {
+        for x in (0..width).step_by(size as usize) {
+            let (w, h) = (size.min(width - x), size.min(height - y));
+            let left = x.saturating_sub(pad);
+            let top = y.saturating_sub(pad);
+            let right = (x + w + pad).min(width);
+            let bottom = (y + h + pad).min(height);
+            let (tw, th) = (right - left, bottom - top);
+            let mut data = Vec::with_capacity(tw as usize * th as usize * 4);
+            for row in top..bottom {
+                let start = row as usize * stride + left as usize * 4;
+                data.extend_from_slice(&source[start..start + tw as usize * 4]);
+            }
+            tiles.push(Tile {
+                x,
+                y,
+                width: w,
+                height: h,
+                pad_left: x - left,
+                pad_top: y - top,
+                pixels: Pixels {
+                    width: tw as i32,
+                    height: th as i32,
+                    data: Buffer(Some(data)),
+                },
+            });
+        }
+    }
+    (tiles, width, height)
 }

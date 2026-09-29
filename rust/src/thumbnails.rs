@@ -242,7 +242,7 @@ fn load_cached(file: &Path) -> Result<Rgba, String> {
 
 fn generate(cache_dir: &Path, job: &Job) -> Result<Pixels, String> {
     let started = Instant::now();
-    let rgba = decode::to_fit(&job.path, WIDTH, HEIGHT)?;
+    let rgba = decode::to_fit(&job.path, WIDTH, HEIGHT)?.rgba;
     save(cache_dir, job, &rgba);
     if std::env::var_os("VITRINE_PROBE_VERBOSE").is_some() {
         eprintln!(

@@ -24,8 +24,14 @@ rustPlatform.buildRustPackage {
   nativeBuildInputs = [pkg-config wrapGAppsHook4];
   buildInputs = [gdk-pixbuf gtk4 libjpeg_turbo webp-pixbuf-loader];
 
+  # The TypeScript app's symbolic icons, found through this (main.rs).
+  env.VITRINE_ICONS_DIR = "${placeholder "out"}/share/vitrine-rs/icons";
+
   # As in ../package.nix: our own loaders.cache, so GdkPixbuf reads WebP.
   postInstall = ''
+    mkdir -p $out/share/vitrine-rs
+    cp -r ${../icons} $out/share/vitrine-rs/icons
+
     cache=$out/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
     mkdir -p $(dirname $cache)
     ${gdk-pixbuf.dev}/bin/gdk-pixbuf-query-loaders \

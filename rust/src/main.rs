@@ -1,9 +1,12 @@
+mod autohide;
 mod decode;
 mod library;
 mod preview;
 mod probe;
 mod thumbnails;
 mod tiles;
+mod view;
+mod zoomable;
 
 use gtk::{gdk, gio, glib, prelude::*};
 use library::Image;
@@ -11,10 +14,11 @@ use preview::Preview;
 use std::{
     cell::{Cell, RefCell},
     cmp::Ordering,
-    path::PathBuf,
+    path::{Path, PathBuf},
     rc::Rc,
 };
 use tiles::Tiles;
+use view::View;
 
 const APP_ID: &str = "io.github.Rido_o.Vitrine.Spike";
 // As in the TypeScript app (Window.tsx, style.scss).
@@ -38,23 +42,57 @@ gridview > child {
 gridview > child:selected {
   outline-color: #8eaaaa;
 }
-.preview { background-color: black; }
+.viewer-preview { background-color: black; }
+/* The view's controls, as in style.scss (theme.scss's colours). */
+.viewer-preview label,
+.viewer-preview button {
+  min-height: 40px;
+  border: 1px solid rgba(193, 193, 193, 0.12);
+  border-radius: 10px;
+  background-color: rgba(16, 16, 16, 0.85);
+  color: #b7b7b7;
+}
+.viewer-preview button {
+  padding: 0 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: all 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.viewer-preview button:hover {
+  background-color: rgba(35, 35, 35, 0.95);
+  border-color: rgba(193, 193, 193, 0.22);
+  color: #d6d6d6;
+}
+.viewer-preview button:active { background-color: rgba(51, 51, 51, 0.95); }
+.viewer-preview .preview-image-info label { padding: 0 12px; }
+.viewer-preview .preview-controls {
+  transition: opacity 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.viewer-preview .preview-controls.hidden { opacity: 0; }
 ";
+
+// The symbolic icons (../icons), installed by package.nix.
+const ICONS_DIR: &str = match option_env!("VITRINE_ICONS_DIR") {
+    Some(dir) => dir,
+    None => concat!(env!("CARGO_MANIFEST_DIR"), "/../icons"),
+};
 
 fn main() -> glib::ExitCode {
     tune_malloc();
+    prefer_gl_on_nvidia();
     let app = gtk::Application::builder()
         .application_id(APP_ID)
         .flags(gio::ApplicationFlags::NON_UNIQUE | gio::ApplicationFlags::HANDLES_OPEN)
         .build();
     app.connect_startup(|_| {
+        let display = gdk::Display::default().expect("a display");
         let provider = gtk::CssProvider::new();
         provider.load_from_string(CSS);
         gtk::style_context_add_provider_for_display(
-            &gdk::Display::default().expect("a display"),
+            &display,
             &provider,
             gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
+        gtk::IconTheme::for_display(&display).add_search_path(ICONS_DIR);
     });
     app.connect_activate(|app| {
         let dir = std::env::current_dir().unwrap_or_else(|_| glib::home_dir());
@@ -80,6 +118,18 @@ fn tune_malloc() {
     unsafe {
         libc::mallopt(libc::M_MMAP_THRESHOLD, 1 << 20);
         libc::mallopt(libc::M_ARENA_MAX, 4);
+    }
+}
+
+// With NVIDIA's driver, GTK's default Vulkan renderer spends several ms of
+// main-thread time on each new texture (a row of thumbnails, or each tile
+// panned into view: 76 ms frames panning at 100%); its GL renderer doesn't.
+// Only when the driver is loaded, and never over an explicit GSK_RENDERER.
+// As main.tsx.
+fn prefer_gl_on_nvidia() {
+    if std::env::var_os("GSK_RENDERER").is_none() && Path::new("/proc/driver/nvidia").is_dir() {
+        // SAFETY: before any other thread exists.
+        unsafe { std::env::set_var("GSK_RENDERER", "gl") };
     }
 }
 
@@ -153,9 +203,6 @@ fn build_window(app: &gtk::Application, dir: PathBuf) {
     let stack = gtk::Stack::new();
     stack.add_named(&scrolled, Some("grid"));
     let preview = Preview::new();
-    let preview_page = gtk::Box::builder().css_classes(["preview"]).build();
-    preview_page.append(&preview.picture);
-    stack.add_named(&preview_page, Some("preview"));
     let window = gtk::ApplicationWindow::builder()
         .application(app)
         .title("Vitrine (spike)")
@@ -164,7 +211,9 @@ fn build_window(app: &gtk::Application, dir: PathBuf) {
         .child(&stack)
         .build();
 
-    connect_preview(&window, &stack, &grid, &tiles, &preview);
+    let view = View::new(&window, &stack, &preview);
+    stack.add_named(&view.page, Some("preview"));
+    connect_preview(&window, &stack, &grid, &tiles, &preview, &view);
 
     let scanning = Rc::new(Cell::new(true));
     keep_first_while_loading(&grid, &scanning);
@@ -203,6 +252,7 @@ fn connect_preview(
     grid: &gtk::GridView,
     tiles: &Rc<Tiles>,
     preview: &Rc<Preview>,
+    view: &Rc<View>,
 ) {
     let selection = grid
         .model()
@@ -258,24 +308,57 @@ fn connect_preview(
         }
     });
 
+    let close: Rc<dyn Fn()> = {
+        let (window, stack, grid, preview, view) = (
+            window.clone(),
+            stack.clone(),
+            grid.clone(),
+            preview.clone(),
+            view.clone(),
+        );
+        let selection = selection.clone();
+        Rc::new(move || {
+            view.leave();
+            stack.set_visible_child_name("grid");
+            grid.scroll_to(selection.selected(), gtk::ListScrollFlags::FOCUS, None);
+            hide_after_paint(&window, &stack, &selection, &preview);
+        })
+    };
+    let close_ = close.clone();
+    view.connect_close(move || close_());
+
+    // At fit, a click in the left/right edge moves to the previous/next.
+    let (move_, selection_) = (show_at.clone(), selection.clone());
+    preview.image.connect_navigate(move |side| {
+        move_(selection_.selected() as i64 + side as i64);
+    });
+
     let keys = gtk::EventControllerKey::builder()
         .propagation_phase(gtk::PropagationPhase::Capture)
         .build();
-    let (window_, stack_, grid_, preview_) =
-        (window.clone(), stack.clone(), grid.clone(), preview.clone());
-    keys.connect_key_pressed(move |_, key, _, _| {
-        if stack_.visible_child_name().as_deref() != Some("preview") {
+    let (stack_, view_) = (stack.clone(), view.clone());
+    keys.connect_key_pressed(move |_, key, _, state| {
+        // Plain keys only (Shift is allowed, for + and ?), so e.g. Ctrl+Q
+        // stays the window's.
+        let held = gdk::ModifierType::CONTROL_MASK
+            | gdk::ModifierType::ALT_MASK
+            | gdk::ModifierType::SUPER_MASK;
+        if state.intersects(held) {
             return glib::Propagation::Proceed;
         }
         let selected = selection.selected() as i64;
+        if stack_.visible_child_name().as_deref() != Some("preview") {
+            if matches!(key, gdk::Key::e | gdk::Key::E) && selection.selected_item().is_some() {
+                show_at(selected);
+                return glib::Propagation::Stop;
+            }
+            return glib::Propagation::Proceed;
+        }
         match key {
             gdk::Key::Right => show_at(selected + 1),
             gdk::Key::Left => show_at(selected - 1),
-            gdk::Key::Escape => {
-                stack_.set_visible_child_name("grid");
-                grid_.scroll_to(selected as u32, gtk::ListScrollFlags::FOCUS, None);
-                hide_after_paint(&window_, &stack_, &selection, &preview_);
-            }
+            gdk::Key::Escape | gdk::Key::q => close(),
+            _ if view_.key(key) => {}
             _ => return glib::Propagation::Proceed,
         }
         glib::Propagation::Stop
@@ -283,19 +366,30 @@ fn connect_preview(
     window.add_controller(keys);
 }
 
-// The size the view decodes images at: the window's, in device pixels
-// (integer scale; fractional scaling is later). Before the window is first
-// shown (the grid's first selection), its default size.
+// The size the view decodes images at, in device pixels (fractional scales
+// included).
 fn view_size(window: &gtk::ApplicationWindow) -> (u32, u32) {
-    let (width, height) = if window.width() > 0 {
-        (window.width(), window.height())
-    } else {
-        (window.default_width(), window.default_height())
+    // The monitor's size, so going fullscreen needs nothing new; before the
+    // window is on one (the grid's first selection), the first monitor's.
+    let display = WidgetExt::display(window);
+    let monitor = window
+        .surface()
+        .and_then(|surface| display.monitor_at_surface(&surface))
+        .or_else(|| display.monitors().item(0).and_downcast::<gdk::Monitor>());
+    let (width, height, scale) = match &monitor {
+        Some(monitor) => {
+            let geometry = monitor.geometry();
+            (geometry.width(), geometry.height(), monitor.scale())
+        }
+        None => (
+            window.default_width(),
+            window.default_height(),
+            window.scale_factor() as f64,
+        ),
     };
-    let scale = window.scale_factor().max(1);
     (
-        (width * scale).max(1) as u32,
-        (height * scale).max(1) as u32,
+        (width as f64 * scale).round().max(1.0) as u32,
+        (height as f64 * scale).round().max(1.0) as u32,
     )
 }
 

@@ -30,6 +30,7 @@ kinds=(
   "webp 250 3840 2160 webp"
   "alpha 200 1920 1080 png"
   "portrait 250 4000 3000 jpg"
+  "gif 10 960 540 gif"
 )
 
 mkdir -p "$out"
@@ -67,6 +68,16 @@ make_one() {
     # ImageMagick's -orient doesn't write the EXIF tag; 6 is "rotate 90° CW".
     portrait) magick "$source" "${common[@]}" -quality 85 "$part" &&
       exiftool -q -n -Orientation=6 -overwrite_original "$part" ;;
+    # 12 frames turning 30° each, 80 ms apart.
+    gif)
+      frames=$(mktemp -d)
+      for i in $(seq 0 11); do
+        magick "$source" "${common[@]}" -distort SRT "$((i * 30))" \
+          "$frames/$(printf %02d "$i").png"
+      done
+      magick -delay 8 -loop 0 "$frames"/*.png "$part"
+      rm -rf "$frames"
+      ;;
     *) magick "$source" "${common[@]}" -quality 85 "$part" ;;
   esac
   mv "$part" "$target"

@@ -152,10 +152,48 @@ Own app ID (`io.github.Rido_o.Vitrine.Spike`) and cache
   such short animations at ~60 fps). For now an outline fades in over 120 ms;
   revisit in the styling pass.
 
-## Phase 3b (only if needed): full-resolution zoom
+## Phase 3b: full-resolution zoom
 
-Tiles of ~1024² at full resolution, created only for the visible region and a
-few per frame, so zooming never uploads a whole 34 MP image in one frame.
+Done in port batch 2 (below): 512² tiles, only the visible ones drawn, at
+most 3 new ones per frame.
+
+## Port batch 2: the full-screen view
+
+As the TypeScript app (ZoomableImage.ts, AutoHide.ts, the view's part of
+Window.tsx), instant zoom steps, no pinch:
+
+- `zoomable.rs`: a widget drawing the image with its transform. Scroll zooms
+  around the cursor (1.2× steps, fit to 8× actual size); +/-/0; double-click
+  toggles fit/100% (2× fit for small images); drag pans, clamped; at fit, the
+  left/right sixth moves to the previous/next image (arrow cursors, a hand
+  when zoomed); s sharp pixels; [ ] rotate, h v flip (view only, reset per
+  image).
+- Resolution levels: a texture of the monitor's size (so fullscreen needs
+  nothing new) for the whole image; zooming past it decodes the full
+  resolution on a worker (`preview.rs`, ahead of preloads) into 512² tiles
+  with a 1-pixel overlap (no seams under smoothing). Only visible tiles are
+  drawn, so uploaded, at most 3 new ones per frame (~3 MB); the rest show the
+  lower resolution for a frame or two.
+- GIFs: frames decoded on a thread of their own, 4 ahead, fitted to the
+  monitor; swapped in on the frame clock. (The TypeScript app decoded each
+  frame on the main thread.)
+- `view.rs`: the page, with the fullscreen and close buttons and the file's
+  name and resolution over the image; f / the button toggles fullscreen,
+  leaving the view restores the window if the view made it fullscreen;
+  `autohide.rs` fades the controls and hides the cursor after 2 s without
+  mouse movement in fullscreen. The TypeScript app's icons are packaged.
+  Also: q closes the view, e opens the selection from the grid, and keys with
+  Ctrl/Alt/Super held are left alone.
+- NVIDIA: GL is picked as on `master` (`prefer_gl_on_nvidia`): with Vulkan,
+  panning at 100% drew 76 ms frames (each tile panned into view is a new
+  texture).
+- **Result** (4K, 144 Hz, 1.5×, warm, GL; `bench/results/rs-warm-4k-gl.txt`):
+  zoom to 100% on a 48 MP JPEG, full detail in ~530 ms, 3 late frames; pan at
+  100%, no late frames (p95 7.4 ms); GIF with no stalls; fullscreen and
+  auto-hide checked by the probe. Not testable headless (no pointer):
+  double-click, edge clicks, dragging, cursors, the controls coming back on
+  movement. Peak memory rises by the zoomed image's tiles (a 48 MP image is
+  ~190 MB of tiles, twice that briefly while splitting).
 
 ## Maybe: uploading off the main thread
 

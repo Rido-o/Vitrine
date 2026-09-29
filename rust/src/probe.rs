@@ -43,6 +43,9 @@ const SELECT_POSITION: u32 = 10;
 const SELECT_DWELL_MS: u64 = 300;
 // hold_key: how long → is held, and watched after.
 const HOLD_KEY_MS: u64 = 3000;
+// pan: how long, and how fast (logical px per ms, sideways; half downwards).
+const PAN_MS: i64 = 1500;
+const PAN_PX_PER_MS: f64 = 1.0;
 const SETTLE_WATCH_MS: i64 = 6000;
 
 thread_local! {
@@ -55,6 +58,15 @@ thread_local! {
 pub fn preview_shown(path: &Path, sharp: bool) {
     SHOWN.with_borrow_mut(|shown| *shown = Some((path.to_owned(), sharp)));
     SHOWS.with_borrow_mut(|shows| shows.push(glib::monotonic_time()));
+}
+
+/// Called by the full-screen view for each animation frame it shows.
+pub fn animation_frame() {
+    FRAMES.with(|frames| frames.set(frames.get() + 1));
+}
+
+thread_local! {
+    static FRAMES: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
 thread_local! {
@@ -330,6 +342,22 @@ fn tiles_filled(grid: &gtk::GridView) -> bool {
     pictures.iter().all(|p| p.paintable().is_some())
 }
 
+// VITRINE_PROBE_SHOTS=DIR: the window as drawn, to DIR/NAME.png (to check
+// what the view shows).
+fn shot(window: &gtk::ApplicationWindow, name: &str) {
+    let Some(dir) = std::env::var_os("VITRINE_PROBE_SHOTS") else {
+        return;
+    };
+    let paintable = gtk::WidgetPaintable::new(Some(window));
+    let snapshot = gtk::Snapshot::new();
+    paintable.snapshot(&snapshot, window.width() as f64, window.height() as f64);
+    let (Some(node), Some(renderer)) = (snapshot.to_node(), window.renderer()) else {
+        return;
+    };
+    let texture = renderer.render_texture(&node, None);
+    let _ = texture.save_to_png(std::path::Path::new(&dir).join(format!("{name}.png")));
+}
+
 fn memory() -> String {
     let status = std::fs::read_to_string("/proc/self/status").unwrap_or_default();
     let field = |name: &str| {
@@ -465,16 +493,12 @@ pub fn run(window: &gtk::ApplicationWindow) {
                 .map(|object| object.borrow::<crate::library::Image>().path.clone())
                 .expect("an image at the position")
         };
-        let mut pictures = Vec::new();
-        find_all::<gtk::Picture>(&root, &mut pictures);
-        let preview = pictures
-            .into_iter()
-            .find(|picture| picture.widget_name() == "preview")
-            .expect("the full-screen view's picture");
+        let preview =
+            find::<crate::zoomable::ZoomableImage>(&root).expect("the full-screen view's image");
         let recorder = Recorder::start(&window);
         let open_start = glib::monotonic_time();
         grid.emit_by_name::<()>("activate", &[&OPEN_POSITION]);
-        let placeholder = wait_until(5000, || preview.paintable().is_some()).await;
+        let placeholder = wait_until(5000, || preview.has_image()).await;
         let first = path_at(OPEN_POSITION);
         let sharp = wait_until(5000, || is_sharp(&first)).await;
         let sharp_ms = if sharp < 0 { -1 } else { ms_since(open_start) };
@@ -522,6 +546,92 @@ pub fn run(window: &gtk::ApplicationWindow) {
         );
         press(&window, gdk::Key::Escape);
         sleep(500).await;
+
+        // zoom: open the first 48 MP image and zoom to 100% at the centre
+        // (full resolution comes in tiles); pan: then drag across it.
+        let huge = (0..model.n_items()).find(|&i| {
+            path_at(i)
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().starts_with("huge-"))
+        });
+        if let Some(position) = huge {
+            grid.emit_by_name::<()>("activate", &[&position]);
+            let path = path_at(position);
+            wait_until(5000, || is_sharp(&path)).await;
+            sleep(300).await;
+            shot(&window, "zoom-fit");
+            let recorder = Recorder::start(&window);
+            let zoom_start = glib::monotonic_time();
+            let (w, h) = (preview.width() as f64, preview.height() as f64);
+            preview.zoom_at(preview.actual_scale() / preview.scale(), w / 2.0, h / 2.0);
+            let detail = wait_until(10_000, || preview.is_detailed()).await;
+            let detail_ms = if detail < 0 { -1 } else { ms_since(zoom_start) };
+            sleep(1500u64.saturating_sub(ms_since(zoom_start) as u64)).await;
+            recorder.finish("zoom", &format!("detail_ms={detail_ms}"));
+            shot(&window, "zoom-100");
+
+            let recorder = Recorder::start(&window);
+            let pan_start = glib::monotonic_time();
+            while ms_since(pan_start) < PAN_MS {
+                preview.pan_by(-PAN_PX_PER_MS * 4.0, -PAN_PX_PER_MS * 2.0);
+                sleep(4).await;
+            }
+            let detail = wait_until(10_000, || preview.is_detailed()).await;
+            recorder.finish("pan", &format!("pan_ms={PAN_MS} detail_after_ms={detail}"));
+            shot(&window, "pan");
+            preview.rotate(true);
+            preview.flip(true);
+            sleep(300).await;
+            shot(&window, "rotated-flipped");
+            press(&window, gdk::Key::Escape);
+            sleep(500).await;
+        } else {
+            println!("RESULT skipped zoom pan (no huge- image)");
+        }
+
+        // gif: play the first GIF for 3 s.
+        let gif = (0..model.n_items()).find(|&i| crate::preview::is_animation(&path_at(i)));
+        if let Some(position) = gif {
+            grid.emit_by_name::<()>("activate", &[&position]);
+            let path = path_at(position);
+            wait_until(5000, || is_sharp(&path)).await;
+            let frames_start = FRAMES.with(|frames| frames.get());
+            let recorder = Recorder::start(&window);
+            sleep(3000).await;
+            let shown = FRAMES.with(|frames| frames.get()) - frames_start;
+            recorder.finish("gif", &format!("played_ms=3000 frames_shown={shown}"));
+            press(&window, gdk::Key::Escape);
+            sleep(500).await;
+        } else {
+            println!("RESULT skipped gif (no GIF)");
+        }
+
+        // fullscreen: f in the view, the controls hiding after 2 s without
+        // the mouse moving, and Esc restoring the window.
+        {
+            grid.emit_by_name::<()>("activate", &[&OPEN_POSITION]);
+            sleep(500).await;
+            press(&window, gdk::Key::f);
+            let entered = wait_until(3000, || window.is_fullscreen()).await;
+            sleep(2500).await;
+            let mut boxes = Vec::new();
+            find_all::<gtk::Box>(&root, &mut boxes);
+            let controls: Vec<_> = boxes
+                .iter()
+                .filter(|b| b.has_css_class("preview-controls"))
+                .collect();
+            let hidden = controls
+                .iter()
+                .filter(|b| b.has_css_class("hidden"))
+                .count();
+            press(&window, gdk::Key::Escape);
+            let left = wait_until(3000, || !window.is_fullscreen()).await;
+            println!(
+                "RESULT fullscreen entered_ms={entered} controls={} hidden={hidden} left_ms={left}",
+                controls.len()
+            );
+            sleep(500).await;
+        }
 
         // hold_key: hold → for real (GTK repeats the key itself, so presses
         // queue up if showing each takes longer than the repeat interval),
