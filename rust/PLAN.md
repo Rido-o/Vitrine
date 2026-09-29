@@ -221,7 +221,8 @@ As the TypeScript app (Window.tsx, Library.ts, History.ts, main.tsx):
 - `window.rs` (split out of `main.rs`): the toolbar (folder entry with its
   history panel, Name/Date/Size/Random and the direction, Subfolders, close),
   the info bar (file name, which shows the file in the file manager;
-  resolution; Rescan; View), the empty folder's label, the title, and the
+  resolution; View; no Rescan button, since the menu and r rescan and file
+  watching will make it rare), the empty folder's label, the title, and the
   keys (Esc/q or Ctrl+W/Q close the window from the grid, r rescans, e opens;
   typing in the entry is left alone, Esc there puts the folder back). The
   view's file name shows the file in the file manager too.

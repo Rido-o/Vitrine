@@ -1,6 +1,6 @@
 //! A viewer window: the grid's page (the folder entry and its history, sort
 //! and subfolder buttons at the top; the selected image's name and
-//! resolution, Rescan and View at the bottom) and the full-screen view's;
+//! resolution and View at the bottom) and the full-screen view's;
 //! opening, closing, the keys. As Window.tsx.
 
 use crate::{
@@ -190,10 +190,6 @@ impl Window {
             .build();
         labels.append(&filename_button);
         labels.append(&resolution);
-        let rescan_button = gtk::Button::builder()
-            .tooltip_text("Rescan folder (r)")
-            .child(&icon("arrows-rotate-awesome-symbolic", 16))
-            .build();
         let view_button = gtk::Button::builder()
             .label("View")
             .tooltip_text("Full-screen view (Enter)")
@@ -202,7 +198,6 @@ impl Window {
             .halign(gtk::Align::End)
             .spacing(6)
             .build();
-        actions.append(&rescan_button);
         actions.append(&view_button);
         let info = gtk::Box::builder()
             .css_classes(["viewer-info"])
@@ -281,7 +276,7 @@ impl Window {
 
         this.connect_toolbar(&subfolders_button, &close_button);
         this.connect_history();
-        this.connect_info(&filename_button, &rescan_button, &view_button);
+        this.connect_info(&filename_button, &view_button);
         this.connect_preview();
         this.connect_keys();
         this.build_menu(&end);
@@ -612,22 +607,11 @@ impl Window {
 
     // --- info bar ------------------------------------------------------------
 
-    fn connect_info(
-        self: &Rc<Self>,
-        filename: &gtk::Button,
-        rescan: &gtk::Button,
-        view: &gtk::Button,
-    ) {
+    fn connect_info(self: &Rc<Self>, filename: &gtk::Button, view: &gtk::Button) {
         let weak = Rc::downgrade(self);
         filename.connect_clicked(move |_| {
             if let Some(path) = weak.upgrade().and_then(|this| this.selected_path()) {
                 show_in_file_manager(&path);
-            }
-        });
-        let weak = Rc::downgrade(self);
-        rescan.connect_clicked(move |_| {
-            if let Some(this) = weak.upgrade() {
-                this.rescan();
             }
         });
         let weak = Rc::downgrade(self);
