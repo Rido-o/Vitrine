@@ -26,8 +26,8 @@ Both apps include subfolders (the spike is passed `-r`; `BENCH_ARGS` replaces
 the arguments before the folder, which can also be a file).
 `BENCH_PROBE=ui BENCH_ARGS= bench/run.sh rs warm DIR` runs the spike's UI
 check instead of the benchmark: sorting, subfolders, the folder entry and
-its history and the empty state on a small folder (rescan too, adding and
-removing files, only if DIR holds a `.vitrine-probe-scratch` file), printed
+its history and the empty state on a small folder (rescan and watching too,
+changing files, only if DIR holds a `.vitrine-probe-scratch` file), printed
 as `ui` lines, with screenshots under `VITRINE_PROBE_SHOTS`.
 
 `BENCH_REAL_CACHE=1` runs with the app's real cache and state instead of the

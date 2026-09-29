@@ -14,7 +14,7 @@ use crate::{
 use gtk::{gdk, gio, glib, pango, prelude::*};
 use std::{
     cell::{Cell, RefCell},
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     rc::Rc,
 };
@@ -59,9 +59,12 @@ pub struct Window {
     // The user clicked, typed or scrolled in the grid since the folder began
     // loading (see `keep_first_while_loading`).
     touched: Cell<bool>,
-    // The selected image and its position when a rescan began: if the rescan
-    // removes or replaces it, the same image, or the one now in its place.
-    rescan_selected: RefCell<Option<(PathBuf, u32)>>,
+    // The last image selected (not by a rescan) and its position: if a
+    // rescan removes or replaces it, the same image, or the one now in its
+    // place, is selected again.
+    last_selected: RefCell<Option<(PathBuf, u32)>>,
+    // The images the running rescan found changed on disk.
+    modified: RefCell<HashSet<PathBuf>>,
     // Width × height from each file's header, read off the main thread.
     resolutions: RefCell<HashMap<PathBuf, Option<(i32, i32)>>>,
     // The ⋯ menu (its actions are the window's), made once the window is.
@@ -266,7 +269,8 @@ impl Window {
             direction,
             pending: RefCell::default(),
             touched: Cell::new(false),
-            rescan_selected: RefCell::default(),
+            last_selected: RefCell::default(),
+            modified: RefCell::default(),
             resolutions: RefCell::default(),
             actions: RefCell::default(),
             toast,
@@ -281,6 +285,15 @@ impl Window {
         this.connect_keys();
         this.build_menu(&end);
         this.keep_first_while_loading();
+        // A file changed on disk: its decoded image and size are out of date.
+        let weak = Rc::downgrade(&this);
+        this.folder.connect_modified(move |path| {
+            if let Some(this) = weak.upgrade() {
+                this.preview.forget(path);
+                this.resolutions.borrow_mut().remove(path);
+                this.modified.borrow_mut().insert(path.to_owned());
+            }
+        });
         let weak = Rc::downgrade(&this);
         this.folder.connect_finished(move |finished| {
             if let Some(this) = weak.upgrade() {
@@ -300,6 +313,7 @@ impl Window {
         this.window.connect_destroy(move |_| {
             if let Some(this) = keep.take() {
                 this.history_panel.unparent();
+                this.folder.dispose();
             }
         });
 
@@ -376,12 +390,6 @@ impl Window {
     }
 
     fn rescan(&self) {
-        if self.folder.is_scanning() || self.folder.is_loading() {
-            return;
-        }
-        *self.rescan_selected.borrow_mut() = self
-            .selected_path()
-            .map(|path| (path, self.selection.selected()));
         self.folder.rescan();
     }
 
@@ -397,7 +405,9 @@ impl Window {
                 }
             }
             Finished::Rescan => {
-                if let Some((path, index)) = self.rescan_selected.borrow_mut().take()
+                let modified = std::mem::take(&mut *self.modified.borrow_mut());
+                let last = self.last_selected.borrow().clone();
+                if let Some((path, index)) = last
                     && count > 0
                     && self.selected_path().as_ref() != Some(&path)
                 {
@@ -409,7 +419,15 @@ impl Window {
                 if !self.in_grid() {
                     if count == 0 {
                         self.close_view();
-                    } else {
+                    } else if self.preview.shown() != self.selected_path()
+                        || self
+                            .preview
+                            .shown()
+                            .is_some_and(|shown| modified.contains(&shown))
+                    {
+                        // Only when its image went or changed: rescans after
+                        // changes elsewhere in the folder mustn't reset the
+                        // zoom.
                         self.show_at(self.selection.selected() as i64);
                     }
                 }
@@ -625,9 +643,26 @@ impl Window {
         let weak = Rc::downgrade(self);
         self.selection.connect_selected_item_notify(move |_| {
             if let Some(this) = weak.upgrade() {
+                this.remember_selection();
                 this.sync_info();
             }
         });
+        // Also when the same image moves (images added before it).
+        let weak = Rc::downgrade(self);
+        self.selection.connect_selected_notify(move |_| {
+            if let Some(this) = weak.upgrade() {
+                this.remember_selection();
+            }
+        });
+    }
+
+    fn remember_selection(&self) {
+        if self.folder.is_updating() {
+            return;
+        }
+        if let Some(path) = self.selected_path() {
+            *self.last_selected.borrow_mut() = Some((path, self.selection.selected()));
+        }
     }
 
     fn sync_info(self: &Rc<Self>) {

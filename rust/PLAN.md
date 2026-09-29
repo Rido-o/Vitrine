@@ -18,9 +18,9 @@ with generated, disk-cached thumbnails; a full-screen view (Enter or
 double-click, Esc back, ←/→ with preloading).
 
 Since ported: the full-screen view (batch 2), the grid's chrome (batch 1),
-the menus and shortcuts (batch 3). Out until later: trash and undo,
-properties, wallpaper, file watching, the Home Manager module, the styling
-pass.
+the menus and shortcuts (batch 3), file watching (batch 4). Out until
+later: trash and undo, properties, wallpaper, the Home Manager module, the
+styling pass.
 
 Own app ID (`io.github.Rido_o.Vitrine.Spike`), cache
 (`~/.cache/vitrine-spike/`) and history (`~/.local/state/vitrine-spike/`),
@@ -280,6 +280,29 @@ Window.tsx):
   closing) and device screenshots of both menus and the window. The 4K
   benchmark is unchanged (holding → varies run to run: 0–17 frames over
   25 ms, as before).
+
+## Port batch 4: file watching
+
+As Library.ts:
+
+- Once a load or rescan is done, the folders it read (the first 1,000:
+  inotify watches are limited) are watched (`gio::FileMonitor`, moves
+  included); the scan now reports them. Created, deleted, moved, renamed
+  and finished-writing images count; with subfolders, any change (it may be
+  a folder).
+- At most one rescan a second, after a running scan; the rescan is the
+  existing one (only what changed, the selection kept). Loading another
+  folder or closing the window stops the watches. Changes made on another
+  machine (an NFS server) aren't seen.
+- A changed image's decoded copy and size are dropped; the view shows the
+  new version if it's the image shown, and otherwise leaves the view alone
+  (the TypeScript app showed its image again after any rescan, resetting the
+  zoom). The selection to keep is now the last one the user made, since
+  rescans start on their own.
+- Checked by `VITRINE_PROBE=ui` in the scratch folder: an added and a removed
+  file show within ~1 s (the rescan delay), a change elsewhere keeps the
+  view's zoom, a change to the image shown shows the new one. The 4K
+  benchmark is unchanged.
 
 ## Maybe: uploading off the main thread
 

@@ -1053,6 +1053,61 @@ pub fn ui(window: &gtk::ApplicationWindow) {
             press(&window, gdk::Key::r);
             sleep(1000).await;
             state("rescan_back");
+
+            // Watching: the same without pressing r.
+            let count = selection.n_items();
+            let watched = directory.join("img-00-watched.jpg");
+            let _ = std::fs::copy(directory.join("img-01-red.jpg"), &watched);
+            let added = wait_until(5000, || selection.n_items() == count + 1).await;
+            let _ = std::fs::remove_file(&watched);
+            let removed = wait_until(5000, || selection.n_items() == count).await;
+            println!("RESULT ui watch added_ms={added} removed_ms={removed}");
+
+            // In the view: a change elsewhere keeps the zoom; a change to the
+            // image shown shows the new version.
+            let view = find::<crate::zoomable::ZoomableImage>(&root).expect("the view");
+            let base_width = || view.base_texture().map_or(0, |texture| texture.width());
+            let gold = directory.join("img-03-gold.jpg");
+            let position = (0..selection.n_items())
+                .find(|&i| name_at(i) == "img-03-gold.jpg")
+                .unwrap_or(0);
+            grid.emit_by_name::<()>("activate", &[&position]);
+            sleep(800).await;
+            press(&window, gdk::Key::plus);
+            sleep(200).await;
+            let zoomed = view.scale();
+            let _ = std::fs::copy(directory.join("img-01-red.jpg"), &watched);
+            wait_until(5000, || selection.n_items() == count + 1).await;
+            sleep(300).await;
+            println!(
+                "RESULT ui watch_elsewhere zoom_kept={} shown={:?}",
+                (view.scale() - zoomed).abs() < 1e-9,
+                name_at(selection.selected())
+            );
+            let before = base_width();
+            let backup = directory.join(".img-03-gold.backup");
+            let mtime = std::fs::metadata(&gold).and_then(|m| m.modified()).ok();
+            let _ = std::fs::copy(&gold, &backup);
+            let _ = std::fs::copy(directory.join("img-10-gray.jpg"), &gold);
+            let reloaded = wait_until(5000, || base_width() != before).await;
+            println!(
+                "RESULT ui watch_shown reloaded_ms={reloaded} width={before}->{} shown={:?}",
+                base_width(),
+                name_at(selection.selected())
+            );
+            shot(&window, "ui-watch-shown");
+            let _ = std::fs::rename(&backup, &gold);
+            if let (Some(mtime), Ok(file)) =
+                (mtime, std::fs::File::options().write(true).open(&gold))
+            {
+                let _ = file.set_modified(mtime);
+            }
+            let _ = std::fs::remove_file(&watched);
+            wait_until(5000, || selection.n_items() == count).await;
+            sleep(1500).await;
+            press(&window, gdk::Key::Escape);
+            sleep(300).await;
+            state("watch_back");
         }
 
         let entry = find::<gtk::Entry>(&root).expect("the folder entry");

@@ -285,6 +285,18 @@ impl Preview {
         *self.shown.borrow_mut() = Some(path);
     }
 
+    /// The image asked for, if the view shows one.
+    pub fn shown(&self) -> Option<PathBuf> {
+        self.shown.borrow().clone()
+    }
+
+    /// Drops what's decoded of `path` (changed on disk), so showing it again
+    /// decodes it again.
+    pub fn forget(&self, path: &Path) {
+        self.textures.borrow_mut().remove(path);
+        self.decoding.borrow_mut().remove(path);
+    }
+
     /// Decodes `path` in the background (the image selected in the grid),
     /// so opening it shows it sharp at once.
     pub fn preload(&self, path: PathBuf, width: u32, height: u32) {

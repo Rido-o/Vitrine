@@ -5,7 +5,7 @@ use gtk::{gio, glib, prelude::*};
 use std::{
     cell::{Cell, RefCell},
     cmp::Ordering,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs,
     hash::{DefaultHasher, Hash, Hasher},
     os::unix::ffi::OsStrExt,
@@ -19,6 +19,10 @@ const EXTENSIONS: [&str; 7] = ["gif", "jpeg", "jpg", "png", "tif", "tiff", "webp
 // first images show quickly and a big folder isn't one item-changed per file.
 const BATCH_SIZE: usize = 512;
 const BATCH_AGE: Duration = Duration::from_millis(50);
+// Folders watched for changes (inotify watches are limited), and how often
+// changes trigger a rescan at most. As Library.ts.
+const WATCH_LIMIT: usize = 1000;
+const RESCAN_DELAY: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Clone)]
 pub struct Image {
@@ -34,15 +38,23 @@ fn is_image(path: &Path) -> bool {
         .is_some_and(|ext| EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
 }
 
+pub enum Scanned {
+    Images(Vec<Image>),
+    // Last: the folders read in full (to watch).
+    Folders(Vec<PathBuf>),
+}
+
 /// Walks `root` (and its subfolders when `recursive`, not following symlinked
-/// folders) and sends the images found in batches; the channel closes when
-/// the walk is done, and the walk stops early if the receiver is dropped.
-pub fn scan(root: PathBuf, recursive: bool) -> async_channel::Receiver<Vec<Image>> {
+/// folders) and sends the images found in batches, then the folders read; the
+/// channel closes when the walk is done, and the walk stops early if the
+/// receiver is dropped.
+pub fn scan(root: PathBuf, recursive: bool) -> async_channel::Receiver<Scanned> {
     let (sender, receiver) = async_channel::unbounded();
     let spawn = std::thread::Builder::new()
         .name("scan".into())
         .spawn(move || {
             let mut pending = vec![root];
+            let mut folders = Vec::new();
             let mut batch = Vec::new();
             let mut batch_start = Instant::now();
             while let Some(dir) = pending.pop() {
@@ -53,6 +65,7 @@ pub fn scan(root: PathBuf, recursive: bool) -> async_channel::Receiver<Vec<Image
                         continue;
                     }
                 };
+                folders.push(dir.clone());
                 for entry in entries.flatten() {
                     let Ok(file_type) = entry.file_type() else {
                         continue;
@@ -91,15 +104,18 @@ pub fn scan(root: PathBuf, recursive: bool) -> async_channel::Receiver<Vec<Image
                         size: metadata.len(),
                     });
                     if (batch.len() >= BATCH_SIZE || batch_start.elapsed() >= BATCH_AGE)
-                        && sender.send_blocking(std::mem::take(&mut batch)).is_err()
+                        && sender
+                            .send_blocking(Scanned::Images(std::mem::take(&mut batch)))
+                            .is_err()
                     {
                         return;
                     }
                 }
             }
-            if !batch.is_empty() {
-                let _ = sender.send_blocking(batch);
+            if !batch.is_empty() && sender.send_blocking(Scanned::Images(batch)).is_err() {
+                return;
             }
+            let _ = sender.send_blocking(Scanned::Folders(folders));
         });
     spawn.expect("the scan thread starts");
     receiver
@@ -183,6 +199,12 @@ pub struct Folder {
     // Bumped by each load or rescan, so a superseded one stops.
     generation: Cell<u64>,
     finished: RefCell<Option<Rc<dyn Fn(Finished)>>>,
+    // Told each image a rescan found changed on disk.
+    modified: RefCell<Option<Rc<dyn Fn(&Path)>>>,
+    // A rescan is changing the list (removing, adding, replacing).
+    updating: Cell<bool>,
+    monitors: RefCell<HashMap<PathBuf, gio::FileMonitor>>,
+    rescan_timeout: RefCell<Option<glib::SourceId>>,
 }
 
 impl Folder {
@@ -209,6 +231,10 @@ impl Folder {
             scanning: Cell::new(false),
             generation: Cell::new(0),
             finished: RefCell::default(),
+            modified: RefCell::default(),
+            updating: Cell::new(false),
+            monitors: RefCell::default(),
+            rescan_timeout: RefCell::default(),
         })
     }
 
@@ -232,11 +258,6 @@ impl Folder {
     /// Loading a folder: from `load` until its images are all in and sorted.
     pub fn is_loading(&self) -> bool {
         self.loading.get()
-    }
-
-    /// A load or a rescan is walking the folder.
-    pub fn is_scanning(&self) -> bool {
-        self.scanning.get()
     }
 
     pub fn sort_key(&self) -> SortKey {
@@ -310,6 +331,7 @@ impl Folder {
     /// Replaces the list with `directory`'s images, as they're found.
     pub fn load(self: &Rc<Self>, directory: PathBuf) {
         let generation = self.begin();
+        self.unwatch();
         self.loading.set(true);
         *self.directory.borrow_mut() = directory.clone();
         self.store.remove_all();
@@ -317,11 +339,19 @@ impl Folder {
         let folder = self.clone();
         glib::spawn_future_local(async move {
             let mut times = crate::probe::ScanTimes::start();
-            while let Ok(batch) = receiver.recv().await {
+            let mut folders = Vec::new();
+            while let Ok(scanned) = receiver.recv().await {
                 // Dropping the receiver stops the walk.
                 if !folder.current(generation) {
                     return;
                 }
+                let batch = match scanned {
+                    Scanned::Images(batch) => batch,
+                    Scanned::Folders(read) => {
+                        folders = read;
+                        continue;
+                    }
+                };
                 let started = glib::monotonic_time();
                 let objects: Vec<glib::BoxedAnyObject> =
                     batch.into_iter().map(glib::BoxedAnyObject::new).collect();
@@ -332,6 +362,7 @@ impl Folder {
                 return;
             }
             times.finish(folder.store.n_items());
+            folder.watch(folders);
             folder.finish(generation, Finished::Load);
         });
     }
@@ -347,27 +378,40 @@ impl Folder {
         let folder = self.clone();
         glib::spawn_future_local(async move {
             let mut fresh: HashMap<PathBuf, Image> = HashMap::new();
-            while let Ok(batch) = receiver.recv().await {
+            let mut folders = Vec::new();
+            while let Ok(scanned) = receiver.recv().await {
                 if !folder.current(generation) {
                     return;
                 }
-                fresh.extend(batch.into_iter().map(|image| (image.path.clone(), image)));
+                match scanned {
+                    Scanned::Images(batch) => {
+                        fresh.extend(batch.into_iter().map(|image| (image.path.clone(), image)))
+                    }
+                    Scanned::Folders(read) => folders = read,
+                }
             }
             if !folder.current(generation) {
                 return;
             }
             // In one go, so the grid never shows a half-sorted list.
+            folder.updating.set(true);
             folder.sorted.set_incremental(false);
             let store = &folder.store;
+            let mut modified = Vec::new();
             for i in (0..store.n_items()).rev() {
                 let Some(object) = store.item(i) else {
                     continue;
                 };
                 let unchanged = {
                     let old = image(&object);
-                    fresh
-                        .get(&old.path)
-                        .is_some_and(|new| new.mtime == old.mtime && new.size == old.size)
+                    match fresh.get(&old.path) {
+                        Some(new) if new.mtime == old.mtime && new.size == old.size => true,
+                        Some(_) => {
+                            modified.push(old.path.clone());
+                            false
+                        }
+                        None => false,
+                    }
                 };
                 if unchanged {
                     fresh.remove(&image(&object).path.clone());
@@ -379,8 +423,127 @@ impl Folder {
                 fresh.into_values().map(glib::BoxedAnyObject::new).collect();
             store.splice(store.n_items(), 0, &objects);
             folder.sorted.set_incremental(true);
+            folder.updating.set(false);
+            let callback = folder.modified.borrow().clone();
+            if let Some(callback) = callback {
+                for path in &modified {
+                    callback(path);
+                }
+            }
+            folder.watch(folders);
             folder.finish(generation, Finished::Rescan);
         });
+    }
+
+    /// Called with each image a rescan found changed on disk, before the
+    /// rescan's `finished`.
+    pub fn connect_modified(&self, modified: impl Fn(&Path) + 'static) {
+        *self.modified.borrow_mut() = Some(Rc::new(modified));
+    }
+
+    /// A rescan is changing the list (so a selection change is its doing,
+    /// not the user's).
+    pub fn is_updating(&self) -> bool {
+        self.updating.get()
+    }
+
+    /// Stops scanning and watching, for a closed window.
+    pub fn dispose(&self) {
+        self.generation.set(self.generation.get() + 1);
+        self.unwatch();
+    }
+
+    // Watches the folders read (the first WATCH_LIMIT) and rescans after a
+    // change. Monitors only see changes made on this machine (not, say, on
+    // an NFS server).
+    fn watch(self: &Rc<Self>, folders: Vec<PathBuf>) {
+        let wanted: HashSet<PathBuf> = folders.into_iter().take(WATCH_LIMIT).collect();
+        let mut monitors = self.monitors.borrow_mut();
+        monitors.retain(|path, monitor| {
+            let keep = wanted.contains(path);
+            if !keep {
+                monitor.cancel();
+            }
+            keep
+        });
+        for path in wanted {
+            if monitors.contains_key(&path) {
+                continue;
+            }
+            let monitor = match gio::File::for_path(&path).monitor_directory(
+                gio::FileMonitorFlags::WATCH_MOVES,
+                None::<&gio::Cancellable>,
+            ) {
+                Ok(monitor) => monitor,
+                Err(error) => {
+                    eprintln!("Could not watch {}: {error}", path.display());
+                    continue;
+                }
+            };
+            let weak = Rc::downgrade(self);
+            monitor.connect_changed(move |_, file, other, event| {
+                if let Some(folder) = weak.upgrade() {
+                    folder.changed(file, other, event);
+                }
+            });
+            monitors.insert(path, monitor);
+        }
+    }
+
+    fn unwatch(&self) {
+        for monitor in self
+            .monitors
+            .borrow_mut()
+            .drain()
+            .map(|(_, monitor)| monitor)
+        {
+            monitor.cancel();
+        }
+        if let Some(id) = self.rescan_timeout.borrow_mut().take() {
+            id.remove();
+        }
+    }
+
+    // Other files only matter when recursive: they may be folders.
+    fn changed(
+        self: &Rc<Self>,
+        file: &gio::File,
+        other: Option<&gio::File>,
+        event: gio::FileMonitorEvent,
+    ) {
+        use gio::FileMonitorEvent::*;
+        if !matches!(
+            event,
+            ChangesDoneHint | Created | Deleted | MovedIn | MovedOut | Renamed
+        ) {
+            return;
+        }
+        let image = |file: Option<&gio::File>| {
+            file.and_then(|file| file.path())
+                .is_some_and(|path| is_image(&path))
+        };
+        if self.recursive.get() || image(Some(file)) || image(other) {
+            self.schedule_rescan();
+        }
+    }
+
+    // At most one rescan per RESCAN_DELAY, so copying many files doesn't
+    // rescan for each; waits for a running scan to finish first.
+    fn schedule_rescan(self: &Rc<Self>) {
+        if self.rescan_timeout.borrow().is_some() {
+            return;
+        }
+        let weak = Rc::downgrade(self);
+        let id = glib::timeout_add_local_once(RESCAN_DELAY, move || {
+            let Some(folder) = weak.upgrade() else { return };
+            folder.rescan_timeout.borrow_mut().take();
+            if folder.scanning.get() || folder.loading.get() {
+                folder.schedule_rescan();
+            } else {
+                folder.rescan();
+            }
+        });
+        *self.rescan_timeout.borrow_mut() = Some(id);
     }
 
     /// As Library.ts: Random reshuffles each time; switching to Date or Size
