@@ -9,8 +9,9 @@ command of your choice.
 
 ## Features
 
-- **Thumbnail grid**, each thumbnail at its image's own shape in equal cells,
-  with an on-disk thumbnail cache. Thumbnails are loaded or
+- **Thumbnail grid**, each thumbnail at its image's own shape in equal 16:9 cells
+  that grow with the window until another column fits, with an on-disk
+  thumbnail cache. Thumbnails are loaded or
   generated on worker threads (one per core but one, at low priority): the
   tiles you stop on come first, and ones scrolled past are skipped. Once a
   folder is scanned, its other missing thumbnails are generated in the

@@ -222,3 +222,65 @@ impl Tiles {
             .map(|(_, path)| path.clone())
     }
 }
+
+mod imp {
+    use super::*;
+    use gtk::subclass::prelude::*;
+
+    #[derive(Default)]
+    pub struct TileLayout;
+
+    #[glib::object_subclass]
+    impl ObjectSubclass for TileLayout {
+        const NAME: &'static str = "VitrineTileLayout";
+        type Type = super::TileLayout;
+        type ParentType = gtk::LayoutManager;
+    }
+
+    impl ObjectImpl for TileLayout {}
+
+    impl LayoutManagerImpl for TileLayout {
+        fn request_mode(&self, _widget: &gtk::Widget) -> gtk::SizeRequestMode {
+            gtk::SizeRequestMode::HeightForWidth
+        }
+
+        fn measure(
+            &self,
+            widget: &gtk::Widget,
+            orientation: gtk::Orientation,
+            for_size: i32,
+        ) -> (i32, i32, i32, i32) {
+            let Some(child) = widget.first_child() else {
+                return (0, 0, -1, -1);
+            };
+            if orientation == gtk::Orientation::Horizontal {
+                let (min, nat, _, _) = child.measure(orientation, -1);
+                return (min, nat, -1, -1);
+            }
+            let width = if for_size < 0 { TILE_WIDTH } else { for_size };
+            let height = width * TILE_HEIGHT / TILE_WIDTH;
+            (height, height, -1, -1)
+        }
+
+        fn allocate(&self, widget: &gtk::Widget, width: i32, height: i32, baseline: i32) {
+            if let Some(child) = widget.first_child() {
+                child.allocate(width, height, baseline, None);
+            }
+        }
+    }
+}
+
+glib::wrapper! {
+    /// A grid cell's layout: its height follows the width the grid gives it,
+    /// at the tile's ratio. Cells widen until another column fits (TILE_WIDTH
+    /// at the least) and grow taller with them; the grid makes each row as
+    /// tall as its cells' minimum height.
+    pub struct TileLayout(ObjectSubclass<imp::TileLayout>)
+        @extends gtk::LayoutManager;
+}
+
+impl Default for TileLayout {
+    fn default() -> Self {
+        glib::Object::new()
+    }
+}

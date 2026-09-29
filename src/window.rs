@@ -8,7 +8,7 @@ use crate::{
     history::History,
     library::{Finished, Folder, SortKey, image},
     preview::Preview,
-    tiles::{TILE_HEIGHT, TILE_WIDTH, Tiles},
+    tiles::{TILE_HEIGHT, TILE_WIDTH, TileLayout, Tiles},
     trash::{self, TrashedItem},
     view::View,
 };
@@ -1334,12 +1334,15 @@ fn build_grid(selection: &gtk::SingleSelection, tiles: &Rc<Tiles>) -> gtk::GridV
             .ratio(TILE_WIDTH as f32 / TILE_HEIGHT as f32)
             .obey_child(false)
             .width_request(TILE_WIDTH)
-            .height_request(TILE_HEIGHT)
             .child(&picture)
             .build();
+        let cell = gtk::Box::builder()
+            .layout_manager(&TileLayout::default())
+            .build();
+        cell.append(&frame);
         item.downcast_ref::<gtk::ListItem>()
             .expect("a ListItem")
-            .set_child(Some(&frame));
+            .set_child(Some(&cell));
     });
     let bind_tiles = tiles.clone();
     factory.connect_bind(move |_, item| {
@@ -1363,6 +1366,7 @@ fn build_grid(selection: &gtk::SingleSelection, tiles: &Rc<Tiles>) -> gtk::GridV
 
 fn tile_picture(item: &gtk::ListItem) -> gtk::Picture {
     item.child()
+        .and_then(|cell| cell.first_child())
         .and_downcast::<gtk::AspectFrame>()
         .and_then(|frame| frame.child())
         .and_downcast::<gtk::Picture>()
