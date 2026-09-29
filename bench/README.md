@@ -66,7 +66,7 @@ In order, in one run:
 | `scan` | from the window appearing until the item count has been stable for 1 s | `first_ms` (first item), `done_ms` (last change), `items` |
 | `scan_detail` | spike only: from starting the walk, as the app sees it | `first_us`, `done_us`, `batches`, `insert_max_us` (longest main-thread insert) |
 | `background` | spike only: background generation finished | `generated`, `done_ms` (from starting the walk) |
-| `fill_first` | the first screen's thumbnails | `fill_ms` |
+| `fill_first` | the first screen's thumbnails | `fill_ms`, `top_px` and `selected` (spike: where the grid is once loaded; 0 and 0 expected) |
 | `scroll` | top to bottom at 4,000 px/s, then until every bound tile has a thumbnail | `scroll_ms`, `fill_after_ms` |
 | `jump` | to the middle in one step, until filled | `fill_ms` |
 | `open` | activate the first image (from the top), 1.5 s | `placeholder_ms`, `sharp_ms` |

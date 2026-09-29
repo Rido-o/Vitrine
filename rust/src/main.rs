@@ -8,7 +8,12 @@ mod tiles;
 use gtk::{gdk, gio, glib, prelude::*};
 use library::Image;
 use preview::Preview;
-use std::{cell::RefCell, cmp::Ordering, path::PathBuf, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    cmp::Ordering,
+    path::PathBuf,
+    rc::Rc,
+};
 use tiles::Tiles;
 
 const APP_ID: &str = "io.github.Rido_o.Vitrine.Spike";
@@ -161,6 +166,9 @@ fn build_window(app: &gtk::Application, dir: PathBuf) {
 
     connect_preview(&window, &stack, &grid, &tiles, &preview);
 
+    let scanning = Rc::new(Cell::new(true));
+    keep_first_while_loading(&grid, &scanning);
+
     let receiver = library::scan(dir, true);
     let scan = probe::ScanTimes::start();
     glib::spawn_future_local(async move {
@@ -173,6 +181,7 @@ fn build_window(app: &gtk::Application, dir: PathBuf) {
             scan.batch(started);
         }
         scan.finish(store.n_items());
+        scanning.set(false);
         let mut images: Vec<Image> = (0..store.n_items())
             .filter_map(|i| store.item(i))
             .map(|object| image(&object).clone())
@@ -329,4 +338,63 @@ fn hide_after_paint(
         hide();
     });
     *handler.borrow_mut() = Some(id);
+}
+
+// While a folder loads, keeps the first image selected and the grid at the
+// top, until the user clicks, types or scrolls in it. Batches arrive in any
+// order and are sorted as they come; the automatic selection would otherwise
+// stay on whichever image arrived first, wherever sorting put it, and the grid
+// kept it in view (opening halfway down a big folder). Loading is over once
+// the scan has finished and the sorting has caught up.
+fn keep_first_while_loading(grid: &gtk::GridView, scanning: &Rc<Cell<bool>>) {
+    let selection = grid
+        .model()
+        .and_downcast::<gtk::SingleSelection>()
+        .expect("the grid's model is a SingleSelection");
+    let sorted = selection
+        .model()
+        .and_downcast::<gtk::SortListModel>()
+        .expect("the selection's model is a SortListModel");
+    // Any press, key or scroll in the grid (seen, not consumed).
+    let touched = Rc::new(Cell::new(false));
+    let events = gtk::EventControllerLegacy::new();
+    events.set_propagation_phase(gtk::PropagationPhase::Capture);
+    let touched_ = touched.clone();
+    events.connect_event(move |_, event| {
+        use gdk::EventType::*;
+        if matches!(
+            event.event_type(),
+            ButtonPress | KeyPress | Scroll | TouchBegin
+        ) {
+            touched_.set(true);
+        }
+        glib::Propagation::Proceed
+    });
+    grid.add_controller(events);
+    let back_to_first = {
+        let (grid, selection) = (grid.clone(), selection.clone());
+        move || {
+            if touched.get() || selection.n_items() == 0 {
+                return;
+            }
+            if selection.selected() != 0 {
+                selection.set_selected(0);
+            }
+            grid.scroll_to(0, gtk::ListScrollFlags::NONE, None);
+        }
+    };
+    let back = Rc::new(back_to_first);
+    let (back_, scanning_, sorted_) = (back.clone(), scanning.clone(), sorted.clone());
+    selection.connect_items_changed(move |_, _, _, _| {
+        if scanning_.get() || sorted_.pending() > 0 {
+            back_();
+        }
+    });
+    // Sorting can catch up after the scan's last batch: once more then.
+    let scanning = scanning.clone();
+    sorted.connect_pending_notify(move |sorted| {
+        if sorted.pending() == 0 && !scanning.get() {
+            back();
+        }
+    });
 }

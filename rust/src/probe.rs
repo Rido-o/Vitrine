@@ -422,7 +422,14 @@ pub fn run(window: &gtk::ApplicationWindow) {
 
         // fill: the first screen of thumbnails.
         let fill = wait_until(FILL_TIMEOUT_MS, || tiles_filled(&grid)).await;
-        println!("RESULT fill_first fill_ms={fill}");
+        let selected = grid
+            .model()
+            .and_downcast::<gtk::SingleSelection>()
+            .map_or(-1, |selection| selection.selected() as i64);
+        println!(
+            "RESULT fill_first fill_ms={fill} top_px={:.0} selected={selected}",
+            adjustment.value()
+        );
 
         // scroll: top to bottom at a fixed speed.
         let recorder = Recorder::start(&window);

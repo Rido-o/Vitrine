@@ -141,8 +141,12 @@ Own app ID (`io.github.Rido_o.Vitrine.Spike`) and cache
   lagged a frame at 144 Hz); buffers over 1 MB are now freed on a janitor
   thread (8 µs). Still: the frame that first shows a 4K image uploads its
   texture (~55 ms), preloaded or not.
-  To do: keep the automatic selection on the first image while a scan runs
-  (it follows the first image found as sorting moves it).
+- **Opening at the top:** batches arrive in any order and are sorted as they
+  come, so the automatic selection stayed on whichever image arrived first,
+  and the grid kept it in view: a 7,756-image folder opened halfway down
+  (image 3,664 selected). While loading (scan and sorting), the first image
+  is now kept selected and the grid at the top, until a press, key or scroll
+  in the grid.
 - **Selection style:** the default theme's animated highlight looked choppy
   on a mouse click, next to 144 Hz scrolling (in the headless session GTK drew
   such short animations at ~60 fps). For now an outline fades in over 120 ms;
