@@ -1,20 +1,18 @@
-this derivation will be built:
-  /nix/store/qsg0ks3ngkybk59mbvyq3c8kfpyp1j3i-vitrine-rs-0.1.0.drv
-building '/nix/store/qsg0ks3ngkybk59mbvyq3c8kfpyp1j3i-vitrine-rs-0.1.0.drv'...
-# rs warm 3840x2160@144Hz scale 1.5 2026-09-29T11:23:07+10:00 e806397
-scan_detail first_us=431760 done_us=447309 batches=6 insert_max_us=13956 items=3010
-background generated=0 done_ms=542
-scan frames=65 p50=16.7 p95=16.7 p99=36.1 max=50.0 over25=3 late=51 stalls=5 stall_sum=123 stall_max=39 first_ms=0 done_ms=0 items=3010 t0_us=11052703248
-fill_first fill_ms=0 top_px=0 selected=0
-scroll frames=2009 p50=6.8 p95=7.0 p99=7.0 max=8.6 over25=0 late=0 stalls=0 stall_sum=0 stall_max=0 scroll_ms=13470 fill_after_ms=0 t0_us=11053707262
-jump frames=1 p50=0.0 p95=0.0 p99=0.0 max=0.0 over25=0 late=0 stalls=1 stall_sum=27 stall_max=27 fill_ms=39 t0_us=11067178054
-open frames=91 p50=16.7 p95=16.7 p99=16.7 max=17.7 over25=0 late=89 stalls=1 stall_sum=15 stall_max=15 placeholder_ms=0 sharp_ms=0 t0_us=11067425021
-hold frames=166 p50=13.7 p95=30.4 p99=31.7 max=33.8 over25=15 late=85 stalls=21 stall_sum=402 stall_max=22 presses=60 last_sharp_ms=70 t0_us=11068925266
-close frames=62 p50=16.7 p95=16.7 p99=16.7 max=16.7 over25=0 late=58 stalls=0 stall_sum=0 stall_max=0  t0_us=11070991515
-open_selected frames=60 p50=16.7 p95=16.7 p99=16.7 max=37.5 over25=1 late=58 stalls=1 stall_sum=30 stall_max=30 dwell_ms=300 sharp_ms=0 t0_us=11072292350
-zoom frames=89 p50=16.7 p95=20.8 p99=34.7 max=35.1 over25=3 late=84 stalls=2 stall_sum=25 stall_max=14 detail_ms=534 t0_us=11074248139
-pan frames=217 p50=7.0 p95=7.4 p99=8.0 max=8.6 over25=0 late=0 stalls=9 stall_sum=77 stall_max=9 pan_ms=1500 detail_after_ms=0 t0_us=11075748665
-gif frames=232 p50=16.7 p95=16.7 p99=16.7 max=16.7 over25=0 late=164 stalls=0 stall_sum=0 stall_max=0 played_ms=3000 frames_shown=33 t0_us=11078066627
-hold_key held_ms=3368 shows_held=64 shows_after=1 last_show_after_ms=66 settle_ms=200 cpu_held=janitor:110,main:550,preview:3530 cpu_after=main:50,preview:250 system_held=5230 system_after=1110
-idle frames=120 p50=16.7 p95=16.7 p99=16.7 max=16.7 over25=0 late=119 stalls=0 stall_sum=0 stall_max=0  t0_us=11092470229
-memory rss_mb=745 hwm_mb=1165 heap_mb=155 anon_mb=421 gpu_mb=36 file_mb=132
+# rs warm 3840x2160@144Hz scale 1.5 2026-09-29T12:05:48+10:00 b199a8a
+scan_detail first_us=424179 done_us=433080 batches=6 insert_max_us=8064 items=3010
+scan frames=72 p50=16.7 p95=16.7 p99=16.7 max=66.7 over25=1 late=49 stalls=3 stall_sum=87 stall_max=66 first_ms=0 done_ms=0 items=3010 t0_us=13613444103
+fill_first fill_ms=612 top_px=0 selected=0
+background generated=2522 done_ms=15315
+scroll frames=1968 p50=6.8 p95=7.0 p99=7.2 max=118.2 over25=1 late=5 stalls=4 stall_sum=158 stall_max=120 scroll_ms=13470 fill_after_ms=0 t0_us=13615059113
+jump frames=2 p50=34.7 p95=34.7 p99=34.7 max=34.7 over25=1 late=1 stalls=2 stall_sum=42 stall_max=29 fill_ms=52 t0_us=13628529343
+open frames=90 p50=16.7 p95=16.7 p99=16.7 max=33.4 over25=1 late=88 stalls=1 stall_sum=28 stall_max=28 placeholder_ms=0 sharp_ms=0 t0_us=13628789406
+hold frames=186 p50=6.9 p95=19.6 p99=27.9 max=30.2 over25=7 late=91 stalls=23 stall_sum=417 stall_max=22 presses=60 last_sharp_ms=65 t0_us=13630289727
+close frames=65 p50=16.7 p95=16.7 p99=16.7 max=16.7 over25=0 late=57 stalls=0 stall_sum=0 stall_max=0  t0_us=13632359548
+open_selected frames=60 p50=16.7 p95=16.7 p99=16.7 max=33.4 over25=1 late=58 stalls=1 stall_sum=28 stall_max=28 dwell_ms=300 sharp_ms=0 t0_us=13633660327
+zoom frames=101 p50=16.7 p95=16.7 p99=16.7 max=16.7 over25=0 late=83 stalls=0 stall_sum=0 stall_max=0 detail_ms=359 t0_us=13635608086
+pan frames=208 p50=7.0 p95=8.4 p99=12.7 max=16.2 over25=0 late=7 stalls=11 stall_sum=94 stall_max=9 pan_ms=1500 detail_after_ms=0 t0_us=13637108444
+gif frames=232 p50=16.7 p95=16.7 p99=16.7 max=16.7 over25=0 late=164 stalls=0 stall_sum=0 stall_max=0 played_ms=3000 frames_shown=33 t0_us=13639421921
+fullscreen entered_ms=9 controls=2 hidden=2 left_ms=8
+hold_key held_ms=3365 shows_held=66 shows_after=1 last_show_after_ms=73 settle_ms=200 cpu_held=janitor:100,main:560,preview:3660 cpu_after=main:60,preview:250 system_held=7840 system_after=4160
+idle frames=120 p50=16.7 p95=16.7 p99=16.7 max=16.7 over25=0 late=119 stalls=0 stall_sum=0 stall_max=0  t0_us=13657344456
+memory rss_mb=919 hwm_mb=1342 heap_mb=183 anon_mb=558 gpu_mb=36 file_mb=140

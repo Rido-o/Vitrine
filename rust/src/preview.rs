@@ -208,6 +208,12 @@ impl Preview {
             on_info: RefCell::default(),
         });
         let weak = Rc::downgrade(&preview);
+        preview.image.connect_resize(move |width, height| {
+            if let Some(preview) = weak.upgrade() {
+                preview.resized(width, height);
+            }
+        });
+        let weak = Rc::downgrade(&preview);
         preview.image.connect_detail(move || {
             if let Some(preview) = weak.upgrade() {
                 preview.request_detail();
@@ -249,7 +255,14 @@ impl Preview {
         *self.size.borrow_mut() = (width, height);
         self.stop_animation();
         let cached = self.textures.borrow().get(&path).cloned();
-        let sharp = cached.is_some();
+        // Decoded for another size: a placeholder, and decoded again.
+        let fresh = cached
+            .as_ref()
+            .is_some_and(|cached| !self.stale(cached, width, height));
+        if cached.is_some() && !fresh {
+            self.redecode(&path, width, height);
+        }
+        let sharp = fresh;
         self.info(&path, cached.as_ref().map(|(_, full)| *full));
         let shown = cached
             .map(|(texture, (w, h))| (texture, (w as f64, h as f64)))
@@ -316,6 +329,43 @@ impl Preview {
         drop(queue);
         self.shared.work.notify_all();
         *self.wanted.borrow_mut() = wanted;
+    }
+
+    // Whether a texture isn't the size its image fits `width`×`height` at
+    // (so it would be drawn scaled, which softens it).
+    fn stale(&self, (texture, full): &FitTexture, width: u32, height: u32) -> bool {
+        let (w, h) = decode::fitted(full.0, full.1, width, height);
+        (texture.width() as u32, texture.height() as u32) != (w, h)
+    }
+
+    // The view's size changed (a resized window, fullscreen): the shown
+    // image again at the new size; the rest when they're shown.
+    fn resized(&self, width: u32, height: u32) {
+        if *self.size.borrow() == (width, height) {
+            return;
+        }
+        *self.size.borrow_mut() = (width, height);
+        let Some(path) = self.shown.borrow().clone() else {
+            return;
+        };
+        let cached = self.textures.borrow().get(&path).cloned();
+        if cached.is_some_and(|cached| self.stale(&cached, width, height)) {
+            self.redecode(&path, width, height);
+        }
+    }
+
+    // `path` at `width`×`height`, ahead of preloads; its current texture
+    // stays until then.
+    fn redecode(&self, path: &Path, width: u32, height: u32) {
+        self.decoding.borrow_mut().insert(path.to_owned());
+        self.shared.queue.lock().unwrap().requests.insert(
+            0,
+            Request {
+                path: path.to_owned(),
+                kind: Kind::Fit(width, height),
+            },
+        );
+        self.shared.work.notify_one();
     }
 
     // Full resolution of the image shown, ahead of any preload.

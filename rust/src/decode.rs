@@ -280,7 +280,7 @@ pub fn resize(image: Rgba, width: u32, height: u32) -> Result<Rgba, String> {
         static RESIZER: std::cell::RefCell<fr::Resizer> = std::cell::RefCell::new(fr::Resizer::new());
     }
     let options =
-        fr::ResizeOptions::new().resize_alg(fr::ResizeAlg::Convolution(fr::FilterType::CatmullRom));
+        fr::ResizeOptions::new().resize_alg(fr::ResizeAlg::Convolution(fr::FilterType::Lanczos3));
     RESIZER
         .with_borrow_mut(|resizer| resizer.resize(&source, &mut target, &options))
         .map_err(|error| error.to_string())?;

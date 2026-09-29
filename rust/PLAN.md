@@ -168,12 +168,18 @@ Window.tsx), instant zoom steps, no pinch:
   left/right sixth moves to the previous/next image (arrow cursors, a hand
   when zoomed); s sharp pixels; [ ] rotate, h v flip (view only, reset per
   image).
-- Resolution levels: a texture of the monitor's size (so fullscreen needs
-  nothing new) for the whole image; zooming past it decodes the full
+- Resolution levels: a texture of the view's size in device pixels for the
+  whole image, drawn at exactly its own pixels at fit (decoded again when
+  the view's size changes); zooming past it decodes the full
   resolution on a worker (`preview.rs`, ahead of preloads) into 512² tiles
   with a 1-pixel overlap (no seams under smoothing). Only visible tiles are
   drawn, so uploaded, at most 3 new ones per frame (~3 MB); the rest show the
   lower resolution for a frame or two.
+- Sharpness: decoding for the monitor and drawing it scaled to the window
+  (×0.9–0.97, bilinear) looked softer than the TypeScript app. Now the
+  texture fits the view and is drawn 1:1, resized with Lanczos3 (was
+  Catmull-Rom): against ImageMagick's Lanczos downscale of a test image, the
+  view at fit went from 17.6% RMSE (67% of its edge contrast) to 1.1% (99%).
 - GIFs: frames decoded on a thread of their own, 4 ahead, fitted to the
   monitor; swapped in on the frame clock. (The TypeScript app decoded each
   frame on the main thread.)

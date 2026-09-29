@@ -579,8 +579,8 @@ pub fn run(window: &gtk::ApplicationWindow) {
             let detail = wait_until(10_000, || preview.is_detailed()).await;
             recorder.finish("pan", &format!("pan_ms={PAN_MS} detail_after_ms={detail}"));
             shot(&window, "pan");
-            preview.rotate(true);
-            preview.flip(true);
+            press(&window, gdk::Key::bracketright);
+            press(&window, gdk::Key::h);
             sleep(300).await;
             shot(&window, "rotated-flipped");
             press(&window, gdk::Key::Escape);

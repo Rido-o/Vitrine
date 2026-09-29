@@ -51,6 +51,7 @@ pub struct State {
 }
 
 type NavigateCallback = Box<dyn Fn(i32)>;
+type ResizeCallback = Box<dyn Fn(u32, u32)>;
 
 mod imp {
     use super::*;
@@ -62,6 +63,8 @@ mod imp {
         pub on_navigate: RefCell<Option<NavigateCallback>>,
         // Called when zooming needs more pixels than the texture has.
         pub on_detail: RefCell<Option<Box<dyn Fn()>>>,
+        // Called with the view's size in device pixels when it changes.
+        pub on_resize: RefCell<Option<ResizeCallback>>,
     }
 
     #[glib::object_subclass]
@@ -169,6 +172,13 @@ mod imp {
         fn size_allocate(&self, width: i32, height: i32, baseline: i32) {
             self.parent_size_allocate(width, height, baseline);
             let obj = self.obj();
+            if let Some(resize) = self.on_resize.borrow().as_ref() {
+                let device = obj.device_scale();
+                resize(
+                    (width as f64 * device).round() as u32,
+                    (height as f64 * device).round() as u32,
+                );
+            }
             if self.state.borrow().fitted {
                 obj.reset_zoom();
             } else {
@@ -197,6 +207,10 @@ impl Default for ZoomableImage {
 impl ZoomableImage {
     pub fn connect_navigate(&self, navigate: impl Fn(i32) + 'static) {
         *self.imp().on_navigate.borrow_mut() = Some(Box::new(navigate));
+    }
+
+    pub fn connect_resize(&self, resize: impl Fn(u32, u32) + 'static) {
+        *self.imp().on_resize.borrow_mut() = Some(Box::new(resize));
     }
 
     pub fn connect_detail(&self, detail: impl Fn() + 'static) {
@@ -510,11 +524,27 @@ impl ZoomableImage {
         let device = self.device_scale();
         let snap = |v: f64| (v * device).round() / device;
         let (w, h) = Self::shown_size(state);
-        let left = snap(state.offset_x);
-        let top = snap(state.offset_y);
+        let mut left = snap(state.offset_x);
+        let mut top = snap(state.offset_y);
         let right = snap(state.offset_x + w * state.scale);
         let bottom = snap(state.offset_y + h * state.scale);
-        let (bw, bh) = (right - left, bottom - top);
+        let (mut bw, mut bh) = (right - left, bottom - top);
+        // At fit, a texture decoded for this view (within rounding) is drawn
+        // at exactly its own pixels, centred on whole device pixels: any
+        // scaling, even by 0.97, softens it.
+        if let Some(base) = state.base.as_ref().filter(|_| state.fitted) {
+            let (tw, th) = if state.rotation % 180 != 0 {
+                (base.height() as f64, base.width() as f64)
+            } else {
+                (base.width() as f64, base.height() as f64)
+            };
+            if (bw * device - tw).abs() <= 2.0 && (bh * device - th).abs() <= 2.0 {
+                bw = tw / device;
+                bh = th / device;
+                left = snap((self.width() as f64 - bw) / 2.0);
+                top = snap((self.height() as f64 - bh) / 2.0);
+            }
+        }
         let (dw, dh) = if state.rotation % 180 != 0 {
             (bh, bw)
         } else {

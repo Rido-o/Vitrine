@@ -366,27 +366,19 @@ fn connect_preview(
     window.add_controller(keys);
 }
 
-// The size the view decodes images at, in device pixels (fractional scales
-// included).
+// The size the view decodes images at: the window's, in device pixels
+// (fractional scales included), so at fit an image is drawn at exactly its
+// decoded pixels. Before the window is shown (the grid's first selection),
+// its default size; the view decodes again when its size changes.
 fn view_size(window: &gtk::ApplicationWindow) -> (u32, u32) {
-    // The monitor's size, so going fullscreen needs nothing new; before the
-    // window is on one (the grid's first selection), the first monitor's.
-    let display = WidgetExt::display(window);
-    let monitor = window
-        .surface()
-        .and_then(|surface| display.monitor_at_surface(&surface))
-        .or_else(|| display.monitors().item(0).and_downcast::<gdk::Monitor>());
-    let (width, height, scale) = match &monitor {
-        Some(monitor) => {
-            let geometry = monitor.geometry();
-            (geometry.width(), geometry.height(), monitor.scale())
-        }
-        None => (
-            window.default_width(),
-            window.default_height(),
-            window.scale_factor() as f64,
-        ),
+    let (width, height) = if window.width() > 0 {
+        (window.width(), window.height())
+    } else {
+        (window.default_width(), window.default_height())
     };
+    let scale = window
+        .surface()
+        .map_or(window.scale_factor() as f64, |surface| surface.scale());
     (
         (width as f64 * scale).round().max(1.0) as u32,
         (height as f64 * scale).round().max(1.0) as u32,
