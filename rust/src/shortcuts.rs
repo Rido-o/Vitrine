@@ -1,6 +1,6 @@
 //! The keyboard shortcuts window. As Shortcuts.ts, listing only what the
-//! spike has so far: properties (i), wallpaper (w), Delete and Ctrl+Z join
-//! when they're ported. Keep in step with `Window::key` and the view's keys.
+//! spike has so far: properties (i) and wallpaper (w) join when they're
+//! ported. Keep in step with `Window::key` and the view's keys.
 
 use gtk::{gdk, glib, prelude::*};
 
@@ -11,6 +11,8 @@ const SECTIONS: [(&str, &[(&str, &str)]); 3] = [
             ("Ctrl+C", "Copy image"),
             ("Ctrl+Shift+C", "Copy path"),
             ("r", "Rescan folder"),
+            ("Delete", "Move to trash"),
+            ("Ctrl+Z", "Undo delete"),
             ("Ctrl+W, Ctrl+Q", "Close the window"),
             ("?", "Keyboard shortcuts"),
         ],

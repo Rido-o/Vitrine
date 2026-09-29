@@ -29,6 +29,12 @@ check instead of the benchmark: sorting, subfolders, the folder entry and
 its history and the empty state on a small folder (rescan and watching too,
 changing files, only if DIR holds a `.vitrine-probe-scratch` file), printed
 as `ui` lines, with screenshots under `VITRINE_PROBE_SHOTS`.
+Its trash and undo checks need GVfs, and trash files for real: run them only
+on the scratch folder, on a private session bus with its own data folder:
+`dbus-run-session`, `XDG_DATA_HOME=<scratch>/data`,
+`GIO_EXTRA_MODULES=<gvfs>/lib/gio/modules` and `<gvfs>/libexec/gvfsd
+--replace &` before `bench/run.sh` (`GIO_USE_VFS=local` checks the no-GVfs
+case).
 
 `BENCH_REAL_CACHE=1` runs with the app's real cache and state instead of the
 benchmark's (e.g. `bench/run.sh rs warm ~/Pictures` on a folder whose

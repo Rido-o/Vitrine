@@ -9,6 +9,7 @@ use crate::{
     library::{Finished, Folder, SortKey, image},
     preview::Preview,
     tiles::Tiles,
+    trash::{self, TrashedItem},
     view::View,
 };
 use gtk::{gdk, gio, glib, pango, prelude::*};
@@ -24,6 +25,8 @@ const APP_TITLE: &str = "Vitrine (spike)";
 const TILE_WIDTH: i32 = 272;
 const TILE_HEIGHT: i32 = 153;
 const TOAST_DURATION: std::time::Duration = std::time::Duration::from_secs(2);
+const UNDO_TOAST_DURATION: std::time::Duration = std::time::Duration::from_secs(5);
+const NO_GVFS: &str = "Moving to the trash needs GVfs, which isn't available";
 const SORTS: [(SortKey, &str, &str); 4] = [
     (SortKey::Name, "Name", "Sort by path"),
     (SortKey::Date, "Date", "Sort by date modified"),
@@ -71,6 +74,13 @@ pub struct Window {
     actions: RefCell<Option<ActionsMenu>>,
     toast: gtk::Box,
     toast_label: gtk::Label,
+    toast_undo: gtk::Button,
+    can_trash: bool,
+    // The deletes to undo, most recent last; undos run one at a time, in
+    // order (`undo_requests`).
+    undo_stack: RefCell<Vec<TrashedItem>>,
+    undo_requests: async_channel::Sender<()>,
+    undo_receiver: async_channel::Receiver<()>,
     toast_timeout: RefCell<Option<glib::SourceId>>,
 }
 
@@ -237,6 +247,13 @@ impl Window {
             .visible(false)
             .build();
         toast.append(&toast_label);
+        let toast_undo = gtk::Button::builder()
+            .label("Undo")
+            .tooltip_text("Undo (Ctrl+Z)")
+            .visible(false)
+            .build();
+        toast.append(&toast_undo);
+        let (undo_requests, undo_receiver) = async_channel::unbounded();
         let overlay = gtk::Overlay::builder().child(&stack).build();
         overlay.add_overlay(&toast);
         let window = gtk::ApplicationWindow::builder()
@@ -275,6 +292,11 @@ impl Window {
             actions: RefCell::default(),
             toast,
             toast_label,
+            toast_undo,
+            can_trash: trash::available(),
+            undo_stack: RefCell::default(),
+            undo_requests,
+            undo_receiver,
             toast_timeout: RefCell::default(),
         });
 
@@ -283,6 +305,7 @@ impl Window {
         this.connect_info(&filename_button, &view_button);
         this.connect_preview();
         this.connect_keys();
+        this.connect_trash();
         this.build_menu(&end);
         this.keep_first_while_loading();
         // A file changed on disk: its decoded image and size are out of date.
@@ -755,8 +778,14 @@ impl Window {
     fn close_view(&self) {
         self.view.leave();
         self.stack.set_visible_child_name("grid");
-        self.grid
-            .scroll_to(self.selection.selected(), gtk::ListScrollFlags::FOCUS, None);
+        let selected = self.selection.selected();
+        // Nothing selected when the last image was deleted.
+        if selected < self.selection.n_items() {
+            self.grid
+                .scroll_to(selected, gtk::ListScrollFlags::FOCUS, None);
+        } else {
+            self.grid.grab_focus();
+        }
         hide_after_paint(&self.window, &self.stack, &self.selection, &self.preview);
     }
 
@@ -895,11 +924,11 @@ impl Window {
             match decoded {
                 Ok(pixels) => {
                     this.window.clipboard().set_texture(&pixels.texture());
-                    this.show_toast("Copied image");
+                    this.show_toast("Copied image", false);
                 }
                 Err(error) => {
                     eprintln!("Could not copy {}: {error}", path.display());
-                    this.show_toast("Could not copy image");
+                    this.show_toast("Could not copy image", false);
                 }
             }
         });
@@ -908,24 +937,142 @@ impl Window {
     fn copy_path(self: &Rc<Self>) {
         if let Some(path) = self.selected_path() {
             self.window.clipboard().set_text(&path.to_string_lossy());
-            self.show_toast("Copied path");
+            self.show_toast("Copied path", false);
         }
     }
 
-    fn show_toast(self: &Rc<Self>, text: &str) {
+    // With `undoable`, the Undo button, and longer.
+    fn show_toast(self: &Rc<Self>, text: &str, undoable: bool) {
         self.toast_label.set_label(text);
+        self.toast_undo.set_visible(undoable);
         self.toast.set_visible(true);
         if let Some(id) = self.toast_timeout.borrow_mut().take() {
             id.remove();
         }
         let weak = Rc::downgrade(self);
-        let id = glib::timeout_add_local_once(TOAST_DURATION, move || {
+        let duration = if undoable {
+            UNDO_TOAST_DURATION
+        } else {
+            TOAST_DURATION
+        };
+        let id = glib::timeout_add_local_once(duration, move || {
             if let Some(this) = weak.upgrade() {
                 this.toast_timeout.borrow_mut().take();
                 this.toast.set_visible(false);
             }
         });
         *self.toast_timeout.borrow_mut() = Some(id);
+    }
+
+    // --- trash and undo --------------------------------------------------------
+
+    fn connect_trash(self: &Rc<Self>) {
+        let weak = Rc::downgrade(self);
+        self.toast_undo.connect_clicked(move |_| {
+            if let Some(this) = weak.upgrade() {
+                this.undo_delete();
+            }
+        });
+        // Undos one at a time: repeated presses go back through the deletes
+        // in order.
+        let (weak, requests) = (Rc::downgrade(self), self.undo_receiver.clone());
+        glib::spawn_future_local(async move {
+            while requests.recv().await.is_ok() {
+                let Some(this) = weak.upgrade() else { return };
+                this.undo_one().await;
+            }
+        });
+    }
+
+    // Takes the image out of the grid straight away (so repeated Delete keeps
+    // going) and puts it back if trashing fails.
+    fn delete_selected(self: &Rc<Self>) {
+        if !self.can_trash {
+            return self.show_toast(NO_GVFS, false);
+        }
+        let Some(path) = self.selected_path() else {
+            return;
+        };
+        if let Some(position) = self.folder.remove(&path) {
+            let count = self.selection.n_items();
+            if count > 0 {
+                self.select(position.min(count - 1), self.in_grid());
+            }
+        }
+        self.refresh_view_if_open();
+        self.sync_info();
+        let weak = Rc::downgrade(self);
+        glib::spawn_future_local(async move {
+            let result = trash::move_to_trash(&path).await;
+            let Some(this) = weak.upgrade() else { return };
+            let name = file_name(&path);
+            match result {
+                Ok(Some(item)) => {
+                    this.undo_stack.borrow_mut().push(item);
+                    this.show_toast(&format!("Moved {name} to the trash"), true);
+                }
+                Ok(None) => this.show_toast(
+                    &format!("Moved {name} to the trash (can't be undone)"),
+                    false,
+                ),
+                Err(error) => {
+                    eprintln!("Could not delete {}: {error}", path.display());
+                    this.show_toast(&format!("Could not move {name} to the trash"), false);
+                    this.reinsert(&path);
+                }
+            }
+        });
+    }
+
+    fn undo_delete(&self) {
+        if !self.can_trash {
+            return;
+        }
+        let _ = self.undo_requests.try_send(());
+    }
+
+    // Restores the most recent delete.
+    async fn undo_one(self: &Rc<Self>) {
+        if !self.can_trash {
+            return self.show_toast(NO_GVFS, false);
+        }
+        let Some(item) = self.undo_stack.borrow_mut().pop() else {
+            return self.show_toast("Nothing to undo", false);
+        };
+        let name = file_name(&item.original);
+        if let Err(reason) = trash::restore(&item).await {
+            return self.show_toast(&format!("Couldn't restore {name}: {reason}"), false);
+        }
+        if self.reinsert(&item.original).is_some() {
+            self.show_toast(&format!("Restored {name}"), false);
+        } else {
+            let folder = item.original.parent().unwrap_or(Path::new("/"));
+            self.show_toast(&format!("Restored {name} to {}", folder.display()), false);
+        }
+    }
+
+    // Puts `path` back in the grid, selected, if it belongs to this folder.
+    fn reinsert(self: &Rc<Self>, path: &Path) -> Option<u32> {
+        let position = self.folder.add(path);
+        if let Some(position) = position {
+            self.select(position, self.in_grid());
+        }
+        self.refresh_view_if_open();
+        self.sync_info();
+        position
+    }
+
+    // The view follows the selection after a delete or restore; with nothing
+    // left, back to the grid.
+    fn refresh_view_if_open(&self) {
+        if self.in_grid() {
+            return;
+        }
+        if self.selection.n_items() == 0 {
+            self.close_view();
+        } else if self.preview.shown() != self.selected_path() {
+            self.show_at(self.selection.selected() as i64);
+        }
     }
 
     // --- keys ------------------------------------------------------------------
@@ -950,6 +1097,12 @@ impl Window {
             }
             self.reset_entry();
             self.grid.grab_focus();
+            return true;
+        }
+        if state.contains(gdk::ModifierType::CONTROL_MASK)
+            && matches!(key, gdk::Key::z | gdk::Key::Z)
+        {
+            self.undo_delete();
             return true;
         }
         if state.contains(gdk::ModifierType::CONTROL_MASK)
@@ -978,6 +1131,10 @@ impl Window {
         }
         if matches!(key, gdk::Key::r | gdk::Key::R) {
             self.rescan();
+            return true;
+        }
+        if matches!(key, gdk::Key::Delete | gdk::Key::KP_Delete) {
+            self.delete_selected();
             return true;
         }
         if key == gdk::Key::question {
@@ -1042,6 +1199,13 @@ impl Window {
                 this.grid.scroll_to(0, gtk::ListScrollFlags::NONE, None);
             });
     }
+}
+
+fn file_name(path: &Path) -> String {
+    path.file_name().map_or_else(
+        || path.display().to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    )
 }
 
 fn icon(name: &str, size: i32) -> gtk::Image {

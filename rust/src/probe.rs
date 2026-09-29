@@ -5,7 +5,7 @@
 
 use gtk::gdk;
 use gtk::glib::translate::IntoGlib;
-use gtk::{glib, prelude::*};
+use gtk::{gio, glib, prelude::*};
 use std::{
     cell::RefCell,
     path::{Path, PathBuf},
@@ -760,6 +760,10 @@ pub fn run(window: &gtk::ApplicationWindow) {
 
 // Like GTK: the window's key controllers in turn until one handles it.
 fn press(window: &gtk::ApplicationWindow, key: gdk::Key) {
+    press_with(window, key, gdk::ModifierType::empty());
+}
+
+fn press_with(window: &gtk::ApplicationWindow, key: gdk::Key, state: gdk::ModifierType) {
     let controllers = window.observe_controllers();
     for i in 0..controllers.n_items() {
         let Some(keys) = controllers
@@ -768,10 +772,7 @@ fn press(window: &gtk::ApplicationWindow, key: gdk::Key) {
         else {
             continue;
         };
-        let handled = keys.emit_by_name::<bool>(
-            "key-pressed",
-            &[&key.into_glib(), &0u32, &gdk::ModifierType::empty()],
-        );
+        let handled = keys.emit_by_name::<bool>("key-pressed", &[&key.into_glib(), &0u32, &state]);
         if handled {
             return;
         }
@@ -1108,6 +1109,130 @@ pub fn ui(window: &gtk::ApplicationWindow) {
             press(&window, gdk::Key::Escape);
             sleep(300).await;
             state("watch_back");
+
+            // Trash and undo (needs GVfs; the run's trash is its own).
+            let toast = || {
+                let mut boxes = Vec::new();
+                find_all::<gtk::Box>(&root, &mut boxes);
+                boxes
+                    .iter()
+                    .find(|b| b.has_css_class("viewer-toast"))
+                    .filter(|b| b.is_visible())
+                    .and_then(|b| b.first_child().and_downcast::<gtk::Label>())
+                    .map(|label| label.label().to_string())
+            };
+            let select_named = |name: &str| {
+                let position = (0..selection.n_items()).find(|&i| name_at(i) == name);
+                if let Some(position) = position {
+                    selection.set_selected(position);
+                }
+                position
+            };
+            let undo = || press_with(&window, gdk::Key::z, gdk::ModifierType::CONTROL_MASK);
+            let teal = directory.join("img-05-teal.jpg");
+            let count = selection.n_items();
+            println!("RESULT ui trash available={}", crate::trash::available());
+            select_named("img-05-teal.jpg");
+            sleep(200).await;
+            press(&window, gdk::Key::Delete);
+            wait_until(5000, || {
+                toast().is_some_and(|t| t.starts_with("Moved") || t.contains("GVfs"))
+            })
+            .await;
+            println!(
+                "RESULT ui delete items={} selected={:?} on_disk={} toast={:?}",
+                selection.n_items(),
+                name_at(selection.selected()),
+                teal.exists(),
+                toast()
+            );
+            shot(&window, "ui-toast-undo");
+            if crate::trash::available() {
+                undo();
+                wait_until(5000, || toast().is_some_and(|t| t.starts_with("Restored"))).await;
+                println!(
+                    "RESULT ui undo items={} selected={:?} on_disk={} toast={:?}",
+                    selection.n_items(),
+                    name_at(selection.selected()),
+                    teal.exists(),
+                    toast()
+                );
+
+                // The same path twice, quickly: undo restores the newer one;
+                // the older can't come back over it.
+                select_named("img-05-teal.jpg");
+                let first = glib::monotonic_time();
+                press(&window, gdk::Key::Delete);
+                wait_until(5000, || !teal.exists()).await;
+                let _ = std::fs::copy(directory.join("img-10-gray.jpg"), &teal);
+                press(&window, gdk::Key::r);
+                wait_until(3000, || select_named("img-05-teal.jpg").is_some()).await;
+                let apart = (glib::monotonic_time() - first) / 1000;
+                press(&window, gdk::Key::Delete);
+                wait_until(5000, || !teal.exists()).await;
+                sleep(500).await;
+                println!("RESULT ui delete_twice apart_ms={apart}");
+                undo();
+                wait_until(5000, || teal.exists()).await;
+                sleep(300).await;
+                println!(
+                    "RESULT ui undo_newer size={:?} toast={:?}",
+                    std::fs::metadata(&teal).map(|m| m.len()).ok(),
+                    toast()
+                );
+                undo();
+                sleep(1000).await;
+                println!("RESULT ui undo_older toast={:?}", toast());
+                // Put the original back by hand.
+                let _ = std::fs::remove_file(&teal);
+                let trash = gio::File::for_uri("trash:///");
+                if let Ok(enumerator) = trash.enumerate_children(
+                    "standard::name,trash::orig-path",
+                    gio::FileQueryInfoFlags::NONE,
+                    None::<&gio::Cancellable>,
+                ) {
+                    for info in enumerator.flatten() {
+                        if info.attribute_byte_string("trash::orig-path").as_deref()
+                            == teal.to_str()
+                        {
+                            let _ = trash.child(info.name()).move_(
+                                &gio::File::for_path(&teal),
+                                gio::FileCopyFlags::NONE,
+                                None::<&gio::Cancellable>,
+                                None,
+                            );
+                        }
+                    }
+                }
+                println!(
+                    "RESULT ui original_back size={:?}",
+                    std::fs::metadata(&teal).map(|m| m.len()).ok()
+                );
+                sleep(1500).await;
+
+                // In the view: deleting shows the next image, undo the
+                // restored one.
+                select_named("img-06-blue.jpg");
+                grid.emit_by_name::<()>("activate", &[&selection.selected()]);
+                sleep(500).await;
+                press(&window, gdk::Key::Delete);
+                wait_until(5000, || toast().is_some_and(|t| t.starts_with("Moved"))).await;
+                let after_delete = shown_name(&root);
+                undo();
+                wait_until(5000, || toast().is_some_and(|t| t.starts_with("Restored"))).await;
+                println!(
+                    "RESULT ui view_delete shown={after_delete:?} after_undo={:?} selected={:?} items={}",
+                    shown_name(&root),
+                    name_at(selection.selected()),
+                    selection.n_items()
+                );
+                press(&window, gdk::Key::Escape);
+                sleep(300).await;
+            }
+            println!(
+                "RESULT ui trash_back items={} expected={count}",
+                selection.n_items()
+            );
         }
 
         let entry = find::<gtk::Entry>(&root).expect("the folder entry");
@@ -1150,6 +1275,26 @@ pub fn ui(window: &gtk::ApplicationWindow) {
                         || focus == *entry.upcast_ref::<gtk::Widget>())
             );
         }
+        // Deleting the last image in the view goes back to the (empty) grid.
+        let single = directory.join("single");
+        if single.is_dir()
+            && directory.join(".vitrine-probe-scratch").exists()
+            && crate::trash::available()
+        {
+            entry.set_text(&single.to_string_lossy());
+            entry.emit_activate();
+            sleep(500).await;
+            grid.emit_by_name::<()>("activate", &[&0u32]);
+            sleep(500).await;
+            press(&window, gdk::Key::Delete);
+            sleep(1500).await;
+            state("delete_last");
+            println!("RESULT ui delete_last_toast {:?}", toast_text(&root));
+            press_with(&window, gdk::Key::z, gdk::ModifierType::CONTROL_MASK);
+            sleep(1500).await;
+            state("undo_last");
+            println!("RESULT ui undo_last_toast {:?}", toast_text(&root));
+        }
         let empty = directory.join("empty");
         if empty.is_dir() {
             entry.set_text(&empty.to_string_lossy());
@@ -1167,4 +1312,27 @@ pub fn ui(window: &gtk::ApplicationWindow) {
         idle(&window).await;
         finish(&window);
     });
+}
+
+// The file name of the image the full-screen view shows (its info label).
+fn shown_name(root: &gtk::Widget) -> Option<String> {
+    let mut boxes = Vec::new();
+    find_all::<gtk::Box>(root, &mut boxes);
+    let info = boxes
+        .iter()
+        .find(|b| b.has_css_class("preview-image-info"))?;
+    let mut labels = Vec::new();
+    find_all::<gtk::Label>(info.upcast_ref(), &mut labels);
+    labels.first().map(|label| label.label().to_string())
+}
+
+fn toast_text(root: &gtk::Widget) -> Option<String> {
+    let mut boxes = Vec::new();
+    find_all::<gtk::Box>(root, &mut boxes);
+    boxes
+        .iter()
+        .find(|b| b.has_css_class("viewer-toast"))
+        .filter(|b| b.is_visible())
+        .and_then(|b| b.first_child().and_downcast::<gtk::Label>())
+        .map(|label| label.label().to_string())
 }

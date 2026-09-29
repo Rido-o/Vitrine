@@ -32,6 +32,15 @@ pub struct Image {
     pub size: u64,
 }
 
+// Seconds since the epoch.
+fn mtime(metadata: &fs::Metadata) -> i64 {
+    metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map_or(0, |duration| duration.as_secs() as i64)
+}
+
 fn is_image(path: &Path) -> bool {
     path.extension()
         .and_then(|ext| ext.to_str())
@@ -90,11 +99,7 @@ pub fn scan(root: PathBuf, recursive: bool) -> async_channel::Receiver<Scanned> 
                     if !metadata.is_file() {
                         continue;
                     }
-                    let mtime = metadata
-                        .modified()
-                        .ok()
-                        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
-                        .map_or(0, |duration| duration.as_secs() as i64);
+                    let mtime = mtime(&metadata);
                     if batch.is_empty() {
                         batch_start = Instant::now();
                     }
@@ -205,6 +210,10 @@ pub struct Folder {
     updating: Cell<bool>,
     monitors: RefCell<HashMap<PathBuf, gio::FileMonitor>>,
     rescan_timeout: RefCell<Option<glib::SourceId>>,
+    // Images removed (trashed) or added (restored) here while a scan runs;
+    // its results predate them, so it leaves them alone.
+    removed_during_scan: RefCell<HashSet<PathBuf>>,
+    added_during_scan: RefCell<HashSet<PathBuf>>,
 }
 
 impl Folder {
@@ -235,6 +244,8 @@ impl Folder {
             updating: Cell::new(false),
             monitors: RefCell::default(),
             rescan_timeout: RefCell::default(),
+            removed_during_scan: RefCell::default(),
+            added_during_scan: RefCell::default(),
         })
     }
 
@@ -284,10 +295,71 @@ impl Folder {
         })
     }
 
+    fn changed_during_scan(&self, path: &Path) -> bool {
+        self.removed_during_scan.borrow().contains(path)
+            || self.added_during_scan.borrow().contains(path)
+    }
+
+    /// Takes `path` out of the list (trashed); its position before, if it
+    /// was there.
+    pub fn remove(&self, path: &Path) -> Option<u32> {
+        let position = self.position(path);
+        let index = (0..self.store.n_items()).find(|&i| {
+            self.store
+                .item(i)
+                .is_some_and(|object| image(&object).path == path)
+        });
+        if let Some(index) = index {
+            self.store.remove(index);
+        }
+        if self.scanning.get() {
+            self.removed_during_scan
+                .borrow_mut()
+                .insert(path.to_owned());
+            self.added_during_scan.borrow_mut().remove(path);
+        }
+        position
+    }
+
+    /// Puts a file that appeared outside a scan (restored from the trash)
+    /// into the list; its position, or None if it doesn't belong here (or
+    /// can't be read).
+    pub fn add(&self, path: &Path) -> Option<u32> {
+        if let Some(position) = self.position(path) {
+            return Some(position);
+        }
+        let directory = self.directory();
+        let belongs = is_image(path)
+            && (path.parent() == Some(directory.as_path())
+                || (self.recursive.get() && path.starts_with(&directory)));
+        if !belongs {
+            return None;
+        }
+        let metadata = fs::metadata(path)
+            .inspect_err(|error| eprintln!("Could not read {}: {error}", path.display()))
+            .ok()?;
+        let image = Image {
+            path: path.to_owned(),
+            mtime: mtime(&metadata),
+            size: metadata.len(),
+        };
+        // Sorted at once, so its position is known.
+        self.sorted.set_incremental(false);
+        self.store.append(&glib::BoxedAnyObject::new(image));
+        self.sorted.set_incremental(true);
+        if self.scanning.get() {
+            self.added_during_scan.borrow_mut().insert(path.to_owned());
+            self.removed_during_scan.borrow_mut().remove(path);
+        }
+        self.position(path)
+    }
+
     fn begin(&self) -> u64 {
         let generation = self.generation.get() + 1;
         self.generation.set(generation);
         self.scanning.set(true);
+        self.removed_during_scan.borrow_mut().clear();
+        self.added_during_scan.borrow_mut().clear();
         generation
     }
 
@@ -353,8 +425,11 @@ impl Folder {
                     }
                 };
                 let started = glib::monotonic_time();
-                let objects: Vec<glib::BoxedAnyObject> =
-                    batch.into_iter().map(glib::BoxedAnyObject::new).collect();
+                let objects: Vec<glib::BoxedAnyObject> = batch
+                    .into_iter()
+                    .filter(|image| !folder.changed_during_scan(&image.path))
+                    .map(glib::BoxedAnyObject::new)
+                    .collect();
                 folder.store.splice(folder.store.n_items(), 0, &objects);
                 times.batch(started);
             }
@@ -413,14 +488,20 @@ impl Folder {
                         None => false,
                     }
                 };
-                if unchanged {
-                    fresh.remove(&image(&object).path.clone());
+                let path = image(&object).path.clone();
+                if unchanged || folder.added_during_scan.borrow().contains(&path) {
+                    fresh.remove(&path);
                 } else {
                     store.remove(i);
                 }
             }
-            let objects: Vec<glib::BoxedAnyObject> =
-                fresh.into_values().map(glib::BoxedAnyObject::new).collect();
+            let removed = folder.removed_during_scan.borrow();
+            let objects: Vec<glib::BoxedAnyObject> = fresh
+                .into_values()
+                .filter(|image| !removed.contains(&image.path))
+                .map(glib::BoxedAnyObject::new)
+                .collect();
+            drop(removed);
             store.splice(store.n_items(), 0, &objects);
             folder.sorted.set_incremental(true);
             folder.updating.set(false);

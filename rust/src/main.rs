@@ -8,6 +8,7 @@ mod probe;
 mod shortcuts;
 mod thumbnails;
 mod tiles;
+mod trash;
 mod view;
 mod window;
 mod zoomable;

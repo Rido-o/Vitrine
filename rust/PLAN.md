@@ -18,9 +18,9 @@ with generated, disk-cached thumbnails; a full-screen view (Enter or
 double-click, Esc back, ←/→ with preloading).
 
 Since ported: the full-screen view (batch 2), the grid's chrome (batch 1),
-the menus and shortcuts (batch 3), file watching (batch 4). Out until
-later: trash and undo, properties, wallpaper, the Home Manager module, the
-styling pass.
+the menus and shortcuts (batch 3), file watching (batch 4), trash and undo
+(batch 5). Out until later: properties, wallpaper, the Home Manager module,
+the styling pass.
 
 Own app ID (`io.github.Rido_o.Vitrine.Spike`), cache
 (`~/.cache/vitrine-spike/`) and history (`~/.local/state/vitrine-spike/`),
@@ -303,6 +303,33 @@ As Library.ts:
   file show within ~1 s (the rescan delay), a change elsewhere keeps the
   view's zoom, a change to the image shown shows the new one. The 4K
   benchmark is unchanged.
+
+## Port batch 5: trash and undo
+
+As Trash.ts and Window.tsx:
+
+- `trash.rs`: trash through GVfs (`trash:///`), and undo restoring exactly
+  the item trashed: the path's trash items are listed before and after, and
+  the one new item is kept (deletion dates have one-second resolution). A
+  restore never overwrites; an existing file is reported. Without GVfs,
+  Delete and Ctrl+Z only say it's needed.
+- `Folder::remove` / `add`: the grid changes at once (repeated Delete keeps
+  going; a failed trash puts the image back). Paths removed or restored
+  while a scan runs are left alone by its results, which predate them (it
+  matters more with watching, which starts rescans on its own).
+- Delete trashes the selection, in the grid or the view (which moves on, or
+  back to the grid when nothing is left); the toast offers Undo for 5 s.
+  Ctrl+Z (or Undo) restores the deletes one at a time, back through all of
+  them; a restored image is selected (and shown in the view).
+- Checked with `VITRINE_PROBE=ui` on a private session bus with GVfs
+  (`bench/README.md`): delete and undo in the grid and the view, the same
+  path trashed twice 15 ms apart (undo brings back the newer copy; the older
+  is refused over it), deleting the last image, and no GVfs. One early run
+  didn't restore the last image (its toast wasn't captured); the next seven
+  passed, so the cause is unconfirmed. Possibly GVfs's trash listing lagging
+  right after trashing, which the TypeScript app would share; the toast then
+  says it can't be undone. Also fixed: closing the view on an emptied folder
+  scrolled to no image (a GTK critical).
 
 ## Maybe: uploading off the main thread
 
