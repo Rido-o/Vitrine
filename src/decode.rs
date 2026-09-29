@@ -1,7 +1,8 @@
 //! Decoding images to fit within a size, on any thread: JPEG through
 //! libjpeg-turbo at a reduced size (1/2, 1/4, 1/8…), PNG through `png`, then a
 //! SIMD resize; everything else (and anything those fail on) through
-//! GdkPixbuf. EXIF orientation is applied.
+//! GdkPixbuf. EXIF orientation is applied, and embedded colour profiles are
+//! converted to sRGB (`color.rs`).
 
 use gtk::{gdk, gdk_pixbuf::Pixbuf, glib};
 use std::{
@@ -181,6 +182,7 @@ fn pixbuf_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> 
         Pixbuf::from_file_at_scale(path, max_w as i32, max_h as i32, true)
     }
     .map_err(|error| error.to_string())?;
+    let profile = crate::color::pixbuf_profile(&pixbuf);
     let pixbuf = pixbuf.apply_embedded_orientation().unwrap_or(pixbuf);
     let (width, height) = (width as u32, height as u32);
     // Rotated by its EXIF orientation if the shape turned.
@@ -189,10 +191,9 @@ fn pixbuf_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> 
     } else {
         (height, width)
     };
-    Ok(Fitted {
-        rgba: Rgba::from_pixbuf(&pixbuf),
-        full,
-    })
+    let mut rgba = Rgba::from_pixbuf(&pixbuf);
+    crate::color::to_srgb(&mut rgba, profile.as_deref());
+    Ok(Fitted { rgba, full })
 }
 
 fn jpeg_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> {
@@ -245,8 +246,11 @@ fn jpeg_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> {
         height: decoded_h as u32,
         data: pixels,
     };
+    // Converted once resized: far fewer pixels.
+    let mut rgba = resize(decoded, target_w, target_h)?;
+    crate::color::to_srgb(&mut rgba, crate::color::jpeg_profile(&data).as_deref());
     Ok(Fitted {
-        rgba: orient(resize(decoded, target_w, target_h)?, orientation),
+        rgba: orient(rgba, orientation),
         full: if swapped {
             (stored_h, stored_w)
         } else {
@@ -258,13 +262,12 @@ fn jpeg_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> {
 // PNG can't decode smaller: in full, then resized (alpha-aware).
 fn png_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> {
     let data = std::fs::read(path).map_err(|error| error.to_string())?;
-    let image = decode_png(&data)?;
+    let (image, profile) = decode_png_with_profile(&data)?;
     let full = (image.width, image.height);
     let (width, height) = fitted(image.width, image.height, max_w, max_h);
-    Ok(Fitted {
-        rgba: resize(image, width, height)?,
-        full,
-    })
+    let mut rgba = resize(image, width, height)?;
+    crate::color::to_srgb(&mut rgba, profile.as_deref());
+    Ok(Fitted { rgba, full })
 }
 
 pub fn resize(image: Rgba, width: u32, height: u32) -> Result<Rgba, String> {
@@ -336,10 +339,17 @@ fn orient(image: Rgba, orientation: u32) -> Rgba {
     }
 }
 
+/// A PNG decoded in full (the thumbnail cache's own files, sRGB).
 pub fn decode_png(data: &[u8]) -> Result<Rgba, String> {
+    decode_png_with_profile(data).map(|(image, _)| image)
+}
+
+// With its embedded colour profile (iCCP), if any.
+fn decode_png_with_profile(data: &[u8]) -> Result<(Rgba, Option<Vec<u8>>), String> {
     let mut decoder = png::Decoder::new(std::io::Cursor::new(data));
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
     let mut reader = decoder.read_info().map_err(|error| error.to_string())?;
+    let profile = reader.info().icc_profile.as_ref().map(|icc| icc.to_vec());
     let mut buffer = vec![0; reader.output_buffer_size().ok_or("PNG too large")?];
     let info = reader
         .next_frame(&mut buffer)
@@ -361,11 +371,14 @@ pub fn decode_png(data: &[u8]) -> Result<Rgba, String> {
             .collect(),
         _ => buffer.iter().flat_map(|&g| [g, g, g, 255]).collect(),
     };
-    Ok(Rgba {
-        width: info.width,
-        height: info.height,
-        data,
-    })
+    Ok((
+        Rgba {
+            width: info.width,
+            height: info.height,
+            data,
+        },
+        profile,
+    ))
 }
 
 /// A JPEG decoded in full (the thumbnail cache's own files).

@@ -37,7 +37,7 @@ There are no unit tests, so:
 - Rust style: `cargo fmt` (rustfmt defaults), edition 2024; Nix: alejandra. Styles are `style/style.scss` (with `style/theme.scss`), compiled into the binary by `build.rs`.
 - Keep comments sparse: explain why, not what.
 - Known traps (details in the README's "Gotchas"): the GL renderer on NVIDIA; draw the view with a plain texture node, decoded at the view's device-pixel size; never evict bound tiles' thumbnails; the package builds its own GdkPixbuf `loaders.cache` and wraps by hand (`dontWrapGApps`) so WebP works; while a folder loads, the first image stays selected; a window's state is an `Rc` its handlers hold weakly, kept alive by its `destroy` handler.
-- The app ID is `io.github.Rido_o.Vitrine`; data lives in `~/.cache/vitrine/thumbnails-3` and `~/.local/state/vitrine/history`. Changing names or paths needs a migration (outdated thumbnail caches are deleted by `thumbnails::housekeeping`, since thumbnails regenerate; the history is moved, as `history::migrate` does).
+- The app ID is `io.github.Rido_o.Vitrine`; data lives in `~/.cache/vitrine/thumbnails-4` and `~/.local/state/vitrine/history`. Changing names or paths needs a migration (outdated thumbnail caches are deleted by `thumbnails::housekeeping`, since thumbnails regenerate; the history is moved, as `history::migrate` does).
 - Nothing may assume the author's setup: machine-specific values (wallpaper command, folders) come from the command line, `VITRINE_WALLPAPER_COMMAND`, or Home Manager options (`hm-module.nix`, `programs.vitrine.*`).
 
 ## Docs

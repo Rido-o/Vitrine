@@ -22,19 +22,21 @@ const WORKER_NICE: libc::c_int = 10;
 const PRUNE_AFTER: Duration = Duration::from_secs(90 * 24 * 60 * 60);
 const TOUCH_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
 
-/// "-3": this app's thumbnails (JPEG, or PNG with transparency, keyed by
-/// `key`); the TypeScript app's were in "-2".
+/// "-4": thumbnails in sRGB (JPEG, or PNG with transparency, keyed by
+/// `key`); "-3" had embedded colour profiles ignored, the TypeScript app's
+/// were in "-2".
 pub fn cache_dir() -> PathBuf {
-    glib::user_cache_dir().join("vitrine/thumbnails-3")
+    glib::user_cache_dir().join("vitrine/thumbnails-4")
 }
 
 // Caches of earlier versions, deleted rather than migrated: thumbnails
 // regenerate.
-fn old_caches() -> [PathBuf; 4] {
+fn old_caches() -> [PathBuf; 5] {
     let cache = glib::user_cache_dir();
     [
         cache.join("vitrine/thumbnails"),
         cache.join("vitrine/thumbnails-2"),
+        cache.join("vitrine/thumbnails-3"),
         cache.join("vitrine-spike"),
         cache.join("shard-view"),
     ]

@@ -1,5 +1,6 @@
 mod actions;
 mod autohide;
+mod color;
 mod decode;
 mod history;
 mod library;

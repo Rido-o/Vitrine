@@ -16,6 +16,8 @@ turbojpeg = { version = "1.5", default-features = false, features = ["pkg-config
 fast_image_resize = "6"
 png = "0.18"
 kamadak-exif = "0.6"
+# Embedded colour profiles to sRGB; pure Rust.
+moxcms = "0.8"
 
 [profile.release]
 debug = "line-tables-only"

@@ -68,6 +68,9 @@ command of your choice.
 - JPEG, PNG, WebP, TIFF and GIF (animated GIFs play in the full-screen view;
   thumbnails show the first frame); a desktop entry registers Vitrine for
   those types. Photos are shown upright: the EXIF orientation is applied.
+  Embedded colour profiles (Adobe RGB, Display P3, ProPhoto…) are converted to
+  sRGB on the worker threads, for thumbnails and the full-screen view alike;
+  images without one are taken to be sRGB.
 
 ## Usage
 
@@ -105,7 +108,7 @@ Keys (grid unless noted):
 
 Files:
 
-- Thumbnails: `~/.cache/vitrine/thumbnails-3`, fitting 440×320: JPEG, or PNG
+- Thumbnails: `~/.cache/vitrine/thumbnails-4`, fitting 440×320: JPEG, or PNG
   for images with transparent pixels, named after the image's path and
   modification time. A thumbnail is refreshed when it's used, and a few
   seconds after launch Vitrine deletes any not used for 90 days, so
@@ -117,7 +120,8 @@ With NVIDIA's driver loaded, Vitrine uses GTK's GL renderer (see "Gotchas");
 set `GSK_RENDERER` to override it (e.g. `GSK_RENDERER=vulkan`).
 
 (Earlier versions' thumbnail caches, `~/.cache/vitrine/thumbnails`,
-`~/.cache/vitrine/thumbnails-2`, `~/.cache/vitrine-spike` and
+`~/.cache/vitrine/thumbnails-2`, `~/.cache/vitrine/thumbnails-3` (before
+colour profiles were read), `~/.cache/vitrine-spike` and
 `~/.cache/shard-view`, are deleted in the background. The Rust port's own
 folder history, `~/.local/state/vitrine-spike/history`, is moved over once.)
 
@@ -229,6 +233,8 @@ src/
   decode.rs         decoding (libjpeg-turbo scaled, png, GdkPixbuf), resizing
                     (Lanczos3), EXIF orientation, freeing big buffers off the
                     main thread
+  color.rs          embedded ICC profiles (JPEG, PNG, GdkPixbuf) converted to
+                    sRGB (moxcms)
   zoomable.rs       the full-screen image widget (zoom, pan, rotate, flip,
                     sharp mode, tiles)
   view.rs           the full-screen view's page and controls
@@ -355,8 +361,9 @@ images and memory all came out ahead of the TypeScript version
 - [gtk4-rs](https://gtk-rs.org) (MIT),
   [turbojpeg](https://crates.io/crates/turbojpeg) (MIT or Unlicense),
   [fast_image_resize](https://crates.io/crates/fast_image_resize) and
-  [png](https://crates.io/crates/png) (MIT or Apache-2.0), and
-  [kamadak-exif](https://crates.io/crates/kamadak-exif) (BSD-2-Clause).
+  [png](https://crates.io/crates/png) (MIT or Apache-2.0),
+  [kamadak-exif](https://crates.io/crates/kamadak-exif) (BSD-2-Clause), and
+  [moxcms](https://crates.io/crates/moxcms) (BSD-3-Clause or Apache-2.0).
 
 ## Licence
 
