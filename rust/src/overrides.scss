@@ -1,0 +1,36 @@
+// The spike's changes to the TypeScript app's stylesheet (style.scss), loaded
+// over it.
+@use "theme" as t;
+
+// The selection's outline fades in. The default theme's animated highlight
+// looked choppy next to scrolling, and none at all felt abrupt; only the
+// outline's colour changes, briefly, so a lower frame rate barely shows.
+.viewer-library .viewer-grid > child {
+  background: none;
+  outline: 3px solid transparent;
+  outline-offset: -7px;
+  border-radius: 12px;
+  transition: outline-color 120ms ease-out;
+}
+
+.viewer-library .viewer-grid > child:selected {
+  outline-color: t.$accent;
+}
+
+// The folder history is a popover here (a box over the grid in the
+// TypeScript app), so the panel's look goes on its contents.
+popover.viewer-history {
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+
+  > contents {
+    padding: 6px;
+    border: 1px solid t.$border-solid;
+    border-radius: 12px;
+    background-color: t.$bg;
+    box-shadow: t.$window-shadow;
+    color: t.$fg;
+  }
+}

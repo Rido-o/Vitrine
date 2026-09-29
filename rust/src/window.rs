@@ -10,7 +10,7 @@ use crate::{
     tiles::Tiles,
     view::View,
 };
-use gtk::{gdk, gio, glib, graphene, pango, prelude::*};
+use gtk::{gdk, gio, glib, pango, prelude::*};
 use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
@@ -44,7 +44,7 @@ pub struct Window {
     view: Rc<View>,
     history: RefCell<History>,
     entry: gtk::Entry,
-    history_panel: gtk::Box,
+    history_panel: gtk::Popover,
     history_list: gtk::Box,
     empty: gtk::Label,
     filename: gtk::Label,
@@ -139,17 +139,19 @@ impl Window {
             .hscrollbar_policy(gtk::PolicyType::Never)
             .child(&grid)
             .build();
+        // The recent folders, under the entry. A popover closes itself on a
+        // click outside or Esc.
         let history_list = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .spacing(2)
             .build();
-        let history_panel = gtk::Box::builder()
+        let history_panel = gtk::Popover::builder()
             .css_classes(["viewer-history"])
-            .halign(gtk::Align::Start)
-            .valign(gtk::Align::Start)
-            .visible(false)
+            .has_arrow(false)
+            .position(gtk::PositionType::Bottom)
+            .child(&history_list)
             .build();
-        history_panel.append(&history_list);
+        history_panel.set_parent(&entry);
         let empty = gtk::Label::builder()
             .css_classes(["viewer-empty"])
             .halign(gtk::Align::Center)
@@ -161,9 +163,7 @@ impl Window {
             .vexpand(true)
             .child(&scrolled)
             .build();
-        // The panel last, so it covers the empty folder's label.
         grid_overlay.add_overlay(&empty);
-        grid_overlay.add_overlay(&history_panel);
 
         // The info bar.
         let filename = gtk::Label::builder()
@@ -277,7 +277,11 @@ impl Window {
         // The handlers hold weak references; the window keeps this alive
         // until it's destroyed.
         let keep = RefCell::new(Some(this.clone()));
-        this.window.connect_destroy(move |_| drop(keep.take()));
+        this.window.connect_destroy(move |_| {
+            if let Some(this) = keep.take() {
+                this.history_panel.unparent();
+            }
+        });
 
         this.render_history();
         this.sync_sort_buttons();
@@ -513,24 +517,12 @@ impl Window {
         });
         self.history_list.add_controller(keys);
 
-        // A click outside the panel (and the entry) closes it.
-        let click = gtk::GestureClick::new();
-        let weak = Rc::downgrade(self);
-        click.connect_released(move |_, _, x, y| {
-            let Some(this) = weak.upgrade() else { return };
-            let contains = |widget: &gtk::Widget| {
-                widget.compute_bounds(&this.window).is_some_and(|bounds| {
-                    bounds.contains_point(&graphene::Point::new(x as f32, y as f32))
-                })
-            };
-            if this.history_panel.is_visible()
-                && !contains(this.history_panel.upcast_ref())
-                && !contains(this.entry.upcast_ref())
-            {
-                this.hide_history();
-            }
+        // Back to the entry (Esc, a click outside); a chosen folder moves
+        // the focus on to the grid afterwards.
+        let entry = self.entry.clone();
+        self.history_panel.connect_closed(move |_| {
+            entry.grab_focus();
         });
-        self.window.add_controller(click);
     }
 
     fn render_history(self: &Rc<Self>) {
@@ -561,13 +553,13 @@ impl Window {
     }
 
     fn hide_history(&self) {
-        self.history_panel.set_visible(false);
+        self.history_panel.popdown();
     }
 
     // Opens the panel with the current folder's entry focused.
     fn show_history(&self) {
-        self.history_panel.set_width_request(self.entry.width());
-        self.history_panel.set_visible(true);
+        self.history_list.set_width_request(self.entry.width());
+        self.history_panel.popup();
         let directory = self.folder.directory();
         let current = self
             .history
@@ -588,7 +580,6 @@ impl Window {
     fn toggle_history(&self) {
         if self.history_panel.is_visible() {
             self.hide_history();
-            self.entry.grab_focus();
         } else {
             self.show_history();
         }
@@ -784,14 +775,6 @@ impl Window {
 
     // Whether `key` was handled.
     fn key(&self, key: gdk::Key, state: gdk::ModifierType) -> bool {
-        if self.history_panel.is_visible() {
-            if key != gdk::Key::Escape {
-                return false;
-            }
-            self.hide_history();
-            self.entry.grab_focus();
-            return true;
-        }
         if self.editing_directory() {
             if key != gdk::Key::Escape {
                 return false;

@@ -16,21 +16,8 @@ use std::{cell::Cell, path::Path, rc::Rc};
 const APP_ID: &str = "io.github.Rido_o.Vitrine.Spike";
 // The TypeScript app's stylesheet, compiled by build.rs.
 const CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
-// Over it: the selection's outline fades in. The default theme's animated
-// highlight looked choppy next to scrolling, and none at all felt abrupt; only
-// the outline's colour changes, briefly, so a lower frame rate barely shows.
-const SELECTION_CSS: &str = "
-.viewer-library .viewer-grid > child {
-  background: none;
-  outline: 3px solid transparent;
-  outline-offset: -7px;
-  border-radius: 12px;
-  transition: outline-color 120ms ease-out;
-}
-.viewer-library .viewer-grid > child:selected {
-  outline-color: #8eaaaa;
-}
-";
+// The spike's changes to it (overrides.scss), loaded over it.
+const OVERRIDES: &str = include_str!(concat!(env!("OUT_DIR"), "/overrides.css"));
 
 // The symbolic icons (../icons), installed by package.nix.
 const ICONS_DIR: &str = match option_env!("VITRINE_ICONS_DIR") {
@@ -64,7 +51,7 @@ fn main() -> glib::ExitCode {
         let display = gdk::Display::default().expect("a display");
         for (css, priority) in [
             (CSS, gtk::STYLE_PROVIDER_PRIORITY_USER),
-            (SELECTION_CSS, gtk::STYLE_PROVIDER_PRIORITY_USER + 1),
+            (OVERRIDES, gtk::STYLE_PROVIDER_PRIORITY_USER + 1),
         ] {
             let provider = gtk::CssProvider::new();
             provider.load_from_string(css);

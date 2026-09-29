@@ -977,9 +977,7 @@ pub fn ui(window: &gtk::ApplicationWindow) {
         state("open_sub");
         entry.emit_by_name::<()>("icon-release", &[&gtk::EntryIconPosition::Secondary]);
         sleep(300).await;
-        let mut boxes = Vec::new();
-        find_all::<gtk::Box>(&root, &mut boxes);
-        if let Some(panel) = boxes.iter().find(|b| b.has_css_class("viewer-history")) {
+        if let Some(panel) = find::<gtk::Popover>(entry.upcast_ref()) {
             let mut buttons = Vec::new();
             find_all::<gtk::Button>(panel.upcast_ref(), &mut buttons);
             let focused = buttons.iter().position(|b| b.has_focus() || b.is_focus());
@@ -989,8 +987,15 @@ pub fn ui(window: &gtk::ApplicationWindow) {
                 buttons.len()
             );
             shot(&window, "ui-history");
-            press(&window, gdk::Key::Escape);
-            println!("RESULT ui history_escape visible={}", panel.is_visible());
+            // (Esc is the popover's own shortcut, which a probe can't press.)
+            panel.popdown();
+            println!(
+                "RESULT ui history_closed visible={} entry_focused={}",
+                panel.is_visible(),
+                gtk::prelude::GtkWindowExt::focus(&window)
+                    .is_some_and(|focus| focus.is_ancestor(&entry)
+                        || focus == *entry.upcast_ref::<gtk::Widget>())
+            );
         }
         let empty = directory.join("empty");
         if empty.is_dir() {
@@ -1002,7 +1007,9 @@ pub fn ui(window: &gtk::ApplicationWindow) {
             entry.emit_by_name::<()>("icon-release", &[&gtk::EntryIconPosition::Secondary]);
             sleep(300).await;
             shot(&window, "ui-empty-history");
-            press(&window, gdk::Key::Escape);
+            if let Some(panel) = find::<gtk::Popover>(entry.upcast_ref()) {
+                panel.popdown();
+            }
         }
         idle(&window).await;
         finish(&window);

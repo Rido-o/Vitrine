@@ -224,6 +224,11 @@ As the TypeScript app (Window.tsx, Library.ts, History.ts, main.tsx):
   keys (Esc/q or Ctrl+W/Q close the window from the grid, r rescans, e opens;
   typing in the entry is left alone, Esc there puts the folder back). The
   view's file name shows the file in the file manager too.
+- The history panel is a popover under the entry (an overlay over the grid in
+  the TypeScript app, which was buggy with the author's shell at the time):
+  it closes on its own on Esc or a click outside, and stays above the
+  empty folder's label. `overrides.scss` puts the panel's look on the
+  popover's contents.
 - `library.rs` `Folder`: the sorted model and loading. Date and Size start
   with the newest/largest; Random is a hash of the path, reseeded on each
   click; ties by path as bytes (as the TypeScript app's string order). A
@@ -237,7 +242,8 @@ As the TypeScript app (Window.tsx, Library.ts, History.ts, main.tsx):
 - The resolution is read from the file's header on a worker (it was read on
   the main thread in the TypeScript app).
 - Styling: `build.rs` compiles the TypeScript app's `style.scss` (dart-sass)
-  into the binary; only the selection's 120 ms outline fade is overridden.
+  into the binary, with `overrides.scss` over it: the selection's 120 ms
+  outline fade and the history popover.
 - `VITRINE_PROBE=ui` (`BENCH_PROBE=ui bench/run.sh rs warm DIR`) drives
   sorting, subfolders, rescan, the entry, the history and the empty state on
   a small folder and prints what it sees.
