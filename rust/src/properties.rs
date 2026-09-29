@@ -107,11 +107,7 @@ fn render(content: &gtk::Box, sections: Option<Vec<Section>>) {
 
 /// The sections, without empty rows; Camera only with EXIF data.
 pub fn image_properties(path: &Path) -> Vec<Section> {
-    let exif = File::open(path).ok().and_then(|file| {
-        exif::Reader::new()
-            .read_from_container(&mut BufReader::new(file))
-            .ok()
-    });
+    let exif = read_exif(path);
     [
         ("File", file_rows(path)),
         ("Image", image_rows(path, exif.as_ref())),
@@ -205,6 +201,31 @@ fn orientation_name(orientation: u32) -> Option<&'static str> {
         7 => "Rotated 90° counter-clockwise and flipped",
         8 => "Rotated 90° counter-clockwise",
         _ => return None,
+    })
+}
+
+fn read_exif(path: &Path) -> Option<Exif> {
+    let file = File::open(path).ok()?;
+    exif::Reader::new()
+        .read_from_container(&mut BufReader::new(file))
+        .ok()
+}
+
+/// Width × height as shown: the header's, swapped for EXIF orientations 5–8
+/// (the info bar; as Dimensions here).
+pub fn shown_size(path: &Path) -> Option<(i32, i32)> {
+    let (_, width, height) = Pixbuf::file_info(path)?;
+    let orientation = read_exif(path)
+        .and_then(|exif| {
+            exif.get_field(Tag::Orientation, In::PRIMARY)?
+                .value
+                .get_uint(0)
+        })
+        .unwrap_or(1);
+    Some(if orientation >= 5 {
+        (height, width)
+    } else {
+        (width, height)
     })
 }
 

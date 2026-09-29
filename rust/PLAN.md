@@ -347,9 +347,9 @@ As Properties.ts and PropertiesPopover.ts:
   `exiv2 -Pkt` on a synthetic photo with every tag.
 - An i button in the toolbar and in the view's controls (which stay while
   it's open); i toggles the current page's.
-- Kept from the TypeScript app: the info bar's resolution is the stored size,
-  so a rotated photo reads 1188 × 574 there and 574 × 1188 in the view and
-  the popover.
+- The info bar's resolution is the size as shown too (the TypeScript app
+  gives the stored size, so a rotated photo read 1188 × 574 there and
+  574 × 1188 in the view and the popover).
 
 ## Maybe: uploading off the main thread
 

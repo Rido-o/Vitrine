@@ -1319,6 +1319,7 @@ pub fn ui(window: &gtk::ApplicationWindow) {
                     "RESULT ui properties {name} view={view} rows={:?}",
                     rows(view)
                 );
+                state(&format!("properties_{name}_view={view}"));
                 shot(
                     &window,
                     &format!(

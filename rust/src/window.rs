@@ -730,12 +730,10 @@ impl Window {
         let (weak, path) = (Rc::downgrade(self), path.to_owned());
         glib::spawn_future_local(async move {
             let read = path.clone();
-            let size = gio::spawn_blocking(move || {
-                gtk::gdk_pixbuf::Pixbuf::file_info(&read).map(|(_, width, height)| (width, height))
-            })
-            .await
-            .ok()
-            .flatten();
+            let size = gio::spawn_blocking(move || crate::properties::shown_size(&read))
+                .await
+                .ok()
+                .flatten();
             let Some(this) = weak.upgrade() else { return };
             this.resolutions.borrow_mut().insert(path.clone(), size);
             if this.selected_path().as_ref() == Some(&path) {
