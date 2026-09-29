@@ -1,6 +1,7 @@
 {
   lib,
   rustPlatform,
+  dart-sass,
   pkg-config,
   wrapGAppsHook4,
   gdk-pixbuf,
@@ -15,13 +16,25 @@ rustPlatform.buildRustPackage {
   pname = "vitrine-rs";
   version = "0.1.0";
 
+  # The crate, plus the TypeScript app's stylesheet (compiled in by build.rs)
+  # and icons.
   src = lib.fileset.toSource {
-    root = ./.;
-    fileset = lib.fileset.unions [./Cargo.toml ./Cargo.lock ./src];
+    root = ../.;
+    fileset = lib.fileset.unions [
+      ./Cargo.toml
+      ./Cargo.lock
+      ./build.rs
+      ./src
+      ../src/style.scss
+      ../src/theme.scss
+      ../icons
+    ];
   };
+  cargoRoot = "rust";
+  buildAndTestSubdir = "rust";
   cargoLock.lockFile = ./Cargo.lock;
 
-  nativeBuildInputs = [pkg-config wrapGAppsHook4];
+  nativeBuildInputs = [dart-sass pkg-config wrapGAppsHook4];
   buildInputs = [gdk-pixbuf gtk4 libjpeg_turbo webp-pixbuf-loader];
 
   # The TypeScript app's symbolic icons, found through this (main.rs).
@@ -30,7 +43,7 @@ rustPlatform.buildRustPackage {
   # As in ../package.nix: our own loaders.cache, so GdkPixbuf reads WebP.
   postInstall = ''
     mkdir -p $out/share/vitrine-rs
-    cp -r ${../icons} $out/share/vitrine-rs/icons
+    cp -r icons $out/share/vitrine-rs/icons
 
     cache=$out/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
     mkdir -p $(dirname $cache)

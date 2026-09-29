@@ -5,7 +5,12 @@
 
 use crate::{autohide::AutoHide, preview::Preview};
 use gtk::{gdk, prelude::*};
-use std::{cell::Cell, path::Path, rc::Rc, time::Duration};
+use std::{
+    cell::{Cell, RefCell},
+    path::{Path, PathBuf},
+    rc::Rc,
+    time::Duration,
+};
 
 const HIDE_CONTROLS_AFTER: Duration = Duration::from_secs(2);
 
@@ -65,6 +70,11 @@ impl View {
             .ellipsize(gtk::pango::EllipsizeMode::Middle)
             .max_width_chars(60)
             .build();
+        let filename_button = gtk::Button::builder()
+            .css_classes(["flat", "viewer-filename-button"])
+            .tooltip_text("Show in file manager")
+            .child(&filename)
+            .build();
         let resolution = gtk::Label::builder().label("0 × 0").build();
         let info = gtk::Box::builder()
             .css_classes(["preview-image-info", "preview-controls"])
@@ -73,7 +83,7 @@ impl View {
             .margin_bottom(24)
             .spacing(8)
             .build();
-        info.append(&filename);
+        info.append(&filename_button);
         info.append(&resolution);
         page.add_overlay(&info);
 
@@ -90,7 +100,15 @@ impl View {
         autohide.add(&info);
         autohide.watch(&page);
 
+        let shown: Rc<RefCell<Option<PathBuf>>> = Rc::default();
+        let shown_ = shown.clone();
+        filename_button.connect_clicked(move |_| {
+            if let Some(path) = shown_.borrow().as_deref() {
+                crate::window::show_in_file_manager(path);
+            }
+        });
         preview.connect_info(move |path: &Path, full: Option<(u32, u32)>| {
+            *shown.borrow_mut() = Some(path.to_owned());
             let name = path
                 .file_name()
                 .map(|name| name.to_string_lossy().into_owned());

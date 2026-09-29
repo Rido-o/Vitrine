@@ -22,6 +22,14 @@ saved too, in device pixels (NAME-device.png), to compare with the texture at
 display scales above 1. `BENCH_SWAY_EXTRA` adds lines to the headless sway's
 config (e.g. `default_border none`, so the window is at the output's corner).
 
+Both apps include subfolders (the spike is passed `-r`; `BENCH_ARGS` replaces
+the arguments before the folder, which can also be a file).
+`BENCH_PROBE=ui BENCH_ARGS= bench/run.sh rs warm DIR` runs the spike's UI
+check instead of the benchmark: sorting, subfolders, the folder entry and
+its history and the empty state on a small folder (rescan too, adding and
+removing files, only if DIR holds a `.vitrine-probe-scratch` file), printed
+as `ui` lines, with screenshots under `VITRINE_PROBE_SHOTS`.
+
 `BENCH_REAL_CACHE=1` runs with the app's real cache and state instead of the
 benchmark's (e.g. `bench/run.sh rs warm ~/Pictures` on a folder whose
 thumbnails exist).
@@ -78,6 +86,7 @@ In order, in one run:
 | `fill_first` | the first screen's thumbnails | `fill_ms`, `top_px` and `selected` (spike: where the grid is once loaded; 0 and 0 expected) |
 | `scroll` | top to bottom at 4,000 px/s, then until every bound tile has a thumbnail | `scroll_ms`, `fill_after_ms` |
 | `jump` | to the middle in one step, until filled | `fill_ms` |
+| `sort` | spike only: click Date, Size, Random, Name, 300 ms apart | `date_us` etc. (each click on the main thread), `kept` (clicks after which the same image was still selected; 4 expected) |
 | `open` | activate the first image (from the top), 1.5 s | `placeholder_ms`, `sharp_ms` |
 | `hold` | → 60 times at 30/s, then until the last image is sharp | `last_sharp_ms` |
 | `close` | Esc, 1 s | |

@@ -493,6 +493,36 @@ pub fn run(window: &gtk::ApplicationWindow) {
         let fill = wait_until(FILL_TIMEOUT_MS, || tiles_filled(&grid)).await;
         recorder.finish("jump", &format!("fill_ms={fill}"));
 
+        // sort: by date, size, random, then name again, each keeping the
+        // selected image selected.
+        {
+            let selection = grid
+                .model()
+                .and_downcast::<gtk::SingleSelection>()
+                .expect("the grid's model is a SingleSelection");
+            let selected_path = || {
+                selection
+                    .selected_item()
+                    .and_downcast::<glib::BoxedAnyObject>()
+                    .map(|object| object.borrow::<crate::library::Image>().path.clone())
+            };
+            let before = selected_path();
+            let recorder = Recorder::start(&window);
+            let (mut times, mut kept) = (Vec::new(), 0);
+            for label in ["Date", "Size", "Random", "Name"] {
+                let Some(button) = button(&root, label) else {
+                    continue;
+                };
+                let started = glib::monotonic_time();
+                button.emit_clicked();
+                let took = glib::monotonic_time() - started;
+                times.push(format!("{}_us={took}", label.to_lowercase()));
+                kept += (selected_path() == before) as u32;
+                sleep(300).await;
+            }
+            recorder.finish("sort", &format!("{} kept={kept}", times.join(" ")));
+        }
+
         // open: from the top, the first image.
         adjustment.set_value(0.0);
         // Let the grid rebind its tiles first (they still show the middle).
@@ -748,6 +778,15 @@ fn press(window: &gtk::ApplicationWindow, key: gdk::Key) {
     }
 }
 
+// The first button labelled `label`.
+fn button(root: &gtk::Widget, label: &str) -> Option<gtk::Button> {
+    let mut buttons = Vec::new();
+    find_all::<gtk::Button>(root, &mut buttons);
+    buttons
+        .into_iter()
+        .find(|button| button.label().as_deref() == Some(label))
+}
+
 async fn wait_for_grid(root: &gtk::Widget) -> Option<gtk::GridView> {
     for _ in 0..100 {
         if let Some(grid) = find::<gtk::GridView>(root) {
@@ -791,4 +830,177 @@ fn finish(window: &gtk::ApplicationWindow) {
     if let Some(app) = window.application() {
         app.quit();
     }
+}
+
+/// VITRINE_PROBE=ui: drives the grid's chrome (sorting, subfolders, rescan,
+/// the folder entry and its history, the empty state) on a small folder and
+/// prints what it sees, as `RESULT ui …` lines. Only in a folder holding a
+/// `.vitrine-probe-scratch` file does it add and remove files (for rescan).
+pub fn ui(window: &gtk::ApplicationWindow) {
+    let window = window.clone();
+    glib::spawn_future_local(async move {
+        let root: gtk::Widget = window.clone().upcast();
+        let start = glib::monotonic_time();
+        let Some(grid) = wait_for_grid(&root).await else {
+            println!("RESULT ui no_grid");
+            return finish(&window);
+        };
+        wait_for_scan(&grid, start).await;
+        let selection = grid
+            .model()
+            .and_downcast::<gtk::SingleSelection>()
+            .expect("the grid's model is a SingleSelection");
+        let name_at = |i: u32| {
+            selection
+                .item(i)
+                .and_downcast::<glib::BoxedAnyObject>()
+                .map(|object| {
+                    let image = object.borrow::<crate::library::Image>();
+                    image
+                        .path
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned()
+                })
+                .unwrap_or_default()
+        };
+        let state = |what: &str| {
+            let names: Vec<String> = (0..selection.n_items().min(4)).map(name_at).collect();
+            let mut labels = Vec::new();
+            find_all::<gtk::Label>(&root, &mut labels);
+            let info: Vec<String> = labels
+                .iter()
+                .filter(|label| {
+                    label.is_drawable()
+                        && label
+                            .ancestor(gtk::Box::static_type())
+                            .is_some_and(|parent| {
+                                parent.has_css_class("viewer-info")
+                                    || parent
+                                        .parent()
+                                        .is_some_and(|p| p.has_css_class("viewer-info"))
+                                    || parent.has_css_class("viewer-empty")
+                            })
+                })
+                .map(|label| label.label().to_string())
+                .collect();
+            let empty = labels
+                .iter()
+                .find(|label| label.has_css_class("viewer-empty") && label.is_visible())
+                .map(|label| label.label().to_string());
+            println!(
+                "RESULT ui {what} page={:?} items={} first={names:?} selected={:?} title={:?} info={info:?} empty={empty:?}",
+                find::<gtk::Stack>(&root)
+                    .and_then(|stack| stack.visible_child_name())
+                    .unwrap_or_default(),
+                selection.n_items(),
+                name_at(selection.selected()),
+                window.title().unwrap_or_default(),
+            );
+        };
+        sleep(500).await;
+        state("load");
+        shot(&window, "ui-grid");
+
+        selection.set_selected(4);
+        sleep(300).await;
+        state("select_5th");
+        for label in ["Date", "Size", "Random", "Random", "Name"] {
+            if let Some(button) = button(&root, label) {
+                button.emit_clicked();
+            }
+            sleep(200).await;
+            state(&format!("sort_{label}"));
+        }
+        if let Some(button) = button(&root, "↑") {
+            button.emit_clicked();
+            sleep(200).await;
+            state("direction");
+            button.emit_clicked();
+        }
+
+        let count = selection.n_items();
+        if let Some(subfolders) = button(&root, "Subfolders").and_downcast::<gtk::ToggleButton>() {
+            subfolders.set_active(true);
+            wait_until(3000, || selection.n_items() != count).await;
+            sleep(500).await;
+            state("subfolders_on");
+            shot(&window, "ui-subfolders");
+        }
+
+        let directory = crate::library::image(&selection.item(0).unwrap())
+            .path
+            .clone();
+        let directory = directory.parent().unwrap().to_owned();
+        let directory = if directory.ends_with("sub") {
+            directory.parent().unwrap().to_owned()
+        } else {
+            directory
+        };
+        if directory.join(".vitrine-probe-scratch").exists() {
+            let added = directory.join("img-00-added.jpg");
+            let removed = directory.join("img-02-orange.jpg");
+            let _ = std::fs::copy(directory.join("img-01-red.jpg"), &added);
+            let kept = directory.join("img-02-kept.jpg");
+            let _ = std::fs::rename(&removed, &kept);
+            selection.set_selected(2);
+            sleep(200).await;
+            state("before_rescan");
+            press(&window, gdk::Key::r);
+            sleep(1000).await;
+            state("rescan");
+            let _ = std::fs::remove_file(&added);
+            let _ = std::fs::rename(&kept, &removed);
+            press(&window, gdk::Key::r);
+            sleep(1000).await;
+            state("rescan_back");
+        }
+
+        let entry = find::<gtk::Entry>(&root).expect("the folder entry");
+        entry.set_text("/nonexistent");
+        entry.emit_activate();
+        println!(
+            "RESULT ui bad_folder error={}",
+            entry.has_css_class("error")
+        );
+        entry.grab_focus();
+        press(&window, gdk::Key::Escape);
+        println!(
+            "RESULT ui escape_resets text={:?} error={}",
+            entry.text(),
+            entry.has_css_class("error")
+        );
+        entry.set_text(&format!("{}/sub", directory.display()));
+        entry.emit_activate();
+        sleep(800).await;
+        state("open_sub");
+        entry.emit_by_name::<()>("icon-release", &[&gtk::EntryIconPosition::Secondary]);
+        sleep(300).await;
+        let mut boxes = Vec::new();
+        find_all::<gtk::Box>(&root, &mut boxes);
+        if let Some(panel) = boxes.iter().find(|b| b.has_css_class("viewer-history")) {
+            let mut buttons = Vec::new();
+            find_all::<gtk::Button>(panel.upcast_ref(), &mut buttons);
+            let focused = buttons.iter().position(|b| b.has_focus() || b.is_focus());
+            println!(
+                "RESULT ui history visible={} entries={} focused={focused:?}",
+                panel.is_visible(),
+                buttons.len()
+            );
+            shot(&window, "ui-history");
+            press(&window, gdk::Key::Escape);
+            println!("RESULT ui history_escape visible={}", panel.is_visible());
+        }
+        let empty = directory.join("empty");
+        if empty.is_dir() {
+            entry.set_text(&empty.to_string_lossy());
+            entry.emit_activate();
+            sleep(500).await;
+            state("empty");
+            shot(&window, "ui-empty");
+        }
+        idle(&window).await;
+        finish(&window);
+    });
 }

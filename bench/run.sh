@@ -7,6 +7,7 @@
 # display to use instead (e.g. to watch it). BENCH_WRAP prefixes the app's
 # command, e.g. BENCH_WRAP="perf record -g -o /tmp/perf.data".
 # BENCH_LOG=FILE keeps the app's whole output.
+# BENCH_PROBE=ui runs the spike's UI check instead (rust/src/probe.rs).
 set -euo pipefail
 
 app=${1:?usage: run.sh ts|rs [cold|warm] [CORPUS_DIR]}
@@ -18,13 +19,17 @@ output=${BENCH_OUTPUT:-1920x1080@60Hz}
 scale=${BENCH_SCALE:-1}
 hz=${output##*@}
 hz=${hz%Hz}
-[[ -d $corpus ]] || { echo "no corpus at $corpus (bench/make-corpus.sh)" >&2; exit 1; }
+[[ -e $corpus ]] || { echo "no corpus at $corpus (bench/make-corpus.sh)" >&2; exit 1; }
 
 case $app in
-  ts) out=$(nix build --no-link --print-out-paths .#bench-ts); bin=$out/bin/vitrine ;;
-  rs) out=$(nix build --no-link --print-out-paths .#spike); bin=$out/bin/vitrine-rs ;;
+  ts) args=(); out=$(nix build --no-link --print-out-paths .#bench-ts); bin=$out/bin/vitrine ;;
+  # The TypeScript probe always includes subfolders; the spike needs -r.
+  rs) out=$(nix build --no-link --print-out-paths .#spike); bin=$out/bin/vitrine-rs; args=(-r) ;;
   *) echo "app must be ts or rs" >&2; exit 1 ;;
 esac
+# BENCH_ARGS replaces the arguments before the folder (e.g. BENCH_ARGS= for
+# the spike without -r).
+[[ -v BENCH_ARGS ]] && read -ra args <<< "$BENCH_ARGS"
 
 # Each app gets its own cache and state, away from the real ones.
 home=$bench/home-$app
@@ -74,5 +79,5 @@ fi
 
 echo "# $app $mode $output scale $scale $(date -Iseconds) $(git rev-parse --short HEAD)"
 WAYLAND_DISPLAY=$display \
-  VITRINE_PROBE=1 VITRINE_PROBE_HZ=$hz ${BENCH_WRAP:-} "$bin" "$corpus" 2>&1 |
+  VITRINE_PROBE=${BENCH_PROBE:-1} VITRINE_PROBE_HZ=$hz ${BENCH_WRAP:-} "$bin" "${args[@]}" "$corpus" 2>&1 |
   tee "${BENCH_LOG:-/dev/null}" | grep "^RESULT" | sed "s/^RESULT //"

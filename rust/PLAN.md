@@ -17,12 +17,13 @@ In: recursive scan of a folder given on the command line; a scrollable grid
 with generated, disk-cached thumbnails; a full-screen view (Enter or
 double-click, Esc back, ←/→ with preloading).
 
-Out until later: sorting options, history and the directory entry, trash and
-undo, properties, wallpaper, menus and shortcuts, file watching,
-zoom/pan/rotate, GIF playback, the Home Manager module, most styling.
+Since ported: the full-screen view (batch 2) and the grid's chrome (batch 1).
+Out until later: trash and undo, properties, wallpaper, menus and shortcuts,
+file watching, the Home Manager module, the styling pass.
 
-Own app ID (`io.github.Rido_o.Vitrine.Spike`) and cache
-(`~/.cache/vitrine-spike/`), so the real app's data is untouched.
+Own app ID (`io.github.Rido_o.Vitrine.Spike`), cache
+(`~/.cache/vitrine-spike/`) and history (`~/.local/state/vitrine-spike/`),
+so the real app's data is untouched.
 
 ## Principles
 
@@ -208,6 +209,45 @@ Window.tsx), instant zoom steps, no pinch:
   double-click, edge clicks, dragging, cursors, the controls coming back on
   movement. Peak memory rises by the zoomed image's tiles (a 48 MP image is
   ~190 MB of tiles, twice that briefly while splitting).
+
+## Port batch 1: the grid's chrome
+
+As the TypeScript app (Window.tsx, Library.ts, History.ts, main.tsx):
+
+- Command line `[-r] [DIR|FILE]`: subfolders only with `-r` (was always);
+  no argument opens ~/Pictures (or the current folder); a file opens its
+  folder with the file in the view at once, selected once the scan finds it.
+- `window.rs` (split out of `main.rs`): the toolbar (folder entry with its
+  history panel, Name/Date/Size/Random and the direction, Subfolders, close),
+  the info bar (file name, which shows the file in the file manager;
+  resolution; Rescan; View), the empty folder's label, the title, and the
+  keys (Esc/q or Ctrl+W/Q close the window from the grid, r rescans, e opens;
+  typing in the entry is left alone, Esc there puts the folder back). The
+  view's file name shows the file in the file manager too.
+- `library.rs` `Folder`: the sorted model and loading. Date and Size start
+  with the newest/largest; Random is a hash of the path, reseeded on each
+  click; ties by path as bytes (as the TypeScript app's string order). A
+  sort change re-sorts at once (not incrementally) so the selected image
+  stays selected and in view. Rescan compares with the list and only removes,
+  adds and replaces what changed, then puts the selection back (the same
+  image, else the one now in its place), without scrolling. Superseded loads
+  stop their walk.
+- `history.rs`: the last 10 folders, in the spike's own state file, filled
+  from the TypeScript app's the first time.
+- The resolution is read from the file's header on a worker (it was read on
+  the main thread in the TypeScript app).
+- Styling: `build.rs` compiles the TypeScript app's `style.scss` (dart-sass)
+  into the binary; only the selection's 120 ms outline fade is overridden.
+- `VITRINE_PROBE=ui` (`BENCH_PROBE=ui bench/run.sh rs warm DIR`) drives
+  sorting, subfolders, rescan, the entry, the history and the empty state on
+  a small folder and prints what it sees.
+- **Result** (4K, 144 Hz, 1.5×, warm, GL): a re-sort of the 3,010-image
+  corpus takes 5–13 ms on the main thread (Random the most, hashing paths),
+  so 1–2 late frames per click, like the TypeScript app's synchronous sort.
+  Opening now fills the first screen at once (it took ~640 ms), concentrating
+  that work into the first frames: 40–80 ms of stalls while the window
+  appears, the same with or without the stylesheet. The rest as batch 2 or
+  better (holding →: last image sharp 60 ms after the last press, was 105).
 
 ## Maybe: uploading off the main thread
 
