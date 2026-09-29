@@ -1,27 +1,16 @@
 {
   lib,
-  stdenv,
-  runtimeShell,
+  rustPlatform,
   makeDesktopItem,
   dart-sass,
-  esbuild,
-  gobject-introspection,
+  pkg-config,
   wrapGAppsHook4,
   gdk-pixbuf,
-  gexiv2_0_16,
-  glycin-loaders,
-  gjs,
-  glib,
   gtk4,
+  libjpeg_turbo,
   librsvg,
   shared-mime-info,
-  libglycin,
-  libglycin-gtk4,
   webp-pixbuf-loader,
-  gnim,
-  # Bundle bench/probe-ts.tsx (the benchmark, see bench/README.md) instead of
-  # the app's own entry.
-  probe ? false,
 }: let
   appId = "io.github.Rido_o.Vitrine";
   mimeTypes = ["image/gif" "image/jpeg" "image/png" "image/tiff" "image/webp"];
@@ -37,72 +26,36 @@
     startupWMClass = appId;
   };
 in
-  stdenv.mkDerivation {
-    pname =
-      if probe
-      then "vitrine-bench"
-      else "vitrine";
+  rustPlatform.buildRustPackage {
+    pname = "vitrine";
     version = "0.1.0";
 
     src = lib.fileset.toSource {
       root = ./.;
-      fileset = lib.fileset.unions ([./src ./icons] ++ lib.optional probe ./bench/probe-ts.tsx);
+      fileset = lib.fileset.unions [
+        ./Cargo.toml
+        ./Cargo.lock
+        ./build.rs
+        ./src
+        ./style
+        ./icons
+      ];
     };
+    cargoLock.lockFile = ./Cargo.lock;
 
-    nativeBuildInputs = [
-      dart-sass
-      esbuild
-      gobject-introspection
-      wrapGAppsHook4
-    ];
+    nativeBuildInputs = [dart-sass pkg-config wrapGAppsHook4];
+    buildInputs = [gdk-pixbuf gtk4 libjpeg_turbo webp-pixbuf-loader];
 
-    buildInputs = [
-      gdk-pixbuf
-      gexiv2_0_16
-      libglycin
-      libglycin-gtk4
-      gjs
-      glib
-      gtk4
-      webp-pixbuf-loader
-    ];
+    # The symbolic icons, found through this (main.rs).
+    env.VITRINE_ICONS_DIR = "${placeholder "out"}/share/vitrine/icons";
 
-    buildPhase = ''
-      runHook preBuild
-
-      # gnim's package.json exports ./dist, which its build copies from ./src
-      mkdir -p node_modules
-      cp -r ${gnim} node_modules/gnim
-      chmod -R u+w node_modules/gnim
-      ln -s src node_modules/gnim/dist
-
-      sass --no-source-map src/style.scss src/style.css
-
-      esbuild ${
-        if probe
-        then "bench/probe-ts.tsx"
-        else "src/main.tsx"
-      } \
-        --bundle --format=esm --outfile=main.js \
-        --external:'gi://*' --external:'resource://*' \
-        --external:system --external:gettext --external:cairo \
-        --jsx=automatic --jsx-import-source=gnim/gtk4 \
-        --loader:.css=text \
-        --define:ICONS_DIR="'$out/share/vitrine/icons'"
-
-      runHook postBuild
-    '';
-
-    installPhase = ''
-      runHook preInstall
-
-      mkdir -p $out/bin $out/share/vitrine
-      cp main.js $out/share/vitrine/
-      cp -r icons $out/share/vitrine/
+    # Our own loaders.cache, so GdkPixbuf reads WebP (webp-pixbuf-loader isn't
+    # in gdk-pixbuf's default cache) and SVG.
+    postInstall = ''
+      mkdir -p $out/share/vitrine
+      cp -r icons $out/share/vitrine/icons
       cp -r ${desktopItem}/share/applications $out/share/
 
-      # wrapGAppsHook points GdkPixbuf at librsvg's loaders.cache, which has
-      # no WebP; build one with the webp loader too (used for thumbnails).
       cache=$out/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
       mkdir -p $(dirname $cache)
       ${gdk-pixbuf.dev}/bin/gdk-pixbuf-query-loaders \
@@ -110,32 +63,21 @@ in
         ${librsvg}/lib/gdk-pixbuf-2.0/2.10.0/loaders/*.so \
         ${webp-pixbuf-loader}/lib/gdk-pixbuf-2.0/2.10.0/loaders/*.so \
         > $cache
-
-      cat > $out/bin/vitrine <<EOF
-      #!${runtimeShell}
-      exec ${gjs}/bin/gjs -m $out/share/vitrine/main.js "\$@"
-      EOF
-      chmod +x $out/bin/vitrine
-
-      runHook postInstall
     '';
 
-    # Wrap by hand so our loaders.cache comes after (and overrides) the hook's
-    # own GDK_PIXBUF_MODULE_FILE. glycin finds its loaders on XDG_DATA_DIRS and
-    # needs the MIME database to pick one (the session's comes first).
+    # Wrapped by hand to point GdkPixbuf at that cache (wrapGAppsHook4's
+    # wrapper alone would use the default one).
     dontWrapGApps = true;
     postFixup = ''
       wrapProgram $out/bin/vitrine "''${gappsWrapperArgs[@]}" \
         --set GDK_PIXBUF_MODULE_FILE $out/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache \
-        --prefix XDG_DATA_DIRS : ${glycin-loaders}/share \
         --suffix XDG_DATA_DIRS : ${shared-mime-info}/share
     '';
 
     passthru = {inherit appId mimeTypes;};
 
     meta = {
-      description = "GTK4 image viewer and wallpaper picker";
-      homepage = "https://github.com/Rido-o/Vitrine";
+      description = "A GTK4 image viewer and wallpaper picker";
       mainProgram = "vitrine";
       platforms = lib.platforms.linux;
     };

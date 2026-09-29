@@ -2,68 +2,71 @@
 
 [![Check](https://github.com/Rido-o/Vitrine/actions/workflows/check.yml/badge.svg)](https://github.com/Rido-o/Vitrine/actions/workflows/check.yml)
 
-A GTK4 image viewer and wallpaper picker for Linux, written in TypeScript for
-GJS with [gnim](https://github.com/aylur/gnim) for JSX. Browse a folder as a
-thumbnail grid, open images full-screen with zoom and pan, and set any image as
-your wallpaper with a command of your choice.
+A GTK4 image viewer and wallpaper picker for Linux, written in Rust with
+[gtk4-rs](https://gtk-rs.org). Browse a folder as a thumbnail grid, open images
+full-screen with zoom and pan, and set any image as your wallpaper with a
+command of your choice.
 
 ## Features
 
-- **Thumbnail grid** with an on-disk thumbnail cache and lazy,
-  concurrency-limited loading; the thumbnails of the tiles the grid has bound
-  (the rows around the viewport, ~390) plus at most 100 more stay in memory,
-  so memory stays bounded in huge folders. Thumbnails being generated go
-  newest first and are skipped once scrolled past, so the tiles you stop on
-  appear straight away; once a folder is scanned, its other missing thumbnails
-  are generated in the background (2 at a time, only while no tile is
-  waiting). Images smaller than a thumbnail keep their size. Folders are scanned in the
-  background (4 folders at a time), so the window opens immediately and the
-  grid fills in as images are found, even for large folders over NFS. It
-  refreshes itself when images are added, removed, renamed or edited (Gio file
-  monitors on up to 1,000 folders, at most one rescan a second); changes made
-  on another machine, e.g. directly on an NFS server, aren't seen, so press
-  `r` for those.
-- **Top bar**: a folder entry (`~` works) with a history of the last 10
+- **Thumbnail grid** with an on-disk thumbnail cache. Thumbnails are loaded or
+  generated on worker threads (one per core but one, at low priority): the
+  tiles you stop on come first, and ones scrolled past are skipped. Once a
+  folder is scanned, its other missing thumbnails are generated in the
+  background while no tile is waiting. The thumbnails of the tiles the grid
+  has bound (the rows around the viewport, ~390) plus at most 100 more stay in
+  memory, so memory stays bounded in huge folders. Images smaller than a
+  thumbnail keep their size. Folders are scanned on a thread, so the window
+  opens immediately and the grid fills in as images are found. It refreshes
+  itself when images are added, removed, renamed or edited (file monitors on
+  up to 1,000 folders, at most one rescan a second); changes made on another
+  machine, e.g. directly on an NFS server, aren't seen, so press `r` (or use
+  the ⋯ menu) for those.
+- **Top bar**: a folder entry (`~` works) with a popover of the last 10
   folders; a sort pill with Name (full path), Date modified, Size and Random
   (click again to reshuffle), and ↑/↓ to flip the direction (Date and Size
   start descending); a Subfolders toggle; and, on the right, image properties
   (i), more actions (⋯) and close.
 - **Info bar**: the filename (click to show it in your file manager over
-  `org.freedesktop.FileManager1`), resolution, rescan, view and Set wallpaper.
+  `org.freedesktop.FileManager1`), its resolution (as shown, after EXIF
+  rotation) and View.
 - **Full-screen view**: scroll to zoom around the cursor (from fit up to 8×
   actual pixels), drag to pan, click the left/right edge (a sixth of the width)
   for the previous/next image, double-click (the middle) to toggle fit/100%,
   `s` for sharp (nearest-neighbour) pixels, `[`/`]` to rotate and `h`/`v` to
   flip (also in the ⋯ menu; only the view changes, never the file, and it
-  resets for the next image), and a button (or `f`) to make the
-  window fullscreen; leaving the view restores it. When fullscreen, the buttons,
-  info and cursor fade out after 2 s without mouse movement (not while the
-  pointer is on them or a menu is open). Images are drawn with GTK's
-  default filter, snapped to whole device pixels. The two images on each side are decoded in
-  the background, so ←/→ are instant, and decoding never freezes the window.
-  While an image is still decoding (e.g. holding an arrow key) its thumbnail
-  is shown, then swapped for the full image.
+  resets for the next image), and a button (or `f`) to make the window
+  fullscreen; leaving the view restores it. When fullscreen, the buttons, info
+  and cursor fade out after 2 s without mouse movement (not while the pointer
+  is on them or a menu is open). An image is decoded at the view's size in
+  device pixels and drawn at exactly those pixels at fit; zooming past it
+  decodes the full resolution into tiles, of which only the visible ones are
+  drawn. The two images on each side are decoded in the background, so ←/→
+  are instant, and the image selected in the grid is decoded before you open
+  it. While an image is still decoding (e.g. holding an arrow key) its
+  thumbnail is shown, then swapped for the full image. Nothing decodes on the
+  main thread.
 - **Image properties** (the i button on either screen, or `i`): name, folder,
   size, type and dates; dimensions (as shown, after EXIF rotation), megapixels,
   format and orientation; and, when the file has EXIF, the camera, lens,
   exposure, aperture, ISO, focal length, flash, date taken, GPS location,
-  software, artist and copyright (read with gexiv2). Values can be selected
-  to copy them.
+  software, artist and copyright (read with kamadak-exif, written as exiv2
+  prints them). Values can be selected to copy them.
 - **More actions** (the ⋯ button on either screen): Copy image (`Ctrl+C`; the
-  full image, or a GIF's first frame), Copy path (`Ctrl+Shift+C`), Show in
-  file manager, Rescan folder and Keyboard shortcuts (`?`, a window listing
-  every key). On Wayland the clipboard is served by Vitrine, so a copy lasts
-  only while it's open unless a clipboard manager keeps it.
-- **Set wallpaper** (button or `w`) runs a configurable command with the image
-  path and shows a "Wallpaper set" toast; the viewer stays open.
+  full image, or a GIF's first frame), Copy path (`Ctrl+Shift+C`), Set as
+  wallpaper (`w`, with a wallpaper command), Show in file manager, Rescan
+  folder and Keyboard shortcuts (`?`, a window listing every key). On Wayland
+  the clipboard is served by Vitrine, so a copy lasts only while it's open
+  unless a clipboard manager keeps it.
+- **Set as wallpaper** runs a configurable command with the image path and
+  shows a "Wallpaper set" toast; the viewer stays open.
 - **Delete** moves the image to the trash, and **Ctrl+Z** (or the toast's Undo)
   restores it, repeatedly back through every delete in the window. Both need
   [GVfs](https://gitlab.gnome.org/GNOME/gvfs) (its `trash:///`), which most
   full desktops run; without it they're disabled.
 - JPEG, PNG, WebP, TIFF and GIF (animated GIFs play in the full-screen view;
   thumbnails show the first frame); a desktop entry registers Vitrine for
-  those types.
-  Photos are shown upright: the EXIF orientation is applied.
+  those types. Photos are shown upright: the EXIF orientation is applied.
 
 ## Usage
 
@@ -79,15 +82,16 @@ Keys (grid unless noted):
 | Key | Does |
 | --- | --- |
 | Enter, `e`, double-click | Open in the full-screen view |
-| `w` | Set as wallpaper (grid and view) |
+| `w` | Set as wallpaper, with a wallpaper command (grid and view) |
 | `i` | Image properties (grid and view) |
 | Ctrl+C, Ctrl+Shift+C | Copy the image, or its path (grid and view) |
 | `?` | Keyboard shortcuts (grid and view) |
-| `r` | Rescan |
-| Delete | Move to trash (needs GVfs) |
+| `r` | Rescan (grid and view) |
+| Delete | Move to trash, needs GVfs (grid and view) |
 | Ctrl+Z | Undo the last delete; repeat to go further back (grid and view) |
 | Ctrl+W, Ctrl+Q | Close the window (grid and view) |
 | Esc, `q` | Close the view, or quit from the grid |
+| ↓ (folder entry) | Open the folder history; Esc puts the entry back |
 | ←/→ (view) | Previous/next image |
 | click the left/right sixth (view, at fit) | Previous/next image; the cursor shows an arrow there |
 | scroll, drag (view) | Zoom around the cursor, pan when zoomed in |
@@ -100,20 +104,20 @@ Keys (grid unless noted):
 
 Files:
 
-- Thumbnails: `~/.cache/vitrine/thumbnails-2`. JPEG, or PNG for images with
-  transparent pixels (earlier JPEG thumbnails of PNG, WebP, GIF and TIFF
-  images lost their transparency, so those are regenerated under new names).
-  A thumbnail is refreshed when it's used, and a few seconds after launch
-  Vitrine deletes any not used for 90 days, so thumbnails of edited, moved or
-  deleted images don't pile up.
-- Folder history: `~/.local/state/vitrine/history`
+- Thumbnails: `~/.cache/vitrine/thumbnails-3`, fitting 440×320: JPEG, or PNG
+  for images with transparent pixels, named after the image's path and
+  modification time. A thumbnail is refreshed when it's used, and a few
+  seconds after launch Vitrine deletes any not used for 90 days, so
+  thumbnails of edited, moved or deleted images don't pile up.
+- Folder history: `~/.local/state/vitrine/history`.
 
 With NVIDIA's driver loaded, Vitrine uses GTK's GL renderer (see "Gotchas");
 set `GSK_RENDERER` to override it (e.g. `GSK_RENDERER=vulkan`).
 
-(The shard-view era's folder history is moved over once. Older thumbnail
-caches, `~/.cache/vitrine/thumbnails` and `~/.cache/shard-view`, held unrotated
-thumbnails and are deleted in the background.)
+(Earlier versions' thumbnail caches, `~/.cache/vitrine/thumbnails`,
+`~/.cache/vitrine/thumbnails-2`, `~/.cache/vitrine-spike` and
+`~/.cache/shard-view`, are deleted in the background. The Rust port's own
+folder history, `~/.local/state/vitrine-spike/history`, is moved over once.)
 
 ## Installing
 
@@ -147,7 +151,7 @@ In a Home Manager configuration:
 | --- | --- |
 | `programs.vitrine.enable` | Installs Vitrine. |
 | `programs.vitrine.package` | The package to use. |
-| `programs.vitrine.wallpaperCommand` | Command run with the image path appended; sets `VITRINE_WALLPAPER_COMMAND` as a default in a wrapper. Null (the default) hides the Set wallpaper action. |
+| `programs.vitrine.wallpaperCommand` | Command run with the image path appended; sets `VITRINE_WALLPAPER_COMMAND` as a default in a wrapper. Null (the default) hides Set as wallpaper. |
 | `programs.vitrine.defaultViewer` | Runs `xdg-mime default io.github.Rido_o.Vitrine.desktop` for JPEG, PNG, WebP, TIFF and GIF on each activation. `~/.config/mimeapps.list` stays unmanaged, so other defaults and your file manager's "Open With" keep working. |
 
 Without the module, set `VITRINE_WALLPAPER_COMMAND` yourself; it's parsed like
@@ -156,12 +160,15 @@ a shell command and the image path is appended.
 ## Development
 
 ```sh
-nix run . -- DIR                                   # build and run
+nix run . -- DIR                                   # build and run (-r for subfolders)
 VITRINE_WALLPAPER_COMMAND=set-wallpaper nix run . -- DIR
-nix flake check                                    # type check (tsc) and flake checks
-nix develop                                        # gjs, esbuild, dart-sass, tsc; links node_modules
-nix fmt                                            # alejandra
+nix flake check                                    # the build, clippy (-D warnings), rustfmt
+nix develop                                        # cargo, clippy, rustfmt, rust-analyzer, dart-sass
+nix fmt                                            # alejandra (Nix files)
 ```
+
+In `nix develop`, `cargo build --release` and `cargo fmt` work as usual
+(`build.rs` needs `sass` from the shell).
 
 To try local changes in a NixOS/Home Manager config that uses the flake input,
 override it with the checkout:
@@ -171,214 +178,166 @@ override it with the checkout:
 CI (`.github/workflows/check.yml`) runs `nix flake check` and `nix build` on
 every push to `master` and on pull requests.
 
-Quick check without opening a window: `vitrine --help` loads the whole bundle
-before GApplication prints its help.
+`bench/` measures it in a headless sway (frame times, main-loop stalls,
+thumbnail and decode times, memory) and has a UI check that drives the
+controls; see `bench/README.md`. Quick check without opening a window:
+`vitrine --help`.
 
 ### Layout
 
 ```
 flake.nix           packages.default, homeManagerModules.default,
-                    checks.typecheck, devShell
-package.json        typescript and @girs types, for type checking only
-tsconfig.json
+                    checks (clippy, rustfmt), devShell
 package.nix         the build
 hm-module.nix       programs.vitrine
+Cargo.toml
+build.rs            compiles style/style.scss into the binary
 src/
-  main.tsx          Gtk.Application: CSS, icon path, command line, windows
-  jsx.ts            registers lowercase JSX tags (box, entry, …) with gnim
-  Window.tsx        layout: top bar, grid, info bar, full-screen view
-  ActionsMenu.ts    the ⋯ menu: its model and window actions
-  AutoHide.ts       fading the full-screen view's controls when idle
-  PropertiesPopover.ts  the i button's popover
-  Library.ts        async folder scanning, sorting, list model, mtime/size
-  Thumbnails.ts     thumbnail cache (disk + memory), loading, concurrency
-  History.ts        folder history file
-  ZoomableImage.ts  full-screen image widget (zoom, pan, sharp mode)
-  Properties.ts     the properties panel's contents (file info, GdkPixbuf, EXIF)
-  Shortcuts.ts      the keyboard shortcuts window
-  ImageCache.ts     full-size images: the one shown plus ±2 preloaded
-  decode.ts         image decoding: full-size with glycin (out of process),
-                    thumbnails and GIFs with GdkPixbuf
-  Trash.ts          trash and exact-item restore through GVfs (trash:///)
-  util.ts           names, folder listing, GC nudge, file-manager D-Bus call,
-                    wallpaper
+  main.rs           Gtk.Application: CSS, icon path, command line, malloc and
+                    renderer tuning
+  window.rs         a window: top bar, grid, info bar, full-screen view, keys,
+                    menus, copy, trash and undo, wallpaper
+  library.rs        scanning (a thread), the sorted list model, rescans,
+                    watching
+  thumbnails.rs     thumbnail workers, disk cache, pruning
+  tiles.rs          the grid's thumbnail textures (bound tiles and 100 more)
+  preview.rs        the full-screen view's decodes: ±2 preloads, full
+                    resolution tiles, GIF frames, on worker threads
+  decode.rs         decoding (libjpeg-turbo scaled, png, GdkPixbuf), resizing
+                    (Lanczos3), EXIF orientation, freeing big buffers off the
+                    main thread
+  zoomable.rs       the full-screen image widget (zoom, pan, rotate, flip,
+                    sharp mode, tiles)
+  view.rs           the full-screen view's page and controls
+  autohide.rs       fading the view's controls when idle
+  actions.rs        the ⋯ menu: its model and window actions
+  properties.rs     the i popover's contents (file info, GdkPixbuf, EXIF)
+  shortcuts.rs      the keyboard shortcuts window
+  trash.rs          trash and exact-item restore through GVfs (trash:///)
+  history.rs        folder history file
+  probe.rs          the benchmark and UI check (VITRINE_PROBE)
+style/
   style.scss        styles
   theme.scss        colour palette
-  env.d.ts          gi:// module and GJS global types (@girs), ICONS_DIR
-  assets.d.ts       the bundled CSS module
 icons/              bundled symbolic icons
+bench/              benchmark harness, corpus script, results
 ```
 
 - App ID `io.github.Rido_o.Vitrine`. The app is `NON_UNIQUE`: every launch is
   its own process and window; nothing stays running in the background.
-- Everything is plain GTK4/Gio/GdkPixbuf/GLib, plus gexiv2 for EXIF and
-  glycin for full-size images; the only JS library is gnim.
+- All GTK work is on the main thread; worker threads only produce pixels,
+  wrapped in a `gdk::MemoryTexture` on the main thread without a copy.
+- A window's state (`Window`) is an `Rc` its signal handlers hold weakly; the
+  window's `destroy` handler holds the one strong reference.
 
 ### Build
 
-`package.nix`:
-
-1. Copies the `gnim` input to `node_modules/gnim` and links `dist` to its `src`
-   (gnim's `package.json` exports `./dist`, which its own build copies from
-   `./src`).
-2. Compiles `src/style.scss` with dart-sass.
-3. Bundles `src/main.tsx` with esbuild: ESM, `gi://*` and GJS built-ins
-   external, JSX via `gnim/gtk4`, CSS loaded as text, `ICONS_DIR` defined as
-   the installed icons path.
-4. Installs `share/vitrine/{main.js,icons}`, the desktop entry and
-   `bin/vitrine` (`gjs -m main.js`), wrapped with `wrapGAppsHook4`'s arguments
-   by hand (`dontWrapGApps`) so its own GdkPixbuf `loaders.cache` (gdk-pixbuf's
-   loaders plus librsvg and `webp-pixbuf-loader`) overrides the hook's.
-   `gexiv2_0_16` (EXIF), `libglycin` and `libglycin-gtk4` are build inputs
-   so the wrapper puts their typelibs on `GI_TYPELIB_PATH`; `glycin-loaders`
-   is added to `XDG_DATA_DIRS`, where glycin looks for its loaders (it finds
-   `bwrap`, for its sandbox, by its store path), and `shared-mime-info` after
-   the session's own directories (glycin picks a loader by MIME type).
-
-esbuild strips types without checking them; `checks.typecheck` (run by
-`nix flake check`) does, with `tsc --noEmit` against the `@girs` type packages
-pinned in `package-lock.json` (installed offline with `importNpmLock`). They're
-pinned to the `4.0.0-rc.17` generation, which covers GTK 4.23 and matches what
-gnim is written against; the 5.x packages type signal names more strictly than
-gnim's code allows. gnim's own `.ts` source is marked `@ts-nocheck` in the
-check (`skipLibCheck` only covers `.d.ts`), so only Vitrine is checked.
+`package.nix` builds the crate with `rustPlatform.buildRustPackage`
+(`build.rs` compiles `style/style.scss` with dart-sass), installs the icons and
+the desktop entry, and wraps `bin/vitrine` with `wrapGAppsHook4`'s arguments
+by hand (`dontWrapGApps`) so its own GdkPixbuf `loaders.cache` (gdk-pixbuf's
+loaders plus librsvg and `webp-pixbuf-loader`) overrides the hook's, with
+`shared-mime-info` after the session's own data directories.
 
 ### Gotchas
 
 Things that broke and look like harmless cleanups:
 
-- **`await app.runAsync(…)`, not `app.run(…)`.** A blocking `run()` at module
-  top level stops GJS from resolving promises while the main loop runs:
-  thumbnails loaded but their `.then()` never ran, leaving blank tiles.
-- **Each window is created inside gnim's `createRoot`** (`main.tsx`), disposed
-  on `destroy`; without it gnim logs "out of tracking context" and can't clean
-  up.
+- **Use GTK's GL renderer with NVIDIA's driver** (`prefer_gl_on_nvidia` in
+  `main.rs`, when `/proc/driver/nvidia` exists and `GSK_RENDERER` isn't set).
+  With GTK's default Vulkan renderer, NVIDIA's driver costs several ms of
+  main-thread time per new texture (`ioctl`s in `perf`/`strace`): about 12 ms
+  per row of new thumbnails while scrolling, 100–300 ms when a screenful
+  arrives at once, and 76 ms frames panning at 100% (each tile panned into view
+  is a new texture). It's a known driver problem; other GPUs keep GTK's
+  default.
+- **Draw the view with a plain texture node** (`append_texture` in
+  `zoomable.rs`). A scaled texture node with the linear filter came out
+  blurred at display scales above 1 even when drawn 1:1 (58% of the texture's
+  edge contrast at 1.5×); the plain node keeps all of it. Only sharp mode uses
+  a scaled node (nearest).
+- **Decode for the view at its size in device pixels and draw 1:1 at fit**
+  (`view_size` in `window.rs`, `layout` in `zoomable.rs`). Decoding for the
+  monitor and drawing it scaled to the window softened every image; the
+  texture is resized with Lanczos3, and decoded again when the view's size
+  changes.
+- **Never evict the thumbnails of bound tiles** (`tiles.rs`). The grid keeps
+  ~390 tiles bound (rows around the viewport, not only the visible ones); with
+  a cap of 300 on every texture, off-screen tiles evicted visible ones, and the
+  full-screen view opened without its placeholder. Only textures of tiles no
+  longer bound are capped (100).
+- **Keep `tune_malloc`** (`main.rs`). glibc raises its mmap threshold each
+  time a large block is freed, so the workers' multi-MB decode buffers ended
+  up in per-thread arenas that never shrink (~230 MB after generating a
+  3,000-image folder); a fixed 1 MB threshold and 4 arenas cut the peak by
+  ~120 MB with no measurable slowdown.
+- **Free big buffers off the main thread** (the janitor in `decode.rs`).
+  Dropping a 33 MB decode on the main thread took 0.7–4 ms per selection
+  change, enough to delay the selection's highlight a frame at 144 Hz.
+- **While a folder loads, keep the first image selected and the grid at the
+  top** (`keep_first_while_loading` in `window.rs`), until the user clicks,
+  types or scrolls in the grid. Batches arrive in any order and are sorted as
+  they come; the automatic selection stayed on whichever image arrived first,
+  and GTK kept it in view (a 7,756-image folder opened halfway down).
+- **Re-sort at once, not incrementally** (`resort` in `library.rs`), so the
+  selected image can be put back straight after (~5–13 ms for 3,000 images).
+  Loading still sorts incrementally, so a big batch doesn't block a frame.
+- **A rescan re-shows the view's image only if it changed or went**
+  (`finished` in `window.rs`): rescans start on their own when anything in the
+  folder changes, and re-showing resets the zoom.
+- **The selection is an outline that fades in (120 ms)**, in `style.scss`: the
+  default theme's animated highlight looked choppy next to 144 Hz scrolling,
+  and none at all felt abrupt.
 - **WebP thumbnails need the package's own `loaders.cache`.** `wrapGAppsHook4`
-  sets `GDK_PIXBUF_MODULE_FILE` to librsvg's cache, which has no WebP, so
-  GdkPixbuf (thumbnails, resolution) failed on `.webp` while the full-screen
-  view (GTK's own loaders) worked. Adding a `--set` to `gappsWrapperArgs`
-  isn't enough: the hook's comes later and wins, hence the manual wrap.
-- **While a scan is running, keep the auto-selection on the first image**
-  (`onLibraryChanged` in `Window.tsx`): batches insert images ahead of it, and
-  GTK would otherwise keep it selected and scroll the grid down after it.
-- **Use GTK's GL renderer with NVIDIA's driver** (`main.tsx`, when
-  `/proc/driver/nvidia` exists and `GSK_RENDERER` isn't set). With GTK's
-  default Vulkan renderer, NVIDIA's driver costs several ms of main-thread time
-  per new texture (`ioctl`s in `perf`/`strace`): about 12 ms per row of new
-  thumbnails while scrolling, and 100–300 ms when a screenful arrives at once.
-  With GL, a warm 20 s scroll through 3,000 images dropped 13 frames instead
-  of 33, and holding → in the full-screen view 4 instead of 11. It's a known
-  driver problem; other GPUs keep GTK's default.
-- **Never evict the thumbnails of bound tiles** (`rememberTexture` in
-  `Thumbnails.ts`). The grid keeps ~390 tiles bound (rows around the
-  viewport, not only the visible ones); with a cap of 300 on every texture,
-  off-screen tiles evicted visible ones, and the full-screen view opened
-  without its placeholder (~130 ms, now 0). Only textures of tiles no longer
-  bound are capped (100).
-- **Keep the `System.gc()` nudge in `Thumbnails.ts`.** Thumbnails in memory
-  are capped (these numbers are from a cap of 300), but dropped textures (and
-  every decode's pixbuf) are only freed when GJS collects their wrappers, and
-  its GC doesn't see their native memory. Without the nudge, memory kept growing past the cap: 526 MB after
-  1,000 cached thumbnails versus a flat ~230 MB with it (~405 MB once
-  full-size originals are being decoded, a high-water mark that then stays
-  flat). Generating thumbnails needs its own nudge (every 5): each decode of a
-  large image kept ~8 MB alive until collected, so generating 348 screenshot
-  thumbnails peaked at 2.9 GB, versus ~0.35 GB with it and no slower; a folder
-  under ~400 images never evicts, so the eviction nudge alone never ran.
-- **~800 MB after scrolling a large folder isn't a leak.** After a warm scroll
-  through 7,756 images, `/proc/PID/smaps` showed ~550 MB of `[heap]` and ~200
-  MB of GPU driver mappings (`/dev/nvidiactl`), with only ~170 MB of
-  thumbnails live. The heap is freed render allocations that glibc keeps: once
-  large buffers are freed it raises its mmap threshold, so later ~0.5 MB
-  texture allocations come from the heap, and fragmentation stops it
-  shrinking. It's the same in a gtk4-rs prototype and with every GSK renderer,
-  and it stays bounded (444–904 MB over five runs). `GLIBC_TUNABLES=
-  glibc.malloc.mmap_threshold=131072` brings it to ~470 MB, but it isn't set:
-  thumbnail generation got ~6% slower, and every texture allocation would
-  mmap on the main thread; frame times weren't measured, and responsiveness
-  matters more than memory here.
-- **Disconnect the grid factory's `unbind` handler on close** (`Window.tsx`).
-  The grid is finalized during GJS's garbage collection after the window
-  closes, and GTK unbinds its tiles then; GJS blocks JS callbacks during a
-  collection and logged "Attempting to call back into JSAPI during the sweeping
-  phase of GC … The offending signal was unbind" once per tile.
-- **Decode full-size images with glycin (`decodeTexture` in `decode.ts`).**
-  GdkPixbuf's `new_from_stream_async` only reads in the background: it feeds
-  each chunk to a loader on the main thread, so a 34 MP JPEG stalled the
-  window for ~240 ms in 20–70 ms bursts (`perf`: libjpeg under
-  `load_from_stream_async_cb`), and opening the full-screen view skipped
-  frames. `Gdk.Texture.new_from_bytes` is worse (one ~150 ms block for a
-  12 MP WebP). glycin decodes in a separate process: no stalls, and faster
-  (~240 vs ~360 ms for 34 MP). It isn't used for thumbnails, where
-  it can't scale while decoding (scaling on the main thread stalled up to
-  ~300 ms). If it fails (e.g. no user namespaces for its sandbox), GdkPixbuf
-  is used instead.
-- **Ask glycin for premultiplied RGBA (`set_accepted_memory_formats`).**
-  Given plain RGB (most JPEGs), GTK converted it to RGBX on the main thread
-  when first drawn (~200 ms for 34 MP). Uploading the texture itself still
-  takes ~50–80 ms for 8–14 MP (~180 ms for 34 MP), after the thumbnail
-  placeholder is already on screen.
-- **Clear the full-screen view after the grid's first frame**
-  (`clearPreviewAfterPaint` in `Window.tsx`). Clearing drops the decoded
-  images and nudges a GC (up to ~110 ms), which could otherwise run before the
-  grid is drawn.
-- **No transition between the grid and the full-screen view.** A 150 ms
-  crossfade rendered cleanly but still looked laggy (both pages blended for a
-  few frames), so the switch is instant.
-- **Preloads are cancelled and queued (`ImageCache.ts`).** Dropping a preload
-  from the cache must cancel its decode, and at most two decodes run with the
-  shown image first: otherwise holding an arrow key (~30 presses/s) piled up
-  decodes of images already passed, and the one stopped on appeared ~925 ms
-  after release instead of ~40 ms.
-- **Copy each GIF frame (`copyToTexture` in `decode.ts`).** GdkPixbuf's
-  animation iterator draws every frame into the same pixbuf, and
-  `Gdk.Texture.new_for_pixbuf` shares its pixels, so a texture made from it
-  would change under GTK. Frames are played live on the widget's frame clock
-  (GdkPixbuf can't say how many frames there are), each as a new texture,
-  with a GC nudge every 64 MB of them.
+  sets `GDK_PIXBUF_MODULE_FILE` to librsvg's cache, which has no WebP. Adding
+  a `--set` to `gappsWrapperArgs` isn't enough: the hook's comes later and
+  wins, hence the manual wrap.
 - **Undo restores an exact trash item, never "the newest".** GVfs's deletion
   dates have one-second resolution, so two deletes of the same path in a
-  second can't be told apart by date (restoring the "newest" picked the wrong
-  one in testing). `Trash.ts` lists the path's `trash:///` items just before
-  and after trashing; the one new item is recorded and undo moves exactly that
-  back.
-- **Testing trash code headless needs GVfs on a private bus**:
-  `dbus-run-session`, `GIO_EXTRA_MODULES=<gvfs>/lib/gio/modules` and
-  `<gvfs>/libexec/gvfsd --replace &` before running the test.
-- **Test decoding headless**: bundle a small entry that imports the module with
-  esbuild and run it with the package's own `gjs` and `GI_TYPELIB_PATH` (from
-  the wrapper); a different gjs mismatches the typelibs.
-
-Scan timings (headless, recursive; "cold" is the first run after NFS attribute
-caches expired):
-
-| Folder | Images | Blocking scan | Async, first images | Async, complete |
-| --- | --- | --- | --- | --- |
-| Small | 53 | 16–45 ms | 2–3 ms | 10–11 ms |
-| Large, over NFS | 9,680 | 0.45 s warm, 1.9 s cold | 2–3 ms | 0.24 s warm, ~1 s cold |
+  second can't be told apart by date. `trash.rs` lists the path's
+  `trash:///` items just before and after trashing; the one new item is
+  recorded and undo moves exactly that back.
+- **Testing trash code needs GVfs on a private bus with its own trash**, or it
+  trashes into your real one: `dbus-run-session`, `XDG_DATA_HOME=<scratch>`,
+  `GIO_EXTRA_MODULES=<gvfs>/lib/gio/modules` and `<gvfs>/libexec/gvfsd
+  --replace &`; the UI check only trashes with `VITRINE_PROBE_TRASH=1` (see
+  `bench/README.md`).
+- **No transition between the grid and the full-screen view.** A 150 ms
+  crossfade rendered cleanly but still looked laggy, so the switch is instant.
+- **GTK uploads textures on the main thread when first drawn**, with no API to
+  do it elsewhere: the frame that first shows a 4K image still spends ~55 ms
+  uploading it. Hence screen-size textures, and tiles uploaded at most 3 per
+  frame.
 
 ## Roadmap
 
+- A styling pass (the selection's style included).
 - Show file size in the info bar (the properties panel has it).
-- More CSS improvements.
 - Thumbnails at the image's own aspect ratio, and account for margins when
   calculating thumbnail width (they end up too wide).
-- The folder history panel and sort pill could become a `Gtk.Popover` /
-  `Gtk.DropDown` (they're inline because Vitrine started as a layer-shell
-  overlay, where Hyprland dismissed popups on click).
-- A colour theme that isn't hardcoded (`src/theme.scss`).
+- A colour theme that isn't hardcoded (`style/theme.scss`).
+- Maybe: uploading textures off the main thread, if screen-size textures and
+  tiles stop being enough (a shared GL context, or dmabufs filled on a
+  worker; both fragile).
 
 ## History
 
 Vitrine started as the wallpaper picker in the author's
 [AGS](https://github.com/aylur/ags) desktop shell, was ported to a standalone
-GJS app called shard-view, and was renamed and moved to its own repo.
+GJS app called shard-view, renamed and moved to its own repo, and then
+rewritten in Rust with gtk4-rs after a performance spike: scrolling, opening
+images and memory all came out ahead of the TypeScript version
+(`bench/RESULTS.md` has the comparison).
 
 ## Credits
 
 - Icons: [Font Awesome Free](https://fontawesome.com) 7.3.1, licensed
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
-- [gnim](https://github.com/aylur/gnim) (MIT) for JSX on GJS.
+- [gtk4-rs](https://gtk-rs.org) (MIT),
+  [turbojpeg](https://crates.io/crates/turbojpeg) (MIT or Unlicense),
+  [fast_image_resize](https://crates.io/crates/fast_image_resize) and
+  [png](https://crates.io/crates/png) (MIT or Apache-2.0), and
+  [kamadak-exif](https://crates.io/crates/kamadak-exif) (BSD-2-Clause).
 
 ## Licence
 

@@ -8,7 +8,7 @@ use std::{
     collections::HashMap,
     path::{Path, PathBuf},
     sync::{Arc, Condvar, Mutex},
-    time::Instant,
+    time::{Duration, Instant, SystemTime},
 };
 
 // Thumbnails fit within this (smaller images keep their size).
@@ -16,6 +16,29 @@ const WIDTH: u32 = 440;
 const HEIGHT: u32 = 320;
 const JPEG_QUALITY: i32 = 85;
 const WORKER_NICE: libc::c_int = 10;
+// Cache files are named after the image's path and mtime, so edited, moved or
+// deleted images leave orphans. Files are touched when used (at most daily)
+// and pruned once unused for PRUNE_AFTER.
+const PRUNE_AFTER: Duration = Duration::from_secs(90 * 24 * 60 * 60);
+const TOUCH_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// "-3": this app's thumbnails (JPEG, or PNG with transparency, keyed by
+/// `key`); the TypeScript app's were in "-2".
+pub fn cache_dir() -> PathBuf {
+    glib::user_cache_dir().join("vitrine/thumbnails-3")
+}
+
+// Caches of earlier versions, deleted rather than migrated: thumbnails
+// regenerate.
+fn old_caches() -> [PathBuf; 4] {
+    let cache = glib::user_cache_dir();
+    [
+        cache.join("vitrine/thumbnails"),
+        cache.join("vitrine/thumbnails-2"),
+        cache.join("vitrine-spike"),
+        cache.join("shard-view"),
+    ]
+}
 
 pub enum Outcome {
     Loaded(Pixels),
@@ -213,11 +236,86 @@ fn worker(shared: &Shared) {
     }
 }
 
+// The cached thumbnail's file, if any, touched when it's a day old.
 fn cached_file(cache_dir: &Path, key: &str) -> Option<PathBuf> {
-    ["jpg", "png"]
+    let file = ["jpg", "png"]
         .iter()
         .map(|ext| cache_dir.join(format!("{key}.{ext}")))
-        .find(|path| path.exists())
+        .find(|path| path.exists())?;
+    let stale = std::fs::metadata(&file)
+        .and_then(|metadata| metadata.modified())
+        .is_ok_and(|modified| modified.elapsed().is_ok_and(|age| age > TOUCH_AFTER));
+    if stale && let Ok(opened) = std::fs::File::options().write(true).open(&file) {
+        let _ = opened.set_modified(SystemTime::now());
+    }
+    Some(file)
+}
+
+/// Deletes cache files unused for PRUNE_AFTER, and earlier versions' caches;
+/// how many files each removed. On a thread of its own, at low priority.
+pub fn housekeeping() {
+    let spawn = std::thread::Builder::new()
+        .name("housekeeping".into())
+        .spawn(|| {
+            lower_priority();
+            let pruned = prune(&cache_dir());
+            if pruned > 0 {
+                println!("Pruned {pruned} unused thumbnails");
+            }
+            let removed: usize = old_caches().iter().map(|dir| remove_tree(dir)).sum();
+            if removed > 0 {
+                println!("Removed {removed} outdated thumbnails");
+            }
+        });
+    if let Err(error) = spawn {
+        eprintln!("Could not start housekeeping: {error}");
+    }
+}
+
+fn prune(cache_dir: &Path) -> usize {
+    let Ok(entries) = std::fs::read_dir(cache_dir) else {
+        return 0;
+    };
+    let is_cache_file = |name: &str| {
+        let (stem, ext) = name.split_once('.').unwrap_or((name, ""));
+        stem.len() == 32
+            && stem.bytes().all(|b| b.is_ascii_hexdigit())
+            && matches!(ext, "jpg" | "png")
+    };
+    let mut pruned = 0;
+    for entry in entries.flatten() {
+        let unused = entry
+            .metadata()
+            .and_then(|metadata| metadata.modified())
+            .is_ok_and(|modified| modified.elapsed().is_ok_and(|age| age > PRUNE_AFTER));
+        if unused
+            && entry.file_name().to_str().is_some_and(is_cache_file)
+            && std::fs::remove_file(entry.path()).is_ok()
+        {
+            pruned += 1;
+        }
+    }
+    pruned
+}
+
+// Deletes `dir` and everything in it; how many files.
+fn remove_tree(dir: &Path) -> usize {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return 0;
+    };
+    let mut removed = 0;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+            removed += remove_tree(&path);
+        } else if std::fs::remove_file(&path).is_ok() {
+            removed += 1;
+        }
+    }
+    if let Err(error) = std::fs::remove_dir(dir) {
+        eprintln!("Could not remove {}: {error}", dir.display());
+    }
+    removed
 }
 
 /// The thumbnail's pixels, from the cache or generated (then true).

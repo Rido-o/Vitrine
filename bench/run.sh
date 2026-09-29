@@ -1,19 +1,18 @@
 #!/usr/bin/env bash
-# Runs the benchmark (see README.md) for one app and prints its RESULT lines.
-# Run from the repo root:
-#   bench/run.sh ts|rs [cold|warm] [CORPUS_DIR]
+# Runs the benchmark (see README.md) and prints its RESULT lines. Run from the
+# repo root:
+#   bench/run.sh [cold|warm] [CORPUS_DIR]
 # cold (the default) starts with an empty thumbnail cache; warm reuses the
 # previous run's. Uses a headless sway unless BENCH_DISPLAY names a Wayland
 # display to use instead (e.g. to watch it). BENCH_WRAP prefixes the app's
 # command, e.g. BENCH_WRAP="perf record -g -o /tmp/perf.data".
 # BENCH_LOG=FILE keeps the app's whole output.
-# BENCH_PROBE=ui runs the spike's UI check instead (rust/src/probe.rs).
+# BENCH_PROBE=ui runs the UI check instead (src/probe.rs).
 set -euo pipefail
 
-app=${1:?usage: run.sh ts|rs [cold|warm] [CORPUS_DIR]}
-mode=${2:-cold}
+mode=${1:-cold}
 bench=${XDG_CACHE_HOME:-$HOME/.cache}/vitrine-bench
-corpus=${3:-$bench/corpus}
+corpus=${2:-$bench/corpus}
 # The headless display, e.g. BENCH_OUTPUT=3840x2160@144Hz BENCH_SCALE=1.5.
 output=${BENCH_OUTPUT:-1920x1080@60Hz}
 scale=${BENCH_SCALE:-1}
@@ -21,18 +20,15 @@ hz=${output##*@}
 hz=${hz%Hz}
 [[ -e $corpus ]] || { echo "no corpus at $corpus (bench/make-corpus.sh)" >&2; exit 1; }
 
-case $app in
-  ts) args=(); out=$(nix build --no-link --print-out-paths .#bench-ts); bin=$out/bin/vitrine ;;
-  # The TypeScript probe always includes subfolders; the spike needs -r.
-  rs) out=$(nix build --no-link --print-out-paths .#spike); bin=$out/bin/vitrine-rs; args=(-r) ;;
-  *) echo "app must be ts or rs" >&2; exit 1 ;;
-esac
-# BENCH_ARGS replaces the arguments before the folder (e.g. BENCH_ARGS= for
-# the spike without -r).
+out=$(nix build --no-link --print-out-paths .)
+bin=$out/bin/vitrine
+args=(-r)
+# BENCH_ARGS replaces the arguments before the folder (BENCH_ARGS= leaves out
+# subfolders).
 [[ -v BENCH_ARGS ]] && read -ra args <<< "$BENCH_ARGS"
 
-# Each app gets its own cache and state, away from the real ones.
-home=$bench/home-$app
+# Its own cache and state, away from the real ones.
+home=$bench/home
 [[ $mode == cold ]] && rm -rf "$home/cache"
 mkdir -p "$home/cache" "$home/state"
 
@@ -77,7 +73,7 @@ else
   export XDG_CACHE_HOME=$home/cache XDG_STATE_HOME=$home/state
 fi
 
-echo "# $app $mode $output scale $scale $(date -Iseconds) $(git rev-parse --short HEAD)"
+echo "# $mode $output scale $scale $(date -Iseconds) $(git rev-parse --short HEAD)"
 WAYLAND_DISPLAY=$display \
   VITRINE_PROBE=${BENCH_PROBE:-1} VITRINE_PROBE_HZ=$hz ${BENCH_WRAP:-} "$bin" "${args[@]}" "$corpus" 2>&1 |
   tee "${BENCH_LOG:-/dev/null}" | grep "^RESULT" | sed "s/^RESULT //"

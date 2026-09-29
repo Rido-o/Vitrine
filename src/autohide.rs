@@ -1,6 +1,6 @@
 //! Fading the full-screen view's controls out, and hiding the cursor, after a
 //! while without the mouse moving; they come back on movement. Never while
-//! the pointer is on a control. As AutoHide.ts.
+//! the pointer is on a control.
 
 use gtk::{glib, prelude::*};
 use std::{

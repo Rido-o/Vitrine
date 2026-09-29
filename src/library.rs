@@ -20,7 +20,7 @@ const EXTENSIONS: [&str; 7] = ["gif", "jpeg", "jpg", "png", "tif", "tiff", "webp
 const BATCH_SIZE: usize = 512;
 const BATCH_AGE: Duration = Duration::from_millis(50);
 // Folders watched for changes (inotify watches are limited), and how often
-// changes trigger a rescan at most. As Library.ts.
+// changes trigger a rescan at most.
 const WATCH_LIMIT: usize = 1000;
 const RESCAN_DELAY: Duration = Duration::from_secs(1);
 
@@ -134,9 +134,8 @@ pub enum SortKey {
     Random,
 }
 
-// The grid's order. As Library.ts: ties (and Name) by path, as bytes like the
-// TypeScript app's string comparison; Random by a hash of the path, reseeded
-// on each shuffle.
+// The grid's order: ties (and Name) by path, as bytes; Random by a hash of the
+// path, reseeded on each shuffle.
 struct Order {
     key: Cell<SortKey>,
     descending: Cell<bool>,
@@ -190,6 +189,9 @@ pub enum Finished {
     Rescan,
 }
 
+type FinishedCallback = Rc<dyn Fn(Finished)>;
+type ModifiedCallback = Rc<dyn Fn(&Path)>;
+
 /// A folder's images: `store` in the order found, `sorted` for the grid,
 /// sorted incrementally while loading so a big batch doesn't block a frame.
 pub struct Folder {
@@ -203,9 +205,9 @@ pub struct Folder {
     scanning: Cell<bool>,
     // Bumped by each load or rescan, so a superseded one stops.
     generation: Cell<u64>,
-    finished: RefCell<Option<Rc<dyn Fn(Finished)>>>,
+    finished: RefCell<Option<FinishedCallback>>,
     // Told each image a rescan found changed on disk.
-    modified: RefCell<Option<Rc<dyn Fn(&Path)>>>,
+    modified: RefCell<Option<ModifiedCallback>>,
     // A rescan is changing the list (removing, adding, replacing).
     updating: Cell<bool>,
     monitors: RefCell<HashMap<PathBuf, gio::FileMonitor>>,
@@ -627,7 +629,7 @@ impl Folder {
         *self.rescan_timeout.borrow_mut() = Some(id);
     }
 
-    /// As Library.ts: Random reshuffles each time; switching to Date or Size
+    /// Random reshuffles each time; switching to Date or Size
     /// starts with the newest or largest.
     pub fn set_sort(&self, key: SortKey) {
         if key == SortKey::Random {

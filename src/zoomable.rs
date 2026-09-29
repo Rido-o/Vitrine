@@ -1,6 +1,6 @@
 //! The full-screen view's image: fit, zoom around the cursor, pan, view-only
 //! rotation and flips, sharp pixels, and clicks on the left/right edges to
-//! move. As ZoomableImage.ts, plus resolution levels: a texture of about the
+//! move. Resolution levels: a texture of about the
 //! screen's size for the whole image, and full-resolution tiles for zooming
 //! past it, of which only the visible ones are drawn (so uploaded), a few new
 //! ones per frame.
@@ -643,8 +643,7 @@ impl ZoomableImage {
         // GTK's default filter (a plain texture node) unless sharp: a scaled
         // texture node with the linear filter came out blurred at display
         // scales of 1.5 and 2 even when drawn 1:1 (58% of the texture's edge
-        // contrast at 1.5×; a plain node keeps all of it). The TypeScript app
-        // draws with the default filter too.
+        // contrast at 1.5×; a plain node keeps all of it).
         let sharp = state.sharp;
         let append = |texture: &gdk::Texture, rect: &graphene::Rect| {
             if sharp {

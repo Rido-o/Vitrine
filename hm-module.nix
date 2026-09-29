@@ -14,7 +14,7 @@ self: {
         paths = [cfg.package];
         nativeBuildInputs = [pkgs.makeBinaryWrapper];
         postBuild = ''
-          wrapProgram $out/bin/vitrine \
+          wrapProgram $out/bin/${cfg.package.meta.mainProgram} \
             --set-default VITRINE_WALLPAPER_COMMAND ${lib.escapeShellArg cfg.wallpaperCommand}
         '';
       };

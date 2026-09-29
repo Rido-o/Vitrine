@@ -1,6 +1,5 @@
-//! Recently opened folders, most recent first, in the spike's own state file;
-//! the first time, filled from the TypeScript app's (so the two can't
-//! overwrite each other's list while both are in use). As History.ts.
+//! Recently opened folders, most recent first, in
+//! ~/.local/state/vitrine/history (one path per line).
 
 use gtk::glib;
 use std::path::{Path, PathBuf};
@@ -16,11 +15,27 @@ fn state_dir() -> PathBuf {
 const LIMIT: usize = 10;
 
 fn file() -> PathBuf {
-    state_dir().join("vitrine-spike/history")
+    state_dir().join("vitrine/history")
 }
 
-fn typescript_app_file() -> PathBuf {
-    state_dir().join("vitrine/history")
+// The Rust port kept its own list while both apps were in use; being the
+// newer, it replaces the TypeScript app's, once.
+fn migrate() {
+    let old = state_dir().join("vitrine-spike");
+    let old_file = old.join("history");
+    if !old_file.exists() {
+        return;
+    }
+    let moved = file()
+        .parent()
+        .map_or(Ok(()), std::fs::create_dir_all)
+        .and_then(|()| std::fs::rename(&old_file, file()));
+    match moved {
+        Ok(()) => {
+            let _ = std::fs::remove_dir(&old);
+        }
+        Err(error) => eprintln!("Could not move {}: {error}", old_file.display()),
+    }
 }
 
 pub struct History {
@@ -29,9 +44,8 @@ pub struct History {
 
 impl History {
     pub fn load() -> Self {
-        let text = std::fs::read_to_string(file())
-            .or_else(|_| std::fs::read_to_string(typescript_app_file()))
-            .unwrap_or_default();
+        migrate();
+        let text = std::fs::read_to_string(file()).unwrap_or_default();
         let mut entries: Vec<PathBuf> = Vec::new();
         for line in text.lines().filter(|line| !line.is_empty()) {
             let path = PathBuf::from(line);

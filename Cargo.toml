@@ -1,9 +1,9 @@
 [package]
-name = "vitrine-rs"
+name = "vitrine"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.92"
-description = "Spike: a gtk4-rs port of Vitrine, to measure performance"
+description = "A GTK4 image viewer and wallpaper picker"
 publish = false
 
 [dependencies]

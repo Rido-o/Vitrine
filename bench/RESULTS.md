@@ -1,5 +1,9 @@
 # Spike results
 
+(A record of the comparison that decided the port: the spike then lived in
+`rust/`, with its plan in `rust/PLAN.md` (see the git history); it is now the
+app, and the TypeScript app is gone.)
+
 The gtk4-rs spike (`rust/`, see `rust/PLAN.md`) against the TypeScript app,
 on the same corpus and scenarios (`bench/README.md`). Raw runs are in
 `results/`; the numbers below are from the runs at `ab9d0e4` (TypeScript

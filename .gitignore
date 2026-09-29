@@ -1,4 +1,3 @@
 result
 result-*
-node_modules
-rust/target
+/target

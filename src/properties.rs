@@ -1,7 +1,6 @@
 //! The i button's popover: the image's file, image and camera properties,
-//! read on a worker each time it opens. As Properties.ts and
-//! PropertiesPopover.ts; EXIF through kamadak-exif (the TypeScript app uses
-//! gexiv2), with values written the way exiv2 prints them.
+//! read on a worker each time it opens. EXIF through kamadak-exif, with values
+//! written the way exiv2 prints them (the TypeScript app used gexiv2).
 
 use exif::{Exif, In, Tag, Value};
 use gtk::{gdk_pixbuf::Pixbuf, gio, glib, pango, prelude::*};
@@ -165,12 +164,12 @@ fn file_rows(path: &Path) -> Rows {
     ])
 }
 
-// 4213456 → "4,213,456", as the TypeScript app's toLocaleString.
+// 4213456 → "4,213,456", as in English.
 fn grouped(number: u64) -> String {
     let digits = number.to_string();
     let mut out = String::new();
     for (i, digit) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i) % 3 == 0 {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
             out.push(',');
         }
         out.push(digit);
@@ -283,7 +282,7 @@ fn megapixels(pixels: f64) -> String {
     }
 }
 
-fn field<'a>(exif: &'a Exif, tag: Tag) -> Option<&'a Value> {
+fn field(exif: &Exif, tag: Tag) -> Option<&Value> {
     exif.get_field(tag, In::PRIMARY).map(|field| &field.value)
 }
 

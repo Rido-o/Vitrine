@@ -1,5 +1,5 @@
-//! The keyboard shortcuts window. As Shortcuts.ts. Keep in step with
-//! `Window::key` and the view's keys.
+//! The keyboard shortcuts window. Keep in step with `Window::key` and the
+//! view's keys.
 
 use gtk::{gdk, glib, prelude::*};
 

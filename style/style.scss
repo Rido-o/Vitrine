@@ -55,15 +55,21 @@ window {
   .viewer-grid {
     background-color: transparent;
 
+    // The selection's outline fades in. The default theme's animated
+    // highlight looked choppy next to scrolling, and none at all felt abrupt;
+    // only the outline's colour changes, briefly, so a lower frame rate
+    // barely shows.
     > child {
       padding: 6px;
-      outline: none;
+      background: none;
+      outline: 3px solid transparent;
+      outline-offset: -7px;
+      border-radius: 12px;
+      transition: outline-color 120ms ease-out;
     }
 
     > child:selected {
-      outline: 3px solid t.$accent;
-      outline-offset: -7px;
-      border-radius: 12px;
+      outline-color: t.$accent;
     }
   }
 
@@ -203,13 +209,16 @@ window {
   }
 }
 
-.viewer-history {
-  padding: 6px;
-  border: 1px solid t.$border-solid;
-  border-radius: 12px;
-  background-color: t.$bg;
-  box-shadow: t.$window-shadow;
-  color: t.$fg;
+// The folder history, a popover under the entry.
+popover.viewer-history {
+  > contents {
+    padding: 6px;
+    border: 1px solid t.$border-solid;
+    border-radius: 12px;
+    background-color: t.$bg;
+    box-shadow: t.$window-shadow;
+    color: t.$fg;
+  }
 
   button {
     padding: 8px 12px;

@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Vitrine is a GTK4 image viewer and wallpaper picker in TypeScript for GJS, with gnim for JSX, packaged as a Nix flake. The README is the main documentation (features, keys, layout, build, gotchas, roadmap); read it before non-trivial changes.
+Vitrine is a GTK4 image viewer and wallpaper picker in Rust with gtk4-rs, packaged as a Nix flake. The README is the main documentation (features, keys, layout, build, gotchas, roadmap); read it before non-trivial changes.
 
 ## Commands
 
@@ -11,30 +11,33 @@ nix build                          # build the package
 nix run . -- DIR                   # build and run (add -r for subfolders)
 VITRINE_WALLPAPER_COMMAND=set-wallpaper nix run . -- DIR
 nix fmt                            # alejandra (Nix files)
-nix flake check                    # includes checks.typecheck (tsc --noEmit)
-nix develop                        # gjs, esbuild, dart-sass, tsc; links node_modules
+nix flake check                    # the build, clippy (-D warnings), rustfmt
+nix develop                        # cargo, clippy, rustfmt, rust-analyzer, dart-sass
+nix develop -c cargo build --release   # quicker rebuilds while iterating
 ```
 
 New files must be `git add`ed before the flake can see them. CI (`.github/workflows/check.yml`) runs `nix flake check` and `nix build` on pushes to `master` and pull requests; after pushing, check the run passed.
 
 ### Verifying changes
 
-There are no tests, so:
+There are no unit tests, so:
 
-- `nix flake check` type-checks `src/` with `tsc` (esbuild alone strips types). Keep it passing; don't silence errors with `any` or `@ts-ignore` without a comment saying why. The `@girs` packages are deliberately pinned to the `4.0.0-rc.17` generation (see "Build" in the README).
-- `nix build`, then `$(nix build --print-out-paths)/bin/vitrine --help`: GApplication prints help only after the whole bundle has loaded, so this catches import and load-time errors without opening a window.
-- Logic that doesn't need a window (scanning, sorting, thumbnails) can be tested headless: bundle a small entry that imports the module with esbuild and run it with the package's own `gjs` and `GI_TYPELIB_PATH` (both from the wrapper, `bin/.vitrine-wrapped` and `strings bin/vitrine`); a different gjs mismatches the typelibs. See "Gotchas" in the README.
-- Behaviour that needs a window (selection, the full-screen view, menus) can be driven the same way when a display is available: an untracked entry that creates a `Gtk.Application`, builds `ViewerWindow` inside `createRoot`, finds widgets by type (`Gtk.GridView`, `ZoomableImage`) and checks state such as the window title; bundle it with `package.nix`'s esbuild flags. It opens a real window briefly.
-- Anything visual needs the user to run it; say what to check.
+- `nix flake check` builds the crate, runs clippy with warnings as errors, and checks formatting (`cargo fmt` in the dev shell). Keep it passing; don't silence a lint with `#[allow]` without a comment saying why.
+- `nix build`, then `$(nix build --print-out-paths)/bin/vitrine --help`: catches wrapper and startup problems without opening a window.
+- The app has a built-in probe (`src/probe.rs`), run in a headless sway by `bench/run.sh` (see `bench/README.md`):
+  - `VITRINE_PROBE=1` (the default in `bench/run.sh`) is the benchmark: frame times, stalls, decode times, memory. Measure at the author's display where it matters: `BENCH_OUTPUT=3840x2160@144Hz BENCH_SCALE=1.5 GSK_RENDERER=gl bench/run.sh warm`.
+  - `BENCH_PROBE=ui BENCH_ARGS= bench/run.sh warm DIR` drives the controls (sorting, menus, copy, history, properties, rescans, watching) and prints what it sees; extend it for new behaviour. Use a folder of synthetic images, not the user's: files are added, changed and removed when it holds `.vitrine-probe-scratch`. Its trash checks only run with `VITRINE_PROBE_TRASH=1`, on a private bus with its own `XDG_DATA_HOME`, never against the real trash.
+  - `VITRINE_PROBE_SHOTS=DIR` (with `VITRINE_PROBE_GRIM` for device pixels and popovers) saves screenshots to look at.
+- Anything that needs a real pointer or the user's eye (dragging, hover, how it looks at 1.5×) needs the user to run it; say what to check.
 
 ## Code
 
-- `src/main.tsx` owns the `Gtk.Application` and command line; `src/Window.tsx` owns layout and interaction; `Library.ts` (async scanning, sorting, the list model, watching), `Thumbnails.ts`, `ZoomableImage.ts` (the full-screen image) with `ImageCache.ts` and `decode.ts`, `Properties.ts`, `Trash.ts` and `History.ts` are the pieces; `ActionsMenu.ts`, `AutoHide.ts`, `PropertiesPopover.ts` and `Shortcuts.ts` hold UI split out of `Window.tsx`. The README's "Layout" lists them all. Names, the app ID and the old-name migration live in `src/util.ts`.
-- TypeScript style: no semicolons, 2-space indent, double quotes, trailing commas, ~80 columns (prettier defaults with `semi: false`). Nix: alejandra.
-- GTK/GLib come from `gi://` imports; gnim's lowercase JSX tags are registered in `src/jsx.ts` (add new ones there).
+- `src/main.rs` owns the `gtk::Application`, command line, CSS and startup tuning; `src/window.rs` owns layout and interaction; `library.rs` (scanning, sorting, the list model, rescans, watching), `thumbnails.rs` and `tiles.rs`, `preview.rs` and `zoomable.rs` (the full-screen view) with `decode.rs`, `properties.rs`, `trash.rs` and `history.rs` are the pieces; `view.rs`, `autohide.rs`, `actions.rs` and `shortcuts.rs` hold UI split out of `window.rs`. The README's "Layout" lists them all.
+- All GTK work stays on the main thread; worker threads only produce pixels (see the README's "Layout" and "Gotchas"). Keep decoding, file reading and big frees off the main thread.
+- Rust style: `cargo fmt` (rustfmt defaults), edition 2024; Nix: alejandra. Styles are `style/style.scss` (with `style/theme.scss`), compiled into the binary by `build.rs`.
 - Keep comments sparse: explain why, not what.
-- Known traps (details in the README): keep `await app.runAsync(…)`, not `app.run(…)`; each window is created inside gnim's `createRoot`; the package builds its own GdkPixbuf `loaders.cache` and wraps by hand (`dontWrapGApps`) so WebP thumbnails work; during a scan the auto-selection is kept on the first image.
-- The app ID is `io.github.Rido_o.Vitrine`; data lives in `~/.cache/vitrine/thumbnails-2` and `~/.local/state/vitrine/history`. Changing names or paths needs a migration (history is moved over via `OLD_APP_NAME`; outdated thumbnail caches are deleted by `removeOldThumbnailCaches`, since thumbnails can be regenerated).
+- Known traps (details in the README's "Gotchas"): the GL renderer on NVIDIA; draw the view with a plain texture node, decoded at the view's device-pixel size; never evict bound tiles' thumbnails; the package builds its own GdkPixbuf `loaders.cache` and wraps by hand (`dontWrapGApps`) so WebP works; while a folder loads, the first image stays selected; a window's state is an `Rc` its handlers hold weakly, kept alive by its `destroy` handler.
+- The app ID is `io.github.Rido_o.Vitrine`; data lives in `~/.cache/vitrine/thumbnails-3` and `~/.local/state/vitrine/history`. Changing names or paths needs a migration (outdated thumbnail caches are deleted by `thumbnails::housekeeping`, since thumbnails regenerate; the history is moved, as `history::migrate` does).
 - Nothing may assume the author's setup: machine-specific values (wallpaper command, folders) come from the command line, `VITRINE_WALLPAPER_COMMAND`, or Home Manager options (`hm-module.nix`, `programs.vitrine.*`).
 
 ## Docs

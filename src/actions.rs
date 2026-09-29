@@ -1,5 +1,5 @@
 //! The ⋯ menu: a menu model of window actions ("win.…"), one section per
-//! group. As ActionsMenu.ts.
+//! group.
 
 use gtk::{gio, prelude::*};
 

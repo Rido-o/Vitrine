@@ -1,7 +1,7 @@
 //! A viewer window: the grid's page (the folder entry and its history, sort
 //! and subfolder buttons at the top; the selected image's name and
 //! resolution and View at the bottom) and the full-screen view's;
-//! opening, closing, the keys. As Window.tsx.
+//! opening, closing, the keys.
 
 use crate::{
     actions::{self, ActionsMenu, MenuAction},
@@ -20,8 +20,8 @@ use std::{
     rc::Rc,
 };
 
-const APP_TITLE: &str = "Vitrine (spike)";
-// As in the TypeScript app (Window.tsx, style.scss).
+const APP_TITLE: &str = "Vitrine";
+// A grid tile's thumbnail (see style.scss).
 const TILE_WIDTH: i32 = 272;
 const TILE_HEIGHT: i32 = 153;
 const TOAST_DURATION: std::time::Duration = std::time::Duration::from_secs(2);
@@ -98,7 +98,7 @@ impl Window {
         subfolders: bool,
     ) -> Rc<Self> {
         let folder = Folder::new(subfolders);
-        let tiles = Tiles::new(glib::user_cache_dir().join("vitrine-spike/thumbnails"));
+        let tiles = Tiles::new(crate::thumbnails::cache_dir());
         let selection = gtk::SingleSelection::new(Some(folder.sorted.clone()));
         let grid = build_grid(&selection, &tiles);
         let preview = Preview::new();
@@ -853,7 +853,6 @@ impl Window {
             action("copy-image", "Copy image", Self::copy_image).accel("<Control>c"),
             action("copy-path", "Copy path", Self::copy_path).accel("<Control><Shift>c"),
         ];
-        // Only in the menu (the TypeScript app also has buttons at the bottom).
         if self.wallpaper_argv.is_some() {
             image.push(action("set-wallpaper", "Set as wallpaper", Self::set_wallpaper).accel("w"));
         }
@@ -1321,7 +1320,7 @@ fn build_grid(selection: &gtk::SingleSelection, tiles: &Rc<Tiles>) -> gtk::GridV
         .build()
 }
 
-// As util.ts: surrounding space trimmed, ~ expanded, relative to the current
+// Surrounding space trimmed, ~ expanded, relative to the current
 // folder.
 fn normalize_directory(input: &str) -> PathBuf {
     let input = input.trim();
@@ -1347,7 +1346,7 @@ fn normalize_directory(input: &str) -> PathBuf {
 }
 
 // VITRINE_WALLPAPER_COMMAND, e.g. "set-wallpaper"; the image path is appended
-// as the last argument. Unset hides "Set as wallpaper". As util.ts.
+// as the last argument. Unset hides "Set as wallpaper".
 fn wallpaper_command() -> Option<Vec<std::ffi::OsString>> {
     let command = std::env::var_os("VITRINE_WALLPAPER_COMMAND")?;
     if command.to_string_lossy().trim().is_empty() {

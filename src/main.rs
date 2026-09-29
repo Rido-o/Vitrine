@@ -17,21 +17,24 @@ mod zoomable;
 use gtk::{gdk, gio, glib, prelude::*};
 use std::{cell::Cell, path::Path, rc::Rc};
 
-const APP_ID: &str = "io.github.Rido_o.Vitrine.Spike";
-// The TypeScript app's stylesheet, compiled by build.rs.
+pub const APP_ID: &str = "io.github.Rido_o.Vitrine";
+pub const APP_NAME: &str = "vitrine";
+// style/style.scss, compiled by build.rs.
 const CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
-// The spike's changes to it (overrides.scss), loaded over it.
-const OVERRIDES: &str = include_str!(concat!(env!("OUT_DIR"), "/overrides.css"));
 
-// The symbolic icons (../icons), installed by package.nix.
+// The symbolic icons (icons/), installed by package.nix.
+// Pruning the thumbnail cache waits this long after startup.
+const HOUSEKEEPING_DELAY_SECONDS: u32 = 5;
+
 const ICONS_DIR: &str = match option_env!("VITRINE_ICONS_DIR") {
     Some(dir) => dir,
-    None => concat!(env!("CARGO_MANIFEST_DIR"), "/../icons"),
+    None => concat!(env!("CARGO_MANIFEST_DIR"), "/icons"),
 };
 
 fn main() -> glib::ExitCode {
     tune_malloc();
     prefer_gl_on_nvidia();
+    glib::set_prgname(Some(APP_NAME));
     glib::set_application_name("Vitrine");
     let app = gtk::Application::builder()
         .application_id(APP_ID)
@@ -53,15 +56,16 @@ fn main() -> glib::ExitCode {
     });
     app.connect_startup(|_| {
         let display = gdk::Display::default().expect("a display");
-        for (css, priority) in [
-            (CSS, gtk::STYLE_PROVIDER_PRIORITY_USER),
-            (OVERRIDES, gtk::STYLE_PROVIDER_PRIORITY_USER + 1),
-        ] {
-            let provider = gtk::CssProvider::new();
-            provider.load_from_string(css);
-            gtk::style_context_add_provider_for_display(&display, &provider, priority);
-        }
+        let provider = gtk::CssProvider::new();
+        provider.load_from_string(CSS);
+        gtk::style_context_add_provider_for_display(
+            &display,
+            &provider,
+            gtk::STYLE_PROVIDER_PRIORITY_USER,
+        );
         gtk::IconTheme::for_display(&display).add_search_path(ICONS_DIR);
+        // After the first thumbnails.
+        glib::timeout_add_seconds_local_once(HOUSEKEEPING_DELAY_SECONDS, thumbnails::housekeeping);
     });
     // No argument: ~/Pictures, or the current folder without one.
     let subfolders_ = subfolders.clone();
@@ -107,7 +111,6 @@ fn tune_malloc() {
 // main-thread time on each new texture (a row of thumbnails, or each tile
 // panned into view: 76 ms frames panning at 100%); its GL renderer doesn't.
 // Only when the driver is loaded, and never over an explicit GSK_RENDERER.
-// As main.tsx.
 fn prefer_gl_on_nvidia() {
     if std::env::var_os("GSK_RENDERER").is_none() && Path::new("/proc/driver/nvidia").is_dir() {
         // SAFETY: before any other thread exists.

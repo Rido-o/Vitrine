@@ -2,7 +2,6 @@
 //! (from the home trash and per-mount ones like <mount>/.Trash-<uid>) with
 //! its original path, and moving an item out of trash:/// restores it and
 //! removes its trash record. Without GVfs, deleting and undo are disabled.
-//! As Trash.ts.
 //!
 //! Deletion dates only have one-second resolution, so trashing the same path
 //! twice in a second makes "newest" ambiguous. Instead, the items for a path
