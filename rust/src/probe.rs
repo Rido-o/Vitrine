@@ -999,6 +999,10 @@ pub fn ui(window: &gtk::ApplicationWindow) {
             sleep(500).await;
             state("empty");
             shot(&window, "ui-empty");
+            entry.emit_by_name::<()>("icon-release", &[&gtk::EntryIconPosition::Secondary]);
+            sleep(300).await;
+            shot(&window, "ui-empty-history");
+            press(&window, gdk::Key::Escape);
         }
         idle(&window).await;
         finish(&window);

@@ -161,8 +161,9 @@ impl Window {
             .vexpand(true)
             .child(&scrolled)
             .build();
-        grid_overlay.add_overlay(&history_panel);
+        // The panel last, so it covers the empty folder's label.
         grid_overlay.add_overlay(&empty);
+        grid_overlay.add_overlay(&history_panel);
 
         // The info bar.
         let filename = gtk::Label::builder()
