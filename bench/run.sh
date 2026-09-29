@@ -45,7 +45,8 @@ if [[ -z $display ]]; then
   runtime=${XDG_RUNTIME_DIR:?}
   before=$(ls "$runtime" | grep -E '^wayland-[0-9]+$' || true)
   config=$(mktemp)
-  echo "output HEADLESS-1 resolution $output scale $scale" > "$config"
+  printf 'output HEADLESS-1 resolution %s scale %s\n%s\n' "$output" "$scale" \
+    "${BENCH_SWAY_EXTRA:-}" > "$config"
   sway=$(nix build --no-link --print-out-paths --inputs-from . nixpkgs#sway)/bin/sway
   WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WAYLAND_DISPLAY= \
     "$sway" -c "$config" > /dev/null 2>&1 &

@@ -16,7 +16,11 @@ BENCH_OUTPUT=3840x2160@144Hz BENCH_SCALE=1.5 bench/run.sh rs warm
 
 `VITRINE_PROBE_SHOTS=DIR` saves the spike's window as drawn at a few points
 (zoom-fit, zoom-100, pan, rotated-flipped) to DIR/NAME.png, to check what the
-view shows.
+view shows, with the view's texture as NAME-texture.png. That render is at
+scale 1; with `VITRINE_PROBE_GRIM=path/to/grim` the compositor's output is
+saved too, in device pixels (NAME-device.png), to compare with the texture at
+display scales above 1. `BENCH_SWAY_EXTRA` adds lines to the headless sway's
+config (e.g. `default_border none`, so the window is at the output's corner).
 
 `BENCH_REAL_CACHE=1` runs with the app's real cache and state instead of the
 benchmark's (e.g. `bench/run.sh rs warm ~/Pictures` on a folder whose

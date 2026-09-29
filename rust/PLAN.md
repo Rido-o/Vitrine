@@ -175,11 +175,19 @@ Window.tsx), instant zoom steps, no pinch:
   with a 1-pixel overlap (no seams under smoothing). Only visible tiles are
   drawn, so uploaded, at most 3 new ones per frame (~3 MB); the rest show the
   lower resolution for a frame or two.
-- Sharpness: decoding for the monitor and drawing it scaled to the window
-  (×0.9–0.97, bilinear) looked softer than the TypeScript app. Now the
-  texture fits the view and is drawn 1:1, resized with Lanczos3 (was
-  Catmull-Rom): against ImageMagick's Lanczos downscale of a test image, the
-  view at fit went from 17.6% RMSE (67% of its edge contrast) to 1.1% (99%).
+- Sharpness, softer than the TypeScript app at first, for two reasons:
+  - Decoding for the monitor and drawing it scaled to the window (×0.9–0.97,
+    bilinear). Now the texture fits the view and is drawn 1:1, resized with
+    Lanczos3 (was Catmull-Rom): at scale 1, the view at fit went from 67% to
+    99% of the edge contrast of ImageMagick's Lanczos downscale.
+  - At display scales above 1 (the author's 1.5×), a scaled texture node with
+    the linear filter came out blurred even when drawn 1:1: the compositor's
+    output had 58% of the texture's own edge contrast, with every renderer.
+    A plain texture node (GTK's default filter, as the TypeScript app uses)
+    keeps all of it; the view at 1.5× now has 95% of the ideal's (the rest is
+    libjpeg-turbo's 3/8 reduced decode; 1/2 would give 97%).
+  Measured with `VITRINE_PROBE_GRIM` (device-pixel captures) on a synthetic
+  test image; the in-app render is at scale 1 and can't show the second one.
 - GIFs: frames decoded on a thread of their own, 4 ahead, fitted to the
   monitor; swapped in on the frame clock. (The TypeScript app decoded each
   frame on the main thread.)

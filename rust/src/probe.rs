@@ -355,7 +355,20 @@ fn shot(window: &gtk::ApplicationWindow, name: &str) {
         return;
     };
     let texture = renderer.render_texture(&node, None);
+    // The view's texture too, to tell its pixels from how they're drawn.
+    if let Some(base) = find::<crate::zoomable::ZoomableImage>(window.upcast_ref())
+        .and_then(|image| image.base_texture())
+    {
+        let _ = base.save_to_png(std::path::Path::new(&dir).join(format!("{name}-texture.png")));
+    }
     let _ = texture.save_to_png(std::path::Path::new(&dir).join(format!("{name}.png")));
+    // VITRINE_PROBE_GRIM: also the compositor's output, in device pixels
+    // (the render above is at scale 1).
+    if let Some(grim) = std::env::var_os("VITRINE_PROBE_GRIM") {
+        let _ = std::process::Command::new(grim)
+            .arg(std::path::Path::new(&dir).join(format!("{name}-device.png")))
+            .status();
+    }
 }
 
 fn memory() -> String {

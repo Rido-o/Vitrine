@@ -272,6 +272,11 @@ impl ZoomableImage {
         self.queue_draw();
     }
 
+    /// For the probe: the texture drawn for the whole image.
+    pub fn base_texture(&self) -> Option<gdk::Texture> {
+        self.imp().state.borrow().base.clone()
+    }
+
     pub fn has_image(&self) -> bool {
         self.imp().state.borrow().base.is_some()
     }
@@ -635,10 +640,18 @@ impl ZoomableImage {
         };
         let mut state = self.imp().state.borrow_mut();
         let (bounds, dw, dh) = self.layout(&state);
-        let filter = if state.sharp {
-            gsk::ScalingFilter::Nearest
-        } else {
-            gsk::ScalingFilter::Linear
+        // GTK's default filter (a plain texture node) unless sharp: a scaled
+        // texture node with the linear filter came out blurred at display
+        // scales of 1.5 and 2 even when drawn 1:1 (58% of the texture's edge
+        // contrast at 1.5×; a plain node keeps all of it). The TypeScript app
+        // draws with the default filter too.
+        let sharp = state.sharp;
+        let append = |texture: &gdk::Texture, rect: &graphene::Rect| {
+            if sharp {
+                snapshot.append_scaled_texture(texture, gsk::ScalingFilter::Nearest, rect);
+            } else {
+                snapshot.append_texture(texture, rect);
+            }
         };
         snapshot.save();
         snapshot.translate(&graphene::Point::new(
@@ -651,9 +664,8 @@ impl ZoomableImage {
         }
         let (x0, y0) = (-dw / 2.0, -dh / 2.0);
         let base = state.base.clone().expect("checked above");
-        snapshot.append_scaled_texture(
+        append(
             &base,
-            filter,
             &graphene::Rect::new(x0 as f32, y0 as f32, dw as f32, dh as f32),
         );
         // Tiles over it, padded ones overlapping so there are no seams; the
@@ -675,9 +687,8 @@ impl ZoomableImage {
                 let (tile, texture) = &tiles.tiles[i];
                 let left = tile.x as f64 - tile.pad_left as f64;
                 let top = tile.y as f64 - tile.pad_top as f64;
-                snapshot.append_scaled_texture(
+                append(
                     texture,
-                    filter,
                     &graphene::Rect::new(
                         (x0 + left * sx) as f32,
                         (y0 + top * sy) as f32,
