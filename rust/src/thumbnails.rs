@@ -93,10 +93,13 @@ impl Pool {
         });
         for _ in 0..workers {
             let shared = shared.clone();
-            std::thread::spawn(move || {
-                lower_priority();
-                worker(&shared)
-            });
+            std::thread::Builder::new()
+                .name("thumbnail".into())
+                .spawn(move || {
+                    lower_priority();
+                    worker(&shared)
+                })
+                .expect("a thumbnail worker starts");
         }
         (Self { shared }, receiver)
     }

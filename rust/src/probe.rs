@@ -41,6 +41,9 @@ const HOLD_INTERVAL_MS: u64 = 33;
 // selected before Enter.
 const SELECT_POSITION: u32 = 10;
 const SELECT_DWELL_MS: u64 = 300;
+// hold_key: how long → is held, and watched after.
+const HOLD_KEY_MS: u64 = 3000;
+const SETTLE_WATCH_MS: i64 = 6000;
 
 thread_local! {
     // What the full-screen view shows, and whether it's the decoded image.
@@ -51,6 +54,89 @@ thread_local! {
 /// not the thumbnail placeholder).
 pub fn preview_shown(path: &Path, sharp: bool) {
     SHOWN.with_borrow_mut(|shown| *shown = Some((path.to_owned(), sharp)));
+    SHOWS.with_borrow_mut(|shows| shows.push(glib::monotonic_time()));
+}
+
+thread_local! {
+    // When the view showed something (a move, or the sharp image arriving).
+    static SHOWS: RefCell<Vec<i64>> = const { RefCell::new(Vec::new()) };
+}
+
+// CPU time (ms) used so far by each named thread ("main" for the process's
+// own), from /proc/self/task/*/stat.
+fn cpu_by_thread() -> std::collections::BTreeMap<String, f64> {
+    let tick_ms = 1000.0 / unsafe { libc::sysconf(libc::_SC_CLK_TCK) } as f64;
+    let pid = std::process::id().to_string();
+    let mut totals = std::collections::BTreeMap::new();
+    let Ok(tasks) = std::fs::read_dir("/proc/self/task") else {
+        return totals;
+    };
+    for task in tasks.flatten() {
+        let stat = std::fs::read_to_string(task.path().join("stat")).unwrap_or_default();
+        // "tid (comm) state …": utime and stime are the 12th and 13th fields
+        // after the comm.
+        let Some((head, rest)) = stat.rsplit_once(") ") else {
+            continue;
+        };
+        let fields: Vec<&str> = rest.split_whitespace().collect();
+        let ticks: f64 = fields
+            .get(11)
+            .and_then(|f| f.parse::<f64>().ok())
+            .unwrap_or(0.0)
+            + fields
+                .get(12)
+                .and_then(|f| f.parse::<f64>().ok())
+                .unwrap_or(0.0);
+        let name = if task.file_name().to_string_lossy() == pid {
+            "main".to_owned()
+        } else {
+            head.split_once(" (")
+                .map_or("?", |(_, comm)| comm)
+                .to_owned()
+        };
+        *totals.entry(name).or_insert(0.0) += ticks * tick_ms;
+    }
+    totals
+}
+
+// CPU time (ms) the whole system has spent busy so far, all cores, from
+// /proc/stat (to see work done outside the app, e.g. by NFS).
+fn system_busy() -> f64 {
+    let tick_ms = 1000.0 / unsafe { libc::sysconf(libc::_SC_CLK_TCK) } as f64;
+    let stat = std::fs::read_to_string("/proc/stat").unwrap_or_default();
+    let Some(line) = stat.lines().next() else {
+        return 0.0;
+    };
+    let fields: Vec<f64> = line
+        .split_whitespace()
+        .skip(1)
+        .filter_map(|f| f.parse().ok())
+        .collect();
+    // user nice system idle iowait irq softirq steal …: all but idle, iowait.
+    let busy: f64 = fields
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| *i != 3 && *i != 4)
+        .take(6)
+        .map(|(_, v)| v)
+        .sum();
+    busy * tick_ms
+}
+
+fn cpu_total() -> f64 {
+    cpu_by_thread().values().sum()
+}
+
+fn cpu_delta(
+    from: &std::collections::BTreeMap<String, f64>,
+    to: &std::collections::BTreeMap<String, f64>,
+) -> String {
+    to.iter()
+        .map(|(name, ms)| (name, ms - from.get(name).copied().unwrap_or(0.0)))
+        .filter(|(_, ms)| *ms >= 10.0)
+        .map(|(name, ms)| format!("{name}:{ms:.0}"))
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 fn is_sharp(path: &Path) -> bool {
@@ -429,6 +515,83 @@ pub fn run(window: &gtk::ApplicationWindow) {
         );
         press(&window, gdk::Key::Escape);
         sleep(500).await;
+
+        // hold_key: hold → for real (GTK repeats the key itself, so presses
+        // queue up if showing each takes longer than the repeat interval),
+        // then watch until things settle.
+        if let Some(wtype) = std::env::var_os("VITRINE_PROBE_WTYPE") {
+            grid.emit_by_name::<()>("activate", &[&OPEN_POSITION]);
+            sleep(1000).await;
+            SHOWS.with_borrow_mut(Vec::clear);
+            let cpu_start = cpu_by_thread();
+            let system_start = system_busy();
+            let mut system_released = system_start;
+            let pressed = glib::monotonic_time();
+            let mut child = std::process::Command::new(wtype)
+                // A pause first: a press sent as the virtual keyboard appears
+                // arrives before GTK has taken it on, and is lost.
+                .args([
+                    "-s",
+                    "300",
+                    "-P",
+                    "Right",
+                    "-s",
+                    &HOLD_KEY_MS.to_string(),
+                    "-p",
+                    "Right",
+                ])
+                .spawn()
+                .expect("wtype starts");
+            let mut released = None;
+            let mut cpu_released = cpu_start.clone();
+            // CPU in each 100 ms after the release, to see when it settles.
+            let mut after = Vec::new();
+            let mut last_total = cpu_total();
+            while released.is_none() || ms_since(released.unwrap()) < SETTLE_WATCH_MS {
+                sleep(100).await;
+                let total = cpu_total();
+                if released.is_none() && child.try_wait().ok().flatten().is_some() {
+                    released = Some(glib::monotonic_time());
+                    cpu_released = cpu_by_thread();
+                    system_released = system_busy();
+                } else if released.is_some() {
+                    after.push(total - last_total);
+                }
+                last_total = total;
+            }
+            let _ = child.wait();
+            let released = released.unwrap();
+            let cpu_end = cpu_by_thread();
+            let system_end = system_busy();
+            let (during, since) = SHOWS.with_borrow(|shows| {
+                let during = shows.iter().filter(|&&t| t <= released).count();
+                (
+                    during,
+                    shows
+                        .iter()
+                        .filter(|&&t| t > released)
+                        .copied()
+                        .collect::<Vec<_>>(),
+                )
+            });
+            let last_show = since.last().map_or(0, |&t| (t - released) / 1000);
+            // Settled: the first 100 ms after the release using under 10 ms.
+            let settle = after
+                .iter()
+                .position(|&ms| ms < 10.0)
+                .map_or(-1, |i| i as i64 * 100);
+            println!(
+                "RESULT hold_key held_ms={} shows_held={during} shows_after={} last_show_after_ms={last_show} settle_ms={settle} cpu_held={} cpu_after={} system_held={:.0} system_after={:.0}",
+                (released - pressed) / 1000,
+                since.len(),
+                cpu_delta(&cpu_start, &cpu_released),
+                cpu_delta(&cpu_released, &cpu_end),
+                system_released - system_start,
+                system_end - system_released,
+            );
+            press(&window, gdk::Key::Escape);
+            sleep(500).await;
+        }
 
         idle(&window).await;
         finish(&window);

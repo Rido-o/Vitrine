@@ -85,7 +85,10 @@ impl Preview {
         });
         for _ in 0..WORKERS {
             let shared = shared.clone();
-            std::thread::spawn(move || worker(&shared));
+            std::thread::Builder::new()
+                .name("preview".into())
+                .spawn(move || worker(&shared))
+                .expect("a preview worker starts");
         }
         let picture = gtk::Picture::builder()
             .content_fit(gtk::ContentFit::Contain)

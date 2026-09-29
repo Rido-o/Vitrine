@@ -56,9 +56,22 @@ if [[ -z $display ]]; then
     sleep 0.1
   done
   [[ -n $display ]] || { echo "headless sway didn't start" >&2; exit 1; }
+  # For the spike's hold_key: a virtual keyboard (GTK repeats held keys).
+  VITRINE_PROBE_WTYPE=$(nix build --no-link --print-out-paths \
+    --inputs-from . nixpkgs#wtype)/bin/wtype
+  export VITRINE_PROBE_WTYPE
+fi
+
+# BENCH_REAL_CACHE=1 uses the app's real cache and state instead (e.g. to run
+# on a real folder whose thumbnails exist); mode is then ignored.
+if [[ -n ${BENCH_REAL_CACHE:-} ]]; then
+  export XDG_CACHE_HOME=${XDG_CACHE_HOME:-$HOME/.cache}
+  export XDG_STATE_HOME=${XDG_STATE_HOME:-$HOME/.local/state}
+else
+  export XDG_CACHE_HOME=$home/cache XDG_STATE_HOME=$home/state
 fi
 
 echo "# $app $mode $output scale $scale $(date -Iseconds) $(git rev-parse --short HEAD)"
-XDG_CACHE_HOME=$home/cache XDG_STATE_HOME=$home/state WAYLAND_DISPLAY=$display \
+WAYLAND_DISPLAY=$display \
   VITRINE_PROBE=1 VITRINE_PROBE_HZ=$hz ${BENCH_WRAP:-} "$bin" "$corpus" 2>&1 |
   tee "${BENCH_LOG:-/dev/null}" | grep "^RESULT" | sed "s/^RESULT //"

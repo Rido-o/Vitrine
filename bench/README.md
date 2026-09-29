@@ -14,6 +14,10 @@ BENCH_DISPLAY=$WAYLAND_DISPLAY bench/run.sh rs   # watch it in a real window
 BENCH_OUTPUT=3840x2160@144Hz BENCH_SCALE=1.5 bench/run.sh rs warm
 ```
 
+`BENCH_REAL_CACHE=1` runs with the app's real cache and state instead of the
+benchmark's (e.g. `bench/run.sh rs warm ~/Pictures` on a folder whose
+thumbnails exist).
+
 `BENCH_OUTPUT` and `BENCH_SCALE` set the headless display (default
 1920×1080 at 60 Hz, scale 1). Match the real monitor where it matters: at
 60 Hz a frame has 16.7 ms, so 8–15 ms stalls don't show as late frames that
@@ -69,6 +73,7 @@ In order, in one run:
 | `hold` | → 60 times at 30/s, then until the last image is sharp | `last_sharp_ms` |
 | `close` | Esc, 1 s | |
 | `open_selected` | spike only: select the 11th image, wait 300 ms, open it | `dwell_ms`, `sharp_ms` |
+| `hold_key` | spike only: hold → for real for 3 s (a virtual keyboard, `wtype`; GTK repeats the key), then watch 6 s | `shows_held`, `shows_after`, `last_show_after_ms`, `settle_ms` (first 100 ms after release using under 10 ms of CPU), `cpu_held`/`cpu_after` (ms per thread: `main`, `preview`, `thumbnail`, `janitor`), `system_held`/`system_after` (ms, all cores) |
 | `idle` | 2 s doing nothing | |
 | `memory` | at the end | `rss_mb`, `hwm_mb` (peak) |
 

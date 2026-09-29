@@ -53,7 +53,10 @@ fn janitor() -> &'static mpsc::Sender<Vec<u8>> {
     static SENDER: OnceLock<mpsc::Sender<Vec<u8>>> = OnceLock::new();
     SENDER.get_or_init(|| {
         let (sender, receiver) = mpsc::channel::<Vec<u8>>();
-        std::thread::spawn(move || receiver.into_iter().for_each(drop));
+        std::thread::Builder::new()
+            .name("janitor".into())
+            .spawn(move || receiver.into_iter().for_each(drop))
+            .expect("the janitor thread starts");
         sender
     })
 }
