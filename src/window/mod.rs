@@ -200,9 +200,8 @@ impl Window {
         if let Some(file) = &file {
             this.show_file(file.clone());
         }
-        let directory = directory.to_string_lossy();
-        if !this.open_directory(&directory, file) {
-            this.open_directory(&glib::home_dir().to_string_lossy(), None);
+        if !this.open_path(directory, file) {
+            this.open_path(&glib::home_dir(), None);
         }
         this.window.present();
         this.grid.grab_focus();
@@ -231,8 +230,15 @@ impl Window {
         self.grid.scroll_to(position, flags, None);
     }
 
+    // A folder typed in the entry.
     fn open_directory(self: &Rc<Self>, input: &str, select: Option<PathBuf>) -> bool {
-        let path = normalize_directory(input);
+        self.open_path(&expand_home(input), select)
+    }
+
+    // Paths stay paths (not text) until here, so names that aren't UTF-8
+    // open too.
+    fn open_path(self: &Rc<Self>, path: &Path, select: Option<PathBuf>) -> bool {
+        let path = absolute(path);
         if !path.is_dir() {
             self.toolbar.entry.add_css_class("error");
             return false;
@@ -315,27 +321,29 @@ fn icon(name: &str, size: i32) -> gtk::Image {
         .build()
 }
 
-// Surrounding space trimmed, ~ expanded, relative to the current
-// folder.
-fn normalize_directory(input: &str) -> PathBuf {
+// Surrounding space trimmed, ~ expanded.
+fn expand_home(input: &str) -> PathBuf {
     let input = input.trim();
-    let expanded = match input.strip_prefix('~') {
-        Some(rest) if rest.is_empty() || rest.starts_with('/') => {
-            format!("{}{rest}", glib::home_dir().to_string_lossy())
-        }
-        _ => input.to_owned(),
-    };
+    match input.strip_prefix('~') {
+        Some("") => glib::home_dir(),
+        Some(rest) if rest.starts_with('/') => glib::home_dir().join(rest.trim_start_matches('/')),
+        _ => PathBuf::from(input),
+    }
+}
+
+// Relative to the current folder, like g_canonicalize_filename: . and ..
+// resolved, symlinks kept.
+fn absolute(path: &Path) -> PathBuf {
     let current = std::env::current_dir().unwrap_or_else(|_| glib::home_dir());
-    // Like g_canonicalize_filename: . and .. resolved, symlinks kept.
-    let mut path = PathBuf::new();
-    for component in current.join(expanded).components() {
+    let mut resolved = PathBuf::new();
+    for component in current.join(path).components() {
         match component {
             std::path::Component::ParentDir => {
-                path.pop();
+                resolved.pop();
             }
             std::path::Component::CurDir => {}
-            component => path.push(component),
+            component => resolved.push(component),
         }
     }
-    path
+    resolved
 }

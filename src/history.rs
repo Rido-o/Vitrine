@@ -2,7 +2,11 @@
 //! ~/.local/state/vitrine/history (one path per line).
 
 use gtk::glib;
-use std::path::{Path, PathBuf};
+use std::{
+    ffi::OsStr,
+    os::unix::ffi::OsStrExt,
+    path::{Path, PathBuf},
+};
 
 // $XDG_STATE_HOME, as g_get_user_state_dir (not in glib-rs 0.22).
 fn state_dir() -> PathBuf {
@@ -45,10 +49,10 @@ pub struct History {
 impl History {
     pub fn load() -> Self {
         migrate();
-        let text = std::fs::read_to_string(file()).unwrap_or_default();
+        let bytes = std::fs::read(file()).unwrap_or_default();
         let mut entries: Vec<PathBuf> = Vec::new();
-        for line in text.lines().filter(|line| !line.is_empty()) {
-            let path = PathBuf::from(line);
+        for line in bytes.split(|&b| b == b'\n').filter(|line| !line.is_empty()) {
+            let path = PathBuf::from(OsStr::from_bytes(line));
             if path.is_dir() && !entries.contains(&path) {
                 entries.push(path);
             }
@@ -61,10 +65,11 @@ impl History {
         self.entries.retain(|entry| entry != directory);
         self.entries.insert(0, directory.to_owned());
         self.entries.truncate(LIMIT);
-        let mut text = String::new();
+        // Bytes, not text: a folder's name needn't be UTF-8.
+        let mut text = Vec::new();
         for entry in &self.entries {
-            text.push_str(&entry.to_string_lossy());
-            text.push('\n');
+            text.extend_from_slice(entry.as_os_str().as_bytes());
+            text.push(b'\n');
         }
         let path = file();
         let saved = path

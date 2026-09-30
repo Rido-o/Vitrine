@@ -261,11 +261,11 @@ impl Window {
                 )
                 .tooltip_text(&*text)
                 .build();
-            let (weak, text) = (Rc::downgrade(self), text.into_owned());
+            let (weak, path) = (Rc::downgrade(self), entry.clone());
             button.connect_clicked(move |_| {
                 if let Some(this) = weak.upgrade() {
                     this.toolbar.history_panel.popdown();
-                    this.open_directory(&text, None);
+                    this.open_path(&path, None);
                 }
             });
             list.append(&button);

@@ -6,6 +6,7 @@ use super::{lower_priority, pool::Job};
 use crate::decode::{self, Rgba};
 use gtk::glib;
 use std::{
+    os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
 };
@@ -38,13 +39,14 @@ fn old_caches() -> [PathBuf; 5] {
 }
 
 /// The cache key: a thumbnail belongs to a file's path and modification time.
+/// The path's bytes, so names that aren't UTF-8 don't collide (the same key
+/// as the text for those that are).
 pub fn key(path: &Path, mtime: i64) -> String {
-    glib::compute_checksum_for_string(
-        glib::ChecksumType::Md5,
-        format!("{}\n{mtime}", path.display()),
-    )
-    .map(|sum| sum.to_string())
-    .unwrap_or_default()
+    let mut data = path.as_os_str().as_bytes().to_vec();
+    data.extend_from_slice(format!("\n{mtime}").as_bytes());
+    glib::compute_checksum_for_data(glib::ChecksumType::Md5, &data)
+        .map(|sum| sum.to_string())
+        .unwrap_or_default()
 }
 
 // The cached thumbnail's file, if any, touched when it's a day old.
