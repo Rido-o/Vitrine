@@ -48,7 +48,6 @@ command of your choice.
   it. While an image is still decoding (e.g. holding an arrow key) its
   thumbnail is shown, then swapped for the full image. Nothing decodes on the
   main thread.
-- **Image properties** (the i button on either screen, or `i`): name, folder,
 - **Colour assessment** (`b` in the full-screen view, or the ⋯ menu), after
   darktable's, along the lines of ISO 12646: the image on middle grey (L\* 50,
   sRGB 119,119,119) inside a white frame, a neutral surround for judging
@@ -57,6 +56,7 @@ command of your choice.
   is decoded for the area inside it, and when zoomed in it stays clipped
   within the frame. The buttons and info fade out as in fullscreen. It stays
   on for the window until it's closed.
+- **Image properties** (the i button on either screen, or `i`): name, folder,
   size, type and dates; dimensions (as shown, after EXIF rotation), megapixels,
   format and orientation; and, when the file has EXIF, the camera, lens,
   exposure, aperture, ISO, focal length, flash, date taken, GPS location,
