@@ -122,7 +122,8 @@ Files:
   for images with transparent pixels, named after the image's path and
   modification time. A thumbnail is refreshed when it's used, and a few
   seconds after launch Vitrine deletes any not used for 90 days, so
-  thumbnails of edited, moved or deleted images don't pile up.
+  thumbnails of edited, moved or deleted images don't pile up (and any left
+  half-written by a Vitrine that was killed, after an hour).
 - Folder history: `~/.local/state/vitrine/history`.
 - Your own styles (optional): `~/.config/vitrine/style.css`, see "Theming".
 

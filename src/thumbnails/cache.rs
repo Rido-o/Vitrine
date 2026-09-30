@@ -17,6 +17,9 @@ const JPEG_QUALITY: i32 = 85;
 // and pruned once unused for PRUNE_AFTER.
 const PRUNE_AFTER: Duration = Duration::from_secs(90 * 24 * 60 * 60);
 const TOUCH_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
+// A partly written thumbnail this old was left by a process that died
+// (another may be writing a newer one right now).
+const PART_AFTER: Duration = Duration::from_secs(60 * 60);
 
 /// "-4": thumbnails in sRGB (JPEG, or PNG with transparency, keyed by
 /// `key`); "-3" had embedded colour profiles ignored, the TypeScript app's
@@ -151,22 +154,29 @@ fn prune(cache_dir: &Path) -> usize {
     let Ok(entries) = std::fs::read_dir(cache_dir) else {
         return 0;
     };
-    let is_cache_file = |name: &str| {
+    // A thumbnail, or one whose writing never finished (`save`, killed
+    // mid-write): unused for this long.
+    let unused_after = |name: &str| {
         let (stem, ext) = name.split_once('.').unwrap_or((name, ""));
-        stem.len() == 32
-            && stem.bytes().all(|b| b.is_ascii_hexdigit())
-            && matches!(ext, "jpg" | "png")
+        if stem.len() != 32 || !stem.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return None;
+        }
+        match ext {
+            "jpg" | "png" => Some(PRUNE_AFTER),
+            _ if ext.ends_with(".part") => Some(PART_AFTER),
+            _ => None,
+        }
     };
     let mut pruned = 0;
     for entry in entries.flatten() {
+        let Some(after) = entry.file_name().to_str().and_then(unused_after) else {
+            continue;
+        };
         let unused = entry
             .metadata()
             .and_then(|metadata| metadata.modified())
-            .is_ok_and(|modified| modified.elapsed().is_ok_and(|age| age > PRUNE_AFTER));
-        if unused
-            && entry.file_name().to_str().is_some_and(is_cache_file)
-            && std::fs::remove_file(entry.path()).is_ok()
-        {
+            .is_ok_and(|modified| modified.elapsed().is_ok_and(|age| age > after));
+        if unused && std::fs::remove_file(entry.path()).is_ok() {
             pruned += 1;
         }
     }
