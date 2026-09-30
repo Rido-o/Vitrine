@@ -20,6 +20,8 @@ impl Window {
 
     // Whether `key` was handled.
     fn key(self: &Rc<Self>, key: gdk::Key, state: gdk::ModifierType) -> bool {
+        // Letters match in either case (Shift, Caps Lock).
+        let key = key.to_lower();
         if self.editing_directory() {
             if key != gdk::Key::Escape {
                 return false;
@@ -28,15 +30,11 @@ impl Window {
             self.grid.grab_focus();
             return true;
         }
-        if state.contains(gdk::ModifierType::CONTROL_MASK)
-            && matches!(key, gdk::Key::z | gdk::Key::Z)
-        {
+        if state.contains(gdk::ModifierType::CONTROL_MASK) && key == gdk::Key::z {
             self.undo_delete();
             return true;
         }
-        if state.contains(gdk::ModifierType::CONTROL_MASK)
-            && matches!(key, gdk::Key::c | gdk::Key::C)
-        {
+        if state.contains(gdk::ModifierType::CONTROL_MASK) && key == gdk::Key::c {
             if state.contains(gdk::ModifierType::SHIFT_MASK) {
                 self.copy_path();
             } else {
@@ -45,7 +43,7 @@ impl Window {
             return true;
         }
         if state.contains(gdk::ModifierType::CONTROL_MASK)
-            && matches!(key, gdk::Key::w | gdk::Key::W | gdk::Key::q | gdk::Key::Q)
+            && matches!(key, gdk::Key::w | gdk::Key::q)
         {
             self.window.close();
             return true;
@@ -58,7 +56,7 @@ impl Window {
         if state.intersects(held) {
             return false;
         }
-        if matches!(key, gdk::Key::r | gdk::Key::R) {
+        if key == gdk::Key::r {
             self.folder.rescan();
             return true;
         }
@@ -66,11 +64,11 @@ impl Window {
             self.delete_selected();
             return true;
         }
-        if matches!(key, gdk::Key::w | gdk::Key::W) && self.wallpaper_argv.is_some() {
+        if key == gdk::Key::w && self.wallpaper_argv.is_some() {
             self.set_wallpaper();
             return true;
         }
-        if matches!(key, gdk::Key::i | gdk::Key::I) {
+        if key == gdk::Key::i {
             self.toggle_properties();
             return true;
         }
@@ -81,9 +79,7 @@ impl Window {
         let selected = self.selection.selected() as i64;
         if self.in_grid() {
             match key {
-                gdk::Key::e | gdk::Key::E if self.selection.selected_item().is_some() => {
-                    self.show_at(selected)
-                }
+                gdk::Key::e if self.selection.selected_item().is_some() => self.show_at(selected),
                 gdk::Key::Escape | gdk::Key::q => self.window.close(),
                 _ => return false,
             }
@@ -94,7 +90,7 @@ impl Window {
             gdk::Key::Left => self.show_at(selected - 1),
             gdk::Key::Escape | gdk::Key::q => self.close_view(),
             // Through the action, so the menu's check follows.
-            gdk::Key::b | gdk::Key::B => {
+            gdk::Key::b => {
                 WidgetExt::activate_action(&self.window, "win.color-assessment", None).ok();
             }
             _ => return self.view.key(key),

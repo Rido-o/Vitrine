@@ -221,17 +221,18 @@ impl View {
     /// The view's own keys (zoom, sharp pixels, rotation, flips, fullscreen);
     /// whether `key` was one.
     pub fn key(&self, key: gdk::Key) -> bool {
+        let key = key.to_lower();
         let image = &self.preview.image;
         match key {
             gdk::Key::plus | gdk::Key::equal | gdk::Key::KP_Add => image.zoom_in(),
             gdk::Key::minus | gdk::Key::KP_Subtract => image.zoom_out(),
             gdk::Key::_0 | gdk::Key::KP_0 => image.reset_zoom(),
-            gdk::Key::s | gdk::Key::S => image.toggle_sharp(),
-            gdk::Key::f | gdk::Key::F => self.toggle_fullscreen(),
+            gdk::Key::s => image.toggle_sharp(),
+            gdk::Key::f => self.toggle_fullscreen(),
             gdk::Key::bracketleft => image.rotate(false),
             gdk::Key::bracketright => image.rotate(true),
-            gdk::Key::h | gdk::Key::H => image.flip(true),
-            gdk::Key::v | gdk::Key::V => image.flip(false),
+            gdk::Key::h => image.flip(true),
+            gdk::Key::v => image.flip(false),
             _ => return false,
         }
         true
