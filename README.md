@@ -368,6 +368,12 @@ Things that broke and look like harmless cleanups:
 
 ## Roadmap
 
+- Fix Ctrl+C in the properties popover: with a value selected, nothing is
+  copied (neither the text nor the image). The values aren't focusable, so
+  the label never gets the key, and a key controller on the popover didn't
+  see it either. In the headless check, `wtype`'s keys didn't reach the
+  window at that point, so it's still unclear where the key goes; find that
+  first.
 - Maybe: uploading textures off the main thread, if screen-size textures and
   tiles stop being enough (a shared GL context, or dmabufs filled on a
   worker; both fragile).
