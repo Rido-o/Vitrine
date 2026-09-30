@@ -1,7 +1,7 @@
 //! Opening images in the full-screen view, moving through them and going back
 //! to the grid; the view's decodes follow the selection.
 
-use super::Window;
+use super::{Window, selected_path};
 use crate::{
     library::image,
     view::{preview::Preview, zoomable},
@@ -100,10 +100,9 @@ impl Window {
                 if !this.in_grid() {
                     return;
                 }
-                if let Some(object) = selection.selected_item() {
+                if let Some(path) = selected_path(selection) {
                     let (width, height) = view_size(&this.window, &this.preview.image);
-                    this.preview
-                        .preload(image(&object).path.clone(), width, height);
+                    this.preview.preload(path, width, height);
                 }
             });
 
@@ -164,11 +163,8 @@ fn hide_after_paint(
             if stack.visible_child_name().as_deref() != Some("grid") {
                 return;
             }
-            let keep = selection
-                .selected_item()
-                .map(|object| image(&object).path.clone());
             let (width, height) = view_size(&window, &preview.image);
-            preview.hide(keep, width, height);
+            preview.hide(selected_path(&selection), width, height);
         }
     };
     let Some(clock) = window.frame_clock() else {

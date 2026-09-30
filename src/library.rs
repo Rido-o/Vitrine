@@ -195,7 +195,7 @@ type ModifiedCallback = Rc<dyn Fn(&Path)>;
 /// A folder's images: `store` in the order found, `sorted` for the grid,
 /// sorted incrementally while loading so a big batch doesn't block a frame.
 pub struct Folder {
-    pub store: gio::ListStore,
+    store: gio::ListStore,
     pub sorted: gtk::SortListModel,
     sorter: gtk::CustomSorter,
     order: Rc<Order>,

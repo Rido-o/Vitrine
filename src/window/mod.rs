@@ -13,7 +13,6 @@ mod toolbar;
 
 use self::{info::InfoBar, toast::Toast, toolbar::Toolbar};
 use crate::{
-    actions::ActionsMenu,
     desktop::trash::{self, TrashedItem},
     history::History,
     library::{Finished, Folder, image},
@@ -59,10 +58,9 @@ pub struct Window {
     modified: RefCell<HashSet<PathBuf>>,
     // Width × height from each file's header, read off the main thread.
     resolutions: RefCell<HashMap<PathBuf, Option<(i32, i32)>>>,
-    // The ⋯ menu (its actions are the window's), made once the window is.
-    actions: RefCell<Option<ActionsMenu>>,
     // The i buttons: the grid's and the view's.
-    properties_buttons: RefCell<Option<(gtk::MenuButton, gtk::MenuButton)>>,
+    grid_properties: gtk::MenuButton,
+    view_properties: gtk::MenuButton,
     // VITRINE_WALLPAPER_COMMAND, split into arguments; the image is appended.
     wallpaper_argv: Option<Vec<std::ffi::OsString>>,
     can_trash: bool,
@@ -70,7 +68,6 @@ pub struct Window {
     // order (`undo_requests`).
     undo_stack: RefCell<Vec<TrashedItem>>,
     undo_requests: async_channel::Sender<()>,
-    undo_receiver: async_channel::Receiver<()>,
 }
 
 impl Window {
@@ -126,6 +123,9 @@ impl Window {
         let view = View::new(&window, &stack, &preview);
         stack.add_named(&view.page, Some("preview"));
         let (undo_requests, undo_receiver) = async_channel::unbounded();
+        let grid_properties = menu::properties_button(&selection, 16);
+        grid_properties.add_css_class("viewer-toolbar-menu");
+        let view_properties = menu::properties_button(&selection, 20);
 
         let this = Rc::new(Self {
             window,
@@ -146,20 +146,19 @@ impl Window {
             last_selected: RefCell::default(),
             modified: RefCell::default(),
             resolutions: RefCell::default(),
-            actions: RefCell::default(),
-            properties_buttons: RefCell::default(),
+            grid_properties,
+            view_properties,
             wallpaper_argv: crate::desktop::wallpaper_command(),
             can_trash: trash::available(),
             undo_stack: RefCell::default(),
             undo_requests,
-            undo_receiver,
         });
 
         this.connect_toolbar();
         this.connect_info();
         this.connect_preview();
         this.connect_keys();
-        this.connect_trash();
+        this.connect_trash(undo_receiver);
         this.build_menu();
         this.keep_first_while_loading();
         // A file changed on disk: its decoded image and size are out of date.
@@ -214,9 +213,7 @@ impl Window {
     }
 
     fn selected_path(&self) -> Option<PathBuf> {
-        self.selection
-            .selected_item()
-            .map(|object| image(&object).path.clone())
+        selected_path(&self.selection)
     }
 
     // Selects `position` and scrolls to it (focusing it with `focus`).
@@ -305,6 +302,12 @@ impl Window {
         self.tiles.set_background(&self.folder.images());
         self.sync_info();
     }
+}
+
+fn selected_path(selection: &gtk::SingleSelection) -> Option<PathBuf> {
+    selection
+        .selected_item()
+        .map(|object| image(&object).path.clone())
 }
 
 fn file_name(path: &Path) -> String {

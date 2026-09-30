@@ -6,6 +6,18 @@ use crate::actions::{self, ActionsMenu, MenuAction};
 use gtk::{gio, glib, prelude::*};
 use std::rc::Rc;
 
+/// An i button: the selected image's properties.
+pub fn properties_button(selection: &gtk::SingleSelection, pixel_size: i32) -> gtk::MenuButton {
+    let selection = selection.clone();
+    let popover = crate::properties::popover(move || super::selected_path(&selection));
+    let button = gtk::MenuButton::builder()
+        .tooltip_text("Image properties (i)")
+        .popover(&popover)
+        .build();
+    button.set_child(Some(&icon("circle-info-awesome-symbolic", pixel_size)));
+    button
+}
+
 impl Window {
     // The view's own actions (rotate, flip, colour assessment) are only
     // enabled there.
@@ -83,39 +95,20 @@ impl Window {
         self.view
             .add_menu_button(&actions::more_button(&menu.model, 20));
         // The i buttons, before the menus.
-        let grid_properties = self.properties_button(16);
-        grid_properties.add_css_class("viewer-toolbar-menu");
-        toolbar_end.prepend(&grid_properties);
-        let view_properties = self.properties_button(20);
-        self.view.add_menu_button(&view_properties);
-        *self.properties_buttons.borrow_mut() = Some((grid_properties, view_properties));
-        let weak = Rc::downgrade(self);
-        self.stack.connect_visible_child_name_notify(move |_| {
-            if let Some(this) = weak.upgrade()
-                && let Some(menu) = this.actions.borrow().as_ref()
-            {
-                menu.set_in_view(!this.in_grid());
-            }
+        toolbar_end.prepend(&self.grid_properties);
+        self.view.add_menu_button(&self.view_properties);
+        self.stack.connect_visible_child_name_notify(move |stack| {
+            menu.set_in_view(stack.visible_child_name().as_deref() != Some("grid"));
         });
-        *self.actions.borrow_mut() = Some(menu);
-    }
-
-    fn properties_button(self: &Rc<Self>, pixel_size: i32) -> gtk::MenuButton {
-        let weak = Rc::downgrade(self);
-        let popover = crate::properties::popover(move || weak.upgrade()?.selected_path());
-        let button = gtk::MenuButton::builder()
-            .tooltip_text("Image properties (i)")
-            .popover(&popover)
-            .build();
-        button.set_child(Some(&icon("circle-info-awesome-symbolic", pixel_size)));
-        button
     }
 
     pub(super) fn toggle_properties(&self) {
-        if let Some((grid, view)) = self.properties_buttons.borrow().as_ref() {
-            let button = if self.in_grid() { grid } else { view };
-            button.set_active(!button.is_active());
-        }
+        let button = if self.in_grid() {
+            &self.grid_properties
+        } else {
+            &self.view_properties
+        };
+        button.set_active(!button.is_active());
     }
 
     // Decodes the whole image (a GIF's first frame) on a worker for the

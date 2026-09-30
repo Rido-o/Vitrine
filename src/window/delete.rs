@@ -9,7 +9,7 @@ use std::{path::Path, rc::Rc};
 const NO_GVFS: &str = "Moving to the trash needs GVfs, which isn't available";
 
 impl Window {
-    pub(super) fn connect_trash(self: &Rc<Self>) {
+    pub(super) fn connect_trash(self: &Rc<Self>, requests: async_channel::Receiver<()>) {
         let weak = Rc::downgrade(self);
         self.toast.connect_undo(move || {
             if let Some(this) = weak.upgrade() {
@@ -18,7 +18,7 @@ impl Window {
         });
         // Undos one at a time: repeated presses go back through the deletes
         // in order.
-        let (weak, requests) = (Rc::downgrade(self), self.undo_receiver.clone());
+        let weak = Rc::downgrade(self);
         glib::spawn_future_local(async move {
             while requests.recv().await.is_ok() {
                 let Some(this) = weak.upgrade() else { return };
@@ -75,11 +75,8 @@ impl Window {
         let _ = self.undo_requests.try_send(());
     }
 
-    // Restores the most recent delete.
+    // Restores the most recent delete (only asked for with GVfs: `undo_delete`).
     async fn undo_one(self: &Rc<Self>) {
-        if !self.can_trash {
-            return self.toast.show(NO_GVFS, false);
-        }
         let Some(item) = self.undo_stack.borrow_mut().pop() else {
             return self.toast.show("Nothing to undo", false);
         };
