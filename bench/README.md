@@ -34,11 +34,10 @@ entry and its history, properties (and EXIF orientation outside JPEG, with
 folder (rescan and watching too, changing files, only if DIR holds a
 `.vitrine-probe-scratch` file), printed as `ui` lines, with screenshots under
 `VITRINE_PROBE_SHOTS`. Its trash and undo checks trash files for real, so they
-only run with `VITRINE_PROBE_TRASH=1`: use it only on the scratch folder, on a
-private session bus with its own data folder: `dbus-run-session`,
-`XDG_DATA_HOME=<scratch>/data`, `GIO_EXTRA_MODULES=<gvfs>/lib/gio/modules`
-and `<gvfs>/libexec/gvfsd --replace &` before `bench/run.sh`
-(`GIO_USE_VFS=local` checks the no-GVfs case).
+only run with `VITRINE_PROBE_TRASH=1`: use it only on the scratch folder, with
+a data folder of its own on the same filesystem, `XDG_DATA_HOME=<scratch>/data`
+(on another filesystem, trashed files go to that filesystem's own
+`.Trash-<uid>`).
 
 `BENCH_REAL_CACHE=1` runs with the app's real cache and state instead of the
 benchmark's (e.g. `bench/run.sh warm ~/Pictures` on a folder whose

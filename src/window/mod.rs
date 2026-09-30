@@ -13,7 +13,7 @@ mod toolbar;
 
 use self::{info::InfoBar, toast::Toast, toolbar::Toolbar};
 use crate::{
-    desktop::trash::{self, TrashedItem},
+    desktop::trash::TrashedItem,
     history::History,
     library::{Finished, Folder, image},
     thumbnails::tiles::Tiles,
@@ -63,7 +63,6 @@ pub struct Window {
     view_properties: gtk::MenuButton,
     // VITRINE_WALLPAPER_COMMAND, split into arguments; the image is appended.
     wallpaper_argv: Option<Vec<std::ffi::OsString>>,
-    can_trash: bool,
     // The deletes to undo, most recent last; undos run one at a time, in
     // order (`undo_requests`).
     undo_stack: RefCell<Vec<TrashedItem>>,
@@ -149,7 +148,6 @@ impl Window {
             grid_properties,
             view_properties,
             wallpaper_argv: crate::desktop::wallpaper_command(),
-            can_trash: trash::available(),
             undo_stack: RefCell::default(),
             undo_requests,
         });

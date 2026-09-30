@@ -8,7 +8,7 @@ pub mod ui;
 
 use gtk::gdk;
 use gtk::glib::translate::IntoGlib;
-use gtk::{gio, glib, prelude::*};
+use gtk::{glib, prelude::*};
 use std::{
     cell::RefCell,
     path::{Path, PathBuf},

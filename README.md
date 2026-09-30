@@ -71,9 +71,10 @@ command of your choice.
 - **Set as wallpaper** runs a configurable command with the image path and
   shows a "Wallpaper set" toast; the viewer stays open.
 - **Delete** moves the image to the trash, and **Ctrl+Z** (or the toast's Undo)
-  restores it, repeatedly back through every delete in the window. Both need
-  [GVfs](https://gitlab.gnome.org/GNOME/gvfs) (its `trash:///`), which most
-  full desktops run; without it they're disabled.
+  restores it, repeatedly back through every delete in the window. It's the
+  desktop's own trash (the freedesktop.org one your file manager shows):
+  the home trash, or a drive's own `.Trash-<uid>` for images on another
+  drive; no GVfs needed.
 - JPEG, PNG, WebP, TIFF and GIF (animated GIFs play in the full-screen view;
   thumbnails show the first frame); a desktop entry registers Vitrine for
   those types. Photos are shown upright: the EXIF orientation is applied, in
@@ -101,7 +102,7 @@ Keys (grid unless noted):
 | Ctrl+C, Ctrl+Shift+C | Copy the image, or its path (grid and view) |
 | `?` | Keyboard shortcuts (grid and view) |
 | `r` | Rescan (grid and view) |
-| Delete | Move to trash, needs GVfs (grid and view) |
+| Delete | Move to trash (grid and view) |
 | Ctrl+Z | Undo the last delete; repeat to go further back (grid and view) |
 | Ctrl+W, Ctrl+Q | Close the window (grid and view) |
 | Esc, `q` | Close the view, or quit from the grid |
@@ -263,7 +264,7 @@ src/
     color.rs          embedded ICC profiles (JPEG, PNG, GdkPixbuf) converted
                       to sRGB (moxcms)
   desktop/          the file manager (D-Bus) and wallpaper command (mod.rs)
-    trash.rs          trash and exact-item restore through GVfs (trash:///)
+    trash.rs          trash and exact-item restore (the `trash` crate)
   actions.rs        the ⋯ menu: its model and window actions
   properties.rs     the i popover's contents (file info, GdkPixbuf, EXIF)
   shortcuts.rs      the keyboard shortcuts window
@@ -349,16 +350,20 @@ Things that broke and look like harmless cleanups:
   sets `GDK_PIXBUF_MODULE_FILE` to librsvg's cache, which has no WebP. Adding
   a `--set` to `gappsWrapperArgs` isn't enough: the hook's comes later and
   wins, hence the manual wrap.
-- **Undo restores an exact trash item, never "the newest".** GVfs's deletion
-  dates have one-second resolution, so two deletes of the same path in a
-  second can't be told apart by date. `desktop/trash.rs` lists the path's
-  `trash:///` items just before and after trashing; the one new item is
+- **Undo restores an exact trash item, never "the newest".** The trash's
+  deletion dates have one-second resolution, so two deletes of the same path
+  in a second can't be told apart by date. `desktop/trash.rs` lists the
+  path's trash items just before and after trashing; the one new item is
   recorded and undo moves exactly that back.
-- **Testing trash code needs GVfs on a private bus with its own trash**, or it
-  trashes into your real one: `dbus-run-session`, `XDG_DATA_HOME=<scratch>`,
-  `GIO_EXTRA_MODULES=<gvfs>/lib/gio/modules` and `<gvfs>/libexec/gvfsd
-  --replace &`; the UI check only trashes with `VITRINE_PROBE_TRASH=1` (see
-  `bench/README.md`).
+- **Restoring cleans up after the `trash` crate.** It puts an empty file at
+  the old path first, then renames the item over it: a rename that fails
+  (e.g. across drives, for an image from a drive without a trash of its own,
+  kept in the home trash) left that empty file where the image was. It's
+  removed, and an item on another drive is copied back instead.
+- **Testing trash code needs its own `XDG_DATA_HOME`, on the same filesystem
+  as the files it trashes**, or it trashes into your real trash, or that
+  filesystem's own (e.g. `/tmp/.Trash-<uid>`); the UI check only trashes with
+  `VITRINE_PROBE_TRASH=1` (see `bench/README.md`).
 - **No transition between the grid and the full-screen view.** A 150 ms
   crossfade rendered cleanly but still looked laggy, so the switch is instant.
 - **GTK uploads textures on the main thread when first drawn**, with no API to
@@ -395,8 +400,9 @@ images and memory all came out ahead of the TypeScript version
   [turbojpeg](https://crates.io/crates/turbojpeg) (MIT or Unlicense),
   [fast_image_resize](https://crates.io/crates/fast_image_resize) and
   [png](https://crates.io/crates/png) (MIT or Apache-2.0),
-  [kamadak-exif](https://crates.io/crates/kamadak-exif) (BSD-2-Clause), and
-  [moxcms](https://crates.io/crates/moxcms) (BSD-3-Clause or Apache-2.0).
+  [kamadak-exif](https://crates.io/crates/kamadak-exif) (BSD-2-Clause),
+  [moxcms](https://crates.io/crates/moxcms) (BSD-3-Clause or Apache-2.0), and
+  [trash](https://crates.io/crates/trash) (MIT).
 
 ## Licence
 

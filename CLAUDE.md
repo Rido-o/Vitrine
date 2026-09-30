@@ -26,7 +26,7 @@ There are no unit tests, so:
 - `nix build`, then `$(nix build --print-out-paths)/bin/vitrine --help`: catches wrapper and startup problems without opening a window.
 - The app has a built-in probe (`src/probe/`), run in a headless sway by `bench/run.sh` (see `bench/README.md`):
   - `VITRINE_PROBE=1` (the default in `bench/run.sh`) is the benchmark: frame times, stalls, decode times, memory. Measure at the author's display where it matters: `BENCH_OUTPUT=3840x2160@144Hz BENCH_SCALE=1.5 GSK_RENDERER=gl bench/run.sh warm`.
-  - `BENCH_PROBE=ui BENCH_ARGS= bench/run.sh warm DIR` drives the controls (sorting, menus, copy, history, properties, rescans, watching) and prints what it sees; extend it for new behaviour. Use a folder of synthetic images, not the user's: files are added, changed and removed when it holds `.vitrine-probe-scratch`. Its trash checks only run with `VITRINE_PROBE_TRASH=1`, on a private bus with its own `XDG_DATA_HOME`, never against the real trash.
+  - `BENCH_PROBE=ui BENCH_ARGS= bench/run.sh warm DIR` drives the controls (sorting, menus, copy, history, properties, rescans, watching) and prints what it sees; extend it for new behaviour. Use a folder of synthetic images, not the user's: files are added, changed and removed when it holds `.vitrine-probe-scratch`. Its trash checks only run with `VITRINE_PROBE_TRASH=1`, with its own `XDG_DATA_HOME` on the scratch folder's filesystem, never against the real trash.
   - `VITRINE_PROBE_SHOTS=DIR` (with `VITRINE_PROBE_GRIM` for device pixels and popovers) saves screenshots to look at.
 - Anything that needs a real pointer or the user's eye (dragging, hover, how it looks at 1.5×) needs the user to run it; say what to check.
 

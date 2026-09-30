@@ -18,6 +18,8 @@ png = "0.18"
 kamadak-exif = "0.6"
 # Embedded colour profiles to sRGB; pure Rust.
 moxcms = "0.8"
+# The freedesktop.org trash, without GVfs; chrono writes deletion dates.
+trash = { version = "5.2", default-features = false, features = ["chrono"] }
 
 [profile.release]
 debug = "line-tables-only"

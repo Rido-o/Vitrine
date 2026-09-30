@@ -1,5 +1,5 @@
 //! The desktop around the app: the file manager (over D-Bus), the wallpaper
-//! command, and the trash (`trash.rs`, through GVfs).
+//! command, and the trash (`trash.rs`, the freedesktop.org trash).
 
 pub mod trash;
 

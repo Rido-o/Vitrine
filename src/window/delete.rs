@@ -1,12 +1,10 @@
 //! Delete (to the trash) and undo, repeatedly back through every delete in
-//! the window; both need GVfs (`desktop::trash`).
+//! the window (`desktop::trash`).
 
 use super::{Window, file_name};
 use crate::desktop::trash;
 use gtk::{glib, prelude::*};
 use std::{path::Path, rc::Rc};
-
-const NO_GVFS: &str = "Moving to the trash needs GVfs, which isn't available";
 
 impl Window {
     pub(super) fn connect_trash(self: &Rc<Self>, requests: async_channel::Receiver<()>) {
@@ -30,9 +28,6 @@ impl Window {
     // Takes the image out of the grid straight away (so repeated Delete keeps
     // going) and puts it back if trashing fails.
     pub(super) fn delete_selected(self: &Rc<Self>) {
-        if !self.can_trash {
-            return self.toast.show(NO_GVFS, false);
-        }
         let Some(path) = self.selected_path() else {
             return;
         };
@@ -69,13 +64,10 @@ impl Window {
     }
 
     pub(super) fn undo_delete(&self) {
-        if !self.can_trash {
-            return;
-        }
         let _ = self.undo_requests.try_send(());
     }
 
-    // Restores the most recent delete (only asked for with GVfs: `undo_delete`).
+    // Restores the most recent delete.
     async fn undo_one(self: &Rc<Self>) {
         let Some(item) = self.undo_stack.borrow_mut().pop() else {
             return self.toast.show("Nothing to undo", false);

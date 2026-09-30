@@ -301,8 +301,8 @@ pub fn run(window: &gtk::ApplicationWindow) {
             state("watch_back");
 
             // Trash and undo: they trash files for real, so only when asked
-            // (VITRINE_PROBE_TRASH=1, on a private bus with its own trash:
-            // bench/README.md).
+            // (VITRINE_PROBE_TRASH=1, with its own XDG_DATA_HOME on this
+            // folder's filesystem: bench/README.md).
             if std::env::var_os("VITRINE_PROBE_TRASH").is_some() {
                 let select_named = |name: &str| {
                     let position = (0..selection.n_items()).find(|&i| name_at(i) == name);
@@ -314,15 +314,12 @@ pub fn run(window: &gtk::ApplicationWindow) {
                 let undo = || press_with(&window, gdk::Key::z, gdk::ModifierType::CONTROL_MASK);
                 let teal = directory.join("img-05-teal.jpg");
                 let count = selection.n_items();
-                println!(
-                    "RESULT ui trash available={}",
-                    crate::desktop::trash::available()
-                );
                 select_named("img-05-teal.jpg");
                 sleep(200).await;
                 press(&window, gdk::Key::Delete);
                 wait_until(5000, || {
-                    toast_text(&root).is_some_and(|t| t.starts_with("Moved") || t.contains("GVfs"))
+                    toast_text(&root)
+                        .is_some_and(|t| t.starts_with("Moved") || t.starts_with("Could"))
                 })
                 .await;
                 println!(
@@ -333,135 +330,104 @@ pub fn run(window: &gtk::ApplicationWindow) {
                     toast_text(&root)
                 );
                 shot(&window, "ui-toast-undo");
-                if crate::desktop::trash::available() {
-                    undo();
-                    wait_until(5000, || {
-                        toast_text(&root).is_some_and(|t| t.starts_with("Restored"))
-                    })
-                    .await;
-                    println!(
-                        "RESULT ui undo items={} selected={:?} on_disk={} toast={:?}",
-                        selection.n_items(),
-                        name_at(selection.selected()),
-                        teal.exists(),
-                        toast_text(&root)
-                    );
+                undo();
+                wait_until(5000, || {
+                    toast_text(&root).is_some_and(|t| t.starts_with("Restored"))
+                })
+                .await;
+                println!(
+                    "RESULT ui undo items={} selected={:?} on_disk={} toast={:?}",
+                    selection.n_items(),
+                    name_at(selection.selected()),
+                    teal.exists(),
+                    toast_text(&root)
+                );
 
-                    // The same path twice, quickly: undo restores the newer one;
-                    // the older can't come back over it.
-                    select_named("img-05-teal.jpg");
-                    let first = glib::monotonic_time();
-                    press(&window, gdk::Key::Delete);
-                    wait_until(5000, || !teal.exists()).await;
-                    let _ = std::fs::copy(directory.join("img-10-gray.jpg"), &teal);
-                    press(&window, gdk::Key::r);
-                    wait_until(3000, || select_named("img-05-teal.jpg").is_some()).await;
-                    let apart = (glib::monotonic_time() - first) / 1000;
-                    press(&window, gdk::Key::Delete);
-                    wait_until(5000, || !teal.exists()).await;
-                    sleep(500).await;
-                    println!("RESULT ui delete_twice apart_ms={apart}");
-                    undo();
-                    wait_until(5000, || teal.exists()).await;
-                    sleep(300).await;
-                    println!(
-                        "RESULT ui undo_newer size={:?} toast={:?}",
-                        std::fs::metadata(&teal).map(|m| m.len()).ok(),
-                        toast_text(&root)
-                    );
-                    undo();
-                    sleep(1000).await;
-                    println!("RESULT ui undo_older toast={:?}", toast_text(&root));
-                    // Put the original back by hand.
-                    let _ = std::fs::remove_file(&teal);
-                    let trash = gio::File::for_uri("trash:///");
-                    if let Ok(enumerator) = trash.enumerate_children(
-                        "standard::name,trash::orig-path",
-                        gio::FileQueryInfoFlags::NONE,
-                        None::<&gio::Cancellable>,
-                    ) {
-                        for info in enumerator.flatten() {
-                            if info.attribute_byte_string("trash::orig-path").as_deref()
-                                == teal.to_str()
-                            {
-                                let _ = trash.child(info.name()).move_(
-                                    &gio::File::for_path(&teal),
-                                    gio::FileCopyFlags::NONE,
-                                    None::<&gio::Cancellable>,
-                                    None,
-                                );
-                            }
-                        }
-                    }
-                    println!(
-                        "RESULT ui original_back size={:?}",
-                        std::fs::metadata(&teal).map(|m| m.len()).ok()
-                    );
-                    sleep(1500).await;
-
-                    // Undo once the item has left the trash (emptied): said
-                    // so, and nothing restored.
-                    let gone = directory.join("img-00-gone.jpg");
-                    let _ = std::fs::copy(directory.join("img-01-red.jpg"), &gone);
-                    press(&window, gdk::Key::r);
-                    wait_until(3000, || select_named("img-00-gone.jpg").is_some()).await;
-                    press(&window, gdk::Key::Delete);
-                    wait_until(5000, || {
-                        toast_text(&root).is_some_and(|t| t.starts_with("Moved"))
-                    })
-                    .await;
-                    let trash = gio::File::for_uri("trash:///");
-                    if let Ok(enumerator) = trash.enumerate_children(
-                        "standard::name,trash::orig-path",
-                        gio::FileQueryInfoFlags::NONE,
-                        None::<&gio::Cancellable>,
-                    ) {
-                        for info in enumerator.flatten() {
-                            if info.attribute_byte_string("trash::orig-path").as_deref()
-                                == gone.to_str()
-                            {
-                                let _ = trash.child(info.name()).delete(None::<&gio::Cancellable>);
-                            }
-                        }
-                    }
-                    undo();
-                    wait_until(5000, || {
-                        toast_text(&root).is_some_and(|t| t.starts_with("Couldn't"))
-                    })
-                    .await;
-                    println!(
-                        "RESULT ui undo_gone toast={:?} on_disk={} items={}",
-                        toast_text(&root),
-                        gone.exists(),
-                        selection.n_items()
-                    );
-                    sleep(1500).await;
-
-                    // In the view: deleting shows the next image, undo the
-                    // restored one.
-                    select_named("img-06-blue.jpg");
-                    grid.emit_by_name::<()>("activate", &[&selection.selected()]);
-                    sleep(500).await;
-                    press(&window, gdk::Key::Delete);
-                    wait_until(5000, || {
-                        toast_text(&root).is_some_and(|t| t.starts_with("Moved"))
-                    })
-                    .await;
-                    let after_delete = shown_name(&root);
-                    undo();
-                    wait_until(5000, || {
-                        toast_text(&root).is_some_and(|t| t.starts_with("Restored"))
-                    })
-                    .await;
-                    println!(
-                        "RESULT ui view_delete shown={after_delete:?} after_undo={:?} selected={:?} items={}",
-                        shown_name(&root),
-                        name_at(selection.selected()),
-                        selection.n_items()
-                    );
-                    press(&window, gdk::Key::Escape);
-                    sleep(300).await;
+                // The same path twice, quickly: undo restores the newer one;
+                // the older can't come back over it.
+                select_named("img-05-teal.jpg");
+                let first = glib::monotonic_time();
+                press(&window, gdk::Key::Delete);
+                wait_until(5000, || !teal.exists()).await;
+                let _ = std::fs::copy(directory.join("img-10-gray.jpg"), &teal);
+                press(&window, gdk::Key::r);
+                wait_until(3000, || select_named("img-05-teal.jpg").is_some()).await;
+                let apart = (glib::monotonic_time() - first) / 1000;
+                press(&window, gdk::Key::Delete);
+                wait_until(5000, || !teal.exists()).await;
+                sleep(500).await;
+                println!("RESULT ui delete_twice apart_ms={apart}");
+                undo();
+                wait_until(5000, || teal.exists()).await;
+                sleep(300).await;
+                println!(
+                    "RESULT ui undo_newer size={:?} toast={:?}",
+                    std::fs::metadata(&teal).map(|m| m.len()).ok(),
+                    toast_text(&root)
+                );
+                undo();
+                sleep(1000).await;
+                println!("RESULT ui undo_older toast={:?}", toast_text(&root));
+                // Put the original back by hand.
+                let _ = std::fs::remove_file(&teal);
+                for item in trashed_from(&teal) {
+                    let _ = trash::os_limited::restore_all([item]);
                 }
+                println!(
+                    "RESULT ui original_back size={:?}",
+                    std::fs::metadata(&teal).map(|m| m.len()).ok()
+                );
+                sleep(1500).await;
+
+                // Undo once the item has left the trash (emptied): said
+                // so, and nothing restored.
+                let gone = directory.join("img-00-gone.jpg");
+                let _ = std::fs::copy(directory.join("img-01-red.jpg"), &gone);
+                press(&window, gdk::Key::r);
+                wait_until(3000, || select_named("img-00-gone.jpg").is_some()).await;
+                press(&window, gdk::Key::Delete);
+                wait_until(5000, || {
+                    toast_text(&root).is_some_and(|t| t.starts_with("Moved"))
+                })
+                .await;
+                let _ = trash::os_limited::purge_all(trashed_from(&gone));
+                undo();
+                wait_until(5000, || {
+                    toast_text(&root).is_some_and(|t| t.starts_with("Couldn't"))
+                })
+                .await;
+                println!(
+                    "RESULT ui undo_gone toast={:?} on_disk={} items={}",
+                    toast_text(&root),
+                    gone.exists(),
+                    selection.n_items()
+                );
+                sleep(1500).await;
+
+                // In the view: deleting shows the next image, undo the
+                // restored one.
+                select_named("img-06-blue.jpg");
+                grid.emit_by_name::<()>("activate", &[&selection.selected()]);
+                sleep(500).await;
+                press(&window, gdk::Key::Delete);
+                wait_until(5000, || {
+                    toast_text(&root).is_some_and(|t| t.starts_with("Moved"))
+                })
+                .await;
+                let after_delete = shown_name(&root);
+                undo();
+                wait_until(5000, || {
+                    toast_text(&root).is_some_and(|t| t.starts_with("Restored"))
+                })
+                .await;
+                println!(
+                    "RESULT ui view_delete shown={after_delete:?} after_undo={:?} selected={:?} items={}",
+                    shown_name(&root),
+                    name_at(selection.selected()),
+                    selection.n_items()
+                );
+                press(&window, gdk::Key::Escape);
+                sleep(300).await;
                 println!(
                     "RESULT ui trash_back items={} expected={count}",
                     selection.n_items()
@@ -590,7 +556,6 @@ pub fn run(window: &gtk::ApplicationWindow) {
         if single.is_dir()
             && directory.join(".vitrine-probe-scratch").exists()
             && std::env::var_os("VITRINE_PROBE_TRASH").is_some()
-            && crate::desktop::trash::available()
         {
             entry.set_text(&single.to_string_lossy());
             entry.emit_activate();
@@ -623,6 +588,20 @@ pub fn run(window: &gtk::ApplicationWindow) {
         idle(&window).await;
         finish(&window);
     });
+}
+
+// The trash items that came from `path` (recorded with its folder resolved).
+fn trashed_from(path: &Path) -> Vec<trash::TrashItem> {
+    let recorded = path
+        .parent()
+        .and_then(|folder| folder.canonicalize().ok())
+        .zip(path.file_name())
+        .map(|(folder, name)| folder.join(name));
+    trash::os_limited::list()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|item| Some(item.original_path()) == recorded)
+        .collect()
 }
 
 // Opens the ⋯ menu (the toolbar's, or the view's), saves a screenshot and
