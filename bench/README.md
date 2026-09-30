@@ -29,8 +29,9 @@ arguments before the folder, which can also be a file.
 `BENCH_PROBE=ui BENCH_ARGS= bench/run.sh warm DIR` runs the UI check instead
 of the benchmark: sorting, subfolders, the ⋯ menu, copying, the shortcuts
 window, the wallpaper command (with `VITRINE_WALLPAPER_COMMAND`), the folder
-entry and its history, properties and the empty state on a small folder
-(rescan and watching too, changing files, only if DIR holds a
+entry and its history, properties (and EXIF orientation outside JPEG, with
+`props/rotated.png` and `props/rotated.webp`) and the empty state on a small
+folder (rescan and watching too, changing files, only if DIR holds a
 `.vitrine-probe-scratch` file), printed as `ui` lines, with screenshots under
 `VITRINE_PROBE_SHOTS`. Its trash and undo checks trash files for real, so they
 only run with `VITRINE_PROBE_TRASH=1`: use it only on the scratch folder, on a

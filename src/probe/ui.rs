@@ -601,6 +601,24 @@ pub fn run(window: &gtk::ApplicationWindow) {
                     sleep(300).await;
                 }
             }
+            // EXIF orientation outside JPEG, when present: the info bar's
+            // size and the view's texture should both be turned.
+            for name in ["rotated.png", "rotated.webp"] {
+                let Some(position) = (0..selection.n_items()).find(|&i| name_at(i) == name) else {
+                    continue;
+                };
+                selection.set_selected(position);
+                sleep(500).await;
+                state(&format!("orientation_{name}"));
+                grid.emit_by_name::<()>("activate", &[&position]);
+                sleep(800).await;
+                let texture = find::<crate::view::zoomable::ZoomableImage>(&root)
+                    .and_then(|image| image.base_texture())
+                    .map(|texture| (texture.width(), texture.height()));
+                println!("RESULT ui orientation {name} texture={texture:?}");
+                press(&window, gdk::Key::Escape);
+                sleep(300).await;
+            }
         }
         // Deleting the last image in the view goes back to the (empty) grid.
         let single = directory.join("single");

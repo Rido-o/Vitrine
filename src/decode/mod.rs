@@ -1,8 +1,9 @@
 //! Decoding images to fit within a size, on any thread: JPEG through
 //! libjpeg-turbo at a reduced size (1/2, 1/4, 1/8…), PNG through `png`, then a
 //! SIMD resize; everything else (and anything those fail on) through
-//! GdkPixbuf. EXIF orientation is applied, and embedded colour profiles are
-//! converted to sRGB (`color.rs`).
+//! GdkPixbuf. EXIF orientation is applied, read the same way for every format
+//! (`orientation`), and embedded colour profiles are converted to sRGB
+//! (`color.rs`).
 
 mod color;
 
@@ -174,46 +175,82 @@ pub fn fitted(width: u32, height: u32, max_w: u32, max_h: u32) -> (u32, u32) {
     )
 }
 
-// GdkPixbuf fits the stored size, before EXIF rotation (GIF, TIFF and WebP
-// rarely have one).
+/// The EXIF orientation (1–8) of `path`, 1 without one: what decoding
+/// applies, and what the info bar and properties go by.
+pub fn orientation(path: &Path) -> u32 {
+    std::fs::File::open(path).map_or(1, |file| orientation_in(&mut std::io::BufReader::new(file)))
+}
+
+/// As `orientation`, from EXIF already read.
+pub fn orientation_of(exif: &exif::Exif) -> u32 {
+    exif.get_field(exif::Tag::Orientation, exif::In::PRIMARY)
+        .and_then(|field| field.value.get_uint(0))
+        .filter(|orientation| (1..=8).contains(orientation))
+        .unwrap_or(1)
+}
+
+fn orientation_in(container: &mut (impl std::io::BufRead + std::io::Seek)) -> u32 {
+    exif::Reader::new()
+        .read_from_container(container)
+        .map_or(1, |exif| orientation_of(&exif))
+}
+
+/// Orientations 5–8 swap width and height.
+pub fn swaps(orientation: u32) -> bool {
+    (5..=8).contains(&orientation)
+}
+
+// The stored size that fits within `max_w`×`max_h` once turned upright, and
+// the image's own size as shown.
+fn fit_stored(width: u32, height: u32, max_w: u32, max_h: u32, orientation: u32) -> FitSizes {
+    if swaps(orientation) {
+        let (w, h) = fitted(height, width, max_w, max_h);
+        FitSizes {
+            target: (h, w),
+            full: (height, width),
+        }
+    } else {
+        FitSizes {
+            target: fitted(width, height, max_w, max_h),
+            full: (width, height),
+        }
+    }
+}
+
+struct FitSizes {
+    target: (u32, u32),
+    full: (u32, u32),
+}
+
 fn pixbuf_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> {
     let (_, width, height) = Pixbuf::file_info(path).ok_or("unknown format")?;
-    let pixbuf = if width as u32 <= max_w && height as u32 <= max_h {
+    let (width, height) = (width as u32, height as u32);
+    let orientation = orientation(path);
+    let sizes = fit_stored(width, height, max_w, max_h, orientation);
+    let pixbuf = if sizes.target == (width, height) {
         Pixbuf::from_file(path)
     } else {
-        Pixbuf::from_file_at_scale(path, max_w as i32, max_h as i32, true)
+        Pixbuf::from_file_at_scale(path, sizes.target.0 as i32, sizes.target.1 as i32, true)
     }
     .map_err(|error| error.to_string())?;
-    let profile = color::pixbuf_profile(&pixbuf);
-    let pixbuf = pixbuf.apply_embedded_orientation().unwrap_or(pixbuf);
-    let (width, height) = (width as u32, height as u32);
-    // Rotated by its EXIF orientation if the shape turned.
-    let full = if (pixbuf.width() > pixbuf.height()) == (width > height) {
-        (width, height)
-    } else {
-        (height, width)
-    };
     let mut rgba = Rgba::from_pixbuf(&pixbuf);
-    color::to_srgb(&mut rgba, profile.as_deref());
-    Ok(Fitted { rgba, full })
+    color::to_srgb(&mut rgba, color::pixbuf_profile(&pixbuf).as_deref());
+    Ok(Fitted {
+        rgba: orient(rgba, orientation),
+        full: sizes.full,
+    })
 }
 
 fn jpeg_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> {
     let data = std::fs::read(path).map_err(|error| error.to_string())?;
-    let orientation = exif_orientation(&data);
+    let orientation = orientation_in(&mut std::io::Cursor::new(&data));
     let mut decompressor = turbojpeg::Decompressor::new().map_err(|error| error.to_string())?;
     let header = decompressor
         .read_header(&data)
         .map_err(|error| error.to_string())?;
     let (stored_w, stored_h) = (header.width as u32, header.height as u32);
-    // Orientations 5–8 swap width and height.
-    let swapped = (5..=8).contains(&orientation);
-    let (target_w, target_h) = if swapped {
-        let (w, h) = fitted(stored_h, stored_w, max_w, max_h);
-        (h, w)
-    } else {
-        fitted(stored_w, stored_h, max_w, max_h)
-    };
+    let sizes = fit_stored(stored_w, stored_h, max_w, max_h, orientation);
+    let (target_w, target_h) = sizes.target;
     let factor = turbojpeg::Decompressor::supported_scaling_factors()
         .into_iter()
         .filter(|f| f.num() <= f.denom())
@@ -253,23 +290,22 @@ fn jpeg_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> {
     color::to_srgb(&mut rgba, color::jpeg_profile(&data).as_deref());
     Ok(Fitted {
         rgba: orient(rgba, orientation),
-        full: if swapped {
-            (stored_h, stored_w)
-        } else {
-            (stored_w, stored_h)
-        },
+        full: sizes.full,
     })
 }
 
 // PNG can't decode smaller: in full, then resized (alpha-aware).
 fn png_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> {
     let data = std::fs::read(path).map_err(|error| error.to_string())?;
+    let orientation = orientation_in(&mut std::io::Cursor::new(&data));
     let (image, profile) = decode_png_with_profile(&data)?;
-    let full = (image.width, image.height);
-    let (width, height) = fitted(image.width, image.height, max_w, max_h);
-    let mut rgba = resize(image, width, height)?;
+    let sizes = fit_stored(image.width, image.height, max_w, max_h, orientation);
+    let mut rgba = resize(image, sizes.target.0, sizes.target.1)?;
     color::to_srgb(&mut rgba, profile.as_deref());
-    Ok(Fitted { rgba, full })
+    Ok(Fitted {
+        rgba: orient(rgba, orientation),
+        full: sizes.full,
+    })
 }
 
 pub fn resize(image: Rgba, width: u32, height: u32) -> Result<Rgba, String> {
@@ -294,18 +330,6 @@ pub fn resize(image: Rgba, width: u32, height: u32) -> Result<Rgba, String> {
         height,
         data: target.into_vec(),
     })
-}
-
-fn exif_orientation(jpeg: &[u8]) -> u32 {
-    exif::Reader::new()
-        .read_from_container(&mut std::io::Cursor::new(jpeg))
-        .ok()
-        .and_then(|exif| {
-            exif.get_field(exif::Tag::Orientation, exif::In::PRIMARY)
-                .and_then(|field| field.value.get_uint(0))
-        })
-        .filter(|orientation| (1..=8).contains(orientation))
-        .unwrap_or(1)
 }
 
 /// Applies an EXIF orientation (1–8) to the pixels.

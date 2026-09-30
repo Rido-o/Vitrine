@@ -76,7 +76,8 @@ command of your choice.
   full desktops run; without it they're disabled.
 - JPEG, PNG, WebP, TIFF and GIF (animated GIFs play in the full-screen view;
   thumbnails show the first frame); a desktop entry registers Vitrine for
-  those types. Photos are shown upright: the EXIF orientation is applied.
+  those types. Photos are shown upright: the EXIF orientation is applied, in
+  any format that has one, and the sizes shown are the upright ones.
   Embedded colour profiles (Adobe RGB, Display P3, ProPhoto…) are converted to
   sRGB on the worker threads, for thumbnails and the full-screen view alike;
   images without one are taken to be sRGB.

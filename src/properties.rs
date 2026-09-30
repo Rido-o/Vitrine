@@ -2,6 +2,7 @@
 //! read on a worker each time it opens. EXIF through kamadak-exif, with values
 //! written the way exiv2 prints them (the TypeScript app used gexiv2).
 
+use crate::decode;
 use exif::{Exif, In, Tag, Value};
 use gtk::{gdk_pixbuf::Pixbuf, gio, glib, pango, prelude::*};
 use std::{
@@ -210,18 +211,11 @@ fn read_exif(path: &Path) -> Option<Exif> {
         .ok()
 }
 
-/// Width × height as shown: the header's, swapped for EXIF orientations 5–8
-/// (the info bar; as Dimensions here).
+/// Width × height as shown: the header's, turned by the orientation decoding
+/// applies (the info bar; as Dimensions here).
 pub fn shown_size(path: &Path) -> Option<(i32, i32)> {
     let (_, width, height) = Pixbuf::file_info(path)?;
-    let orientation = read_exif(path)
-        .and_then(|exif| {
-            exif.get_field(Tag::Orientation, In::PRIMARY)?
-                .value
-                .get_uint(0)
-        })
-        .unwrap_or(1);
-    Some(if orientation >= 5 {
+    Some(if decode::swaps(decode::orientation(path)) {
         (height, width)
     } else {
         (width, height)
@@ -230,10 +224,7 @@ pub fn shown_size(path: &Path) -> Option<(i32, i32)> {
 
 fn image_rows(path: &Path, exif: Option<&Exif>) -> Rows {
     let info = Pixbuf::file_info(path);
-    let orientation = exif
-        .and_then(|exif| exif.get_field(Tag::Orientation, In::PRIMARY))
-        .and_then(|field| field.value.get_uint(0))
-        .unwrap_or(1);
+    let orientation = exif.map_or(1, decode::orientation_of);
     let size = info
         .as_ref()
         .map(|(_, width, height)| (*width, *height))
@@ -253,7 +244,7 @@ fn image_rows(path: &Path, exif: Option<&Exif>) -> Rows {
         (
             "Dimensions",
             size.map(|(width, height)| {
-                let (width, height) = if orientation >= 5 {
+                let (width, height) = if decode::swaps(orientation) {
                     (height, width)
                 } else {
                     (width, height)
