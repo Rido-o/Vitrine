@@ -20,9 +20,15 @@ use std::{
 // When the window was built (the scan started), for times reported later.
 static START: OnceLock<i64> = OnceLock::new();
 
+/// Whether VITRINE_PROBE is set: the hooks record nothing otherwise.
+fn enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| std::env::var_os("VITRINE_PROBE").is_some())
+}
+
 /// Background generation is done: how many thumbnails it made, and when.
 pub fn background_finished(generated: usize) {
-    if std::env::var_os("VITRINE_PROBE").is_none() {
+    if !enabled() {
         return;
     }
     let start = START.get().copied().unwrap_or_default();
@@ -44,13 +50,18 @@ thread_local! {
 /// Called by the full-screen view when it shows `path` (`sharp`: decoded,
 /// not the thumbnail placeholder).
 pub fn preview_shown(path: &Path, sharp: bool) {
+    if !enabled() {
+        return;
+    }
     SHOWN.with_borrow_mut(|shown| *shown = Some((path.to_owned(), sharp)));
     SHOWS.with_borrow_mut(|shows| shows.push(glib::monotonic_time()));
 }
 
 /// Called by the full-screen view for each animation frame it shows.
 pub fn animation_frame() {
-    FRAMES.with(|frames| frames.set(frames.get() + 1));
+    if enabled() {
+        FRAMES.with(|frames| frames.set(frames.get() + 1));
+    }
 }
 
 thread_local! {
@@ -255,7 +266,7 @@ impl ScanTimes {
     }
 
     pub fn finish(&self, items: u32) {
-        if std::env::var_os("VITRINE_PROBE").is_none() {
+        if !enabled() {
             return;
         }
         println!(
