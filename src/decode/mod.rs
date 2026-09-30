@@ -66,14 +66,6 @@ fn janitor() -> &'static mpsc::Sender<Vec<u8>> {
 }
 
 impl Pixels {
-    fn empty() -> Self {
-        Self {
-            width: 0,
-            height: 0,
-            data: Buffer(None),
-        }
-    }
-
     pub fn texture(self) -> gdk::Texture {
         let stride = self.width as usize * 4;
         gdk::MemoryTexture::new(
@@ -419,9 +411,10 @@ pub fn decode_jpeg(data: &[u8]) -> Result<Rgba, String> {
 }
 
 /// A piece of a full-resolution image: `x`, `y`, `width`, `height` in the
-/// image, and its pixels with a `pad`-pixel border copied from the
+/// image. Its pixels (`split`) have a `pad`-pixel border copied from the
 /// neighbours (none at the image's edges), so adjacent tiles overlap and
-/// smoothing shows no seams.
+/// smoothing shows no seams; `pad_left` and `pad_top` are where the tile
+/// starts in them.
 pub struct Tile {
     pub x: u32,
     pub y: u32,
@@ -429,18 +422,11 @@ pub struct Tile {
     pub height: u32,
     pub pad_left: u32,
     pub pad_top: u32,
-    pub pixels: Pixels,
 }
 
-impl Tile {
-    /// The pixels, for a texture (the tile keeps its place).
-    pub fn take_pixels(&mut self) -> Pixels {
-        std::mem::replace(&mut self.pixels, Pixels::empty())
-    }
-}
-
-/// Splits `image` into tiles of at most `size` pixels square, row by row.
-pub fn split(image: Rgba, size: u32, pad: u32) -> (Vec<Tile>, u32, u32) {
+/// Splits `image` into tiles of at most `size` pixels square, row by row,
+/// each with its pixels.
+pub fn split(image: Rgba, size: u32, pad: u32) -> (Vec<(Tile, Pixels)>, u32, u32) {
     let (width, height) = (image.width, image.height);
     let pixels = image.premultiplied();
     let source = pixels.data.as_ref();
@@ -459,19 +445,20 @@ pub fn split(image: Rgba, size: u32, pad: u32) -> (Vec<Tile>, u32, u32) {
                 let start = row as usize * stride + left as usize * 4;
                 data.extend_from_slice(&source[start..start + tw as usize * 4]);
             }
-            tiles.push(Tile {
+            let tile = Tile {
                 x,
                 y,
                 width: w,
                 height: h,
                 pad_left: x - left,
                 pad_top: y - top,
-                pixels: Pixels {
-                    width: tw as i32,
-                    height: th as i32,
-                    data: Buffer(Some(data)),
-                },
-            });
+            };
+            let pixels = Pixels {
+                width: tw as i32,
+                height: th as i32,
+                data: Buffer(Some(data)),
+            };
+            tiles.push((tile, pixels));
         }
     }
     (tiles, width, height)

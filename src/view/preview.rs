@@ -44,7 +44,7 @@ enum Decoded {
         full: (u32, u32),
     },
     Tiles {
-        tiles: Vec<Tile>,
+        tiles: Vec<(Tile, Pixels)>,
         width: u32,
         height: u32,
     },
@@ -428,10 +428,7 @@ impl Preview {
                 if shown && self.displayed.borrow().as_ref() == Some(&path) {
                     let tiles = tiles
                         .into_iter()
-                        .map(|mut tile| {
-                            let texture = tile.take_pixels().texture();
-                            (tile, texture)
-                        })
+                        .map(|(tile, pixels)| (tile, pixels.texture()))
                         .collect();
                     self.image.set_tiles(Tiles {
                         tiles,
