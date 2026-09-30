@@ -34,9 +34,10 @@
         postInstall = "";
         postFixup = "";
       });
-      # rustfmt itself: cargo fmt would resolve the dependencies first.
+      # rustfmt itself: cargo fmt would resolve the dependencies first. From
+      # main.rs it follows the modules into their folders.
       rustfmt = pkgs.runCommand "vitrine-rustfmt" {nativeBuildInputs = [pkgs.rustfmt];} ''
-        rustfmt --check --edition 2024 ${./build.rs} ${./src}/*.rs
+        rustfmt --check --edition 2024 ${./build.rs} ${./src}/main.rs
         touch $out
       '';
     });

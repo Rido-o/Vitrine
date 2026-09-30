@@ -4,6 +4,8 @@
 //! GdkPixbuf. EXIF orientation is applied, and embedded colour profiles are
 //! converted to sRGB (`color.rs`).
 
+mod color;
+
 use gtk::{gdk, gdk_pixbuf::Pixbuf, glib};
 use std::{
     path::Path,
@@ -182,7 +184,7 @@ fn pixbuf_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> 
         Pixbuf::from_file_at_scale(path, max_w as i32, max_h as i32, true)
     }
     .map_err(|error| error.to_string())?;
-    let profile = crate::color::pixbuf_profile(&pixbuf);
+    let profile = color::pixbuf_profile(&pixbuf);
     let pixbuf = pixbuf.apply_embedded_orientation().unwrap_or(pixbuf);
     let (width, height) = (width as u32, height as u32);
     // Rotated by its EXIF orientation if the shape turned.
@@ -192,7 +194,7 @@ fn pixbuf_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> 
         (height, width)
     };
     let mut rgba = Rgba::from_pixbuf(&pixbuf);
-    crate::color::to_srgb(&mut rgba, profile.as_deref());
+    color::to_srgb(&mut rgba, profile.as_deref());
     Ok(Fitted { rgba, full })
 }
 
@@ -248,7 +250,7 @@ fn jpeg_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> {
     };
     // Converted once resized: far fewer pixels.
     let mut rgba = resize(decoded, target_w, target_h)?;
-    crate::color::to_srgb(&mut rgba, crate::color::jpeg_profile(&data).as_deref());
+    color::to_srgb(&mut rgba, color::jpeg_profile(&data).as_deref());
     Ok(Fitted {
         rgba: orient(rgba, orientation),
         full: if swapped {
@@ -266,7 +268,7 @@ fn png_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> {
     let full = (image.width, image.height);
     let (width, height) = fitted(image.width, image.height, max_w, max_h);
     let mut rgba = resize(image, width, height)?;
-    crate::color::to_srgb(&mut rgba, profile.as_deref());
+    color::to_srgb(&mut rgba, profile.as_deref());
     Ok(Fitted { rgba, full })
 }
 

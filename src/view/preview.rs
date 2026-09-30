@@ -4,8 +4,8 @@
 //! image when zooming needs them; GIFs played from frames decoded ahead on a
 //! thread of their own.
 
+use super::zoomable::{Tiles, ZoomableImage};
 use crate::decode::{self, Pixels, Tile};
-use crate::zoomable::{Tiles, ZoomableImage};
 use gtk::{gdk, gdk_pixbuf::PixbufAnimation, glib, prelude::*};
 use std::{
     cell::RefCell,

@@ -61,7 +61,7 @@ the app's command, e.g.
 `BENCH_WRAP="perf record -k CLOCK_MONOTONIC --call-graph dwarf -o x.perf"`;
 the lines end with `t0_us` (monotonic) to find a scenario in a profile.
 
-The probe is built into the app (`src/probe.rs`, enabled with
+The probe is built into the app (`src/probe/`, enabled with
 `VITRINE_PROBE=1`, or `ui`).
 
 ## Corpus

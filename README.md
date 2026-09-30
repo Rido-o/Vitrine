@@ -9,10 +9,10 @@ command of your choice.
 
 ## Features
 
-- **Thumbnail grid**, each thumbnail at its image's own shape in equal 16:9 cells
-  that grow with the window until another column fits, with an on-disk
-  thumbnail cache. Thumbnails are loaded or
-  generated on worker threads (one per core but one, at low priority): the
+- **Thumbnail grid**, each thumbnail at its image's own shape in equal 16:9
+  cells that grow with the window until another column fits, with an on-disk
+  thumbnail cache. Thumbnails are loaded or generated on worker threads (one
+  per core but one, at low priority): the
   tiles you stop on come first, and ones scrolled past are skipped. Once a
   folder is scanned, its other missing thumbnails are generated in the
   background while no tile is waiting. The thumbnails of the tiles the grid
@@ -232,29 +232,42 @@ build.rs            compiles style/style.scss into the binary
 src/
   main.rs           Gtk.Application: CSS, icon path, command line, malloc and
                     renderer tuning
-  window.rs         a window: top bar, grid, info bar, full-screen view, keys,
-                    menus, copy, trash and undo, wallpaper
+  window/           a window (`Window`: its state, building it, loading
+                    folders), split by part:
+    toolbar.rs        folder entry and history panel, sorting, Subfolders
+    grid.rs           the thumbnail grid, its 16:9 cells, keeping the first
+                      image selected while loading
+    info.rs           the info bar, title and empty-folder message
+    navigation.rs     opening, moving through and closing the full-screen view
+    menu.rs           the ⋯ menu's actions, i buttons, copy, wallpaper
+    delete.rs         trash and undo
+    keys.rs           the window's keys
+    toast.rs          brief messages over both pages
   library.rs        scanning (a thread), the sorted list model, rescans,
                     watching
-  thumbnails.rs     thumbnail workers, disk cache, pruning
-  tiles.rs          the grid's thumbnail textures (bound tiles and 100 more)
-  preview.rs        the full-screen view's decodes: ±2 preloads, full
-                    resolution tiles, GIF frames, on worker threads
-  decode.rs         decoding (libjpeg-turbo scaled, png, GdkPixbuf), resizing
+  thumbnails/
+    pool.rs           thumbnail workers
+    cache.rs          the disk cache, pruning, old caches
+    tiles.rs          the grid's thumbnail textures (bound tiles and 100 more)
+  view/             the full-screen view: its page and controls (mod.rs)
+    preview.rs        its decodes: ±2 preloads, full resolution tiles, GIF
+                      frames, on worker threads
+    zoomable.rs       the image widget (zoom, pan, rotate, flip, sharp mode,
+                      tiles, colour assessment)
+    autohide.rs       fading the controls when idle
+  decode/           decoding (libjpeg-turbo scaled, png, GdkPixbuf), resizing
                     (Lanczos3), EXIF orientation, freeing big buffers off the
-                    main thread
-  color.rs          embedded ICC profiles (JPEG, PNG, GdkPixbuf) converted to
-                    sRGB (moxcms)
-  zoomable.rs       the full-screen image widget (zoom, pan, rotate, flip,
-                    sharp mode, tiles, colour assessment)
-  view.rs           the full-screen view's page and controls
-  autohide.rs       fading the view's controls when idle
+                    main thread (mod.rs)
+    color.rs          embedded ICC profiles (JPEG, PNG, GdkPixbuf) converted
+                      to sRGB (moxcms)
+  desktop/          the file manager (D-Bus) and wallpaper command (mod.rs)
+    trash.rs          trash and exact-item restore through GVfs (trash:///)
   actions.rs        the ⋯ menu: its model and window actions
   properties.rs     the i popover's contents (file info, GdkPixbuf, EXIF)
   shortcuts.rs      the keyboard shortcuts window
-  trash.rs          trash and exact-item restore through GVfs (trash:///)
   history.rs        folder history file
-  probe.rs          the benchmark and UI check (VITRINE_PROBE)
+  probe/            VITRINE_PROBE: hooks and helpers (mod.rs), the benchmark
+                    (bench.rs) and the UI check (ui.rs)
 style/
   style.scss        styles
   theme.scss        colour palette
@@ -291,40 +304,41 @@ Things that broke and look like harmless cleanups:
   is a new texture). It's a known driver problem; other GPUs keep GTK's
   default.
 - **Draw the view with a plain texture node** (`append_texture` in
-  `zoomable.rs`). A scaled texture node with the linear filter came out
+  `view/zoomable.rs`). A scaled texture node with the linear filter came out
   blurred at display scales above 1 even when drawn 1:1 (58% of the texture's
   edge contrast at 1.5×); the plain node keeps all of it. Only sharp mode uses
   a scaled node (nearest).
 - **Decode for the view at its size in device pixels and draw 1:1 at fit**
-  (`view_size` in `window.rs`, `layout` in `zoomable.rs`). Decoding for the
-  monitor and drawing it scaled to the window softened every image; the
-  texture is resized with Lanczos3, and decoded again when the view's size
-  changes, and for the area inside the colour assessment border
+  (`view_size` in `window/navigation.rs`, `layout` in `view/zoomable.rs`).
+  Decoding for the monitor and drawing it scaled to the window softened every
+  image; the texture is resized with Lanczos3, and decoded again when the
+  view's size changes, and for the area inside the colour assessment border
   (`zoomable::image_area`, used by both).
-- **Never evict the thumbnails of bound tiles** (`tiles.rs`). The grid keeps
-  ~390 tiles bound (rows around the viewport, not only the visible ones); with
-  a cap of 300 on every texture, off-screen tiles evicted visible ones, and the
-  full-screen view opened without its placeholder. Only textures of tiles no
-  longer bound are capped (100).
+- **Never evict the thumbnails of bound tiles** (`thumbnails/tiles.rs`). The
+  grid keeps ~390 tiles bound (rows around the viewport, not only the visible
+  ones); with a cap of 300 on every texture, off-screen tiles evicted visible
+  ones, and the full-screen view opened without its placeholder. Only textures
+  of tiles no longer bound are capped (100).
 - **Keep `tune_malloc`** (`main.rs`). glibc raises its mmap threshold each
   time a large block is freed, so the workers' multi-MB decode buffers ended
   up in per-thread arenas that never shrink (~230 MB after generating a
   3,000-image folder); a fixed 1 MB threshold and 4 arenas cut the peak by
   ~120 MB with no measurable slowdown.
-- **Free big buffers off the main thread** (the janitor in `decode.rs`).
+- **Free big buffers off the main thread** (the janitor in `decode/mod.rs`).
   Dropping a 33 MB decode on the main thread took 0.7–4 ms per selection
   change, enough to delay the selection's highlight a frame at 144 Hz.
 - **While a folder loads, keep the first image selected and the grid at the
-  top** (`keep_first_while_loading` in `window.rs`), until the user clicks,
-  types or scrolls in the grid. Batches arrive in any order and are sorted as
-  they come; the automatic selection stayed on whichever image arrived first,
-  and GTK kept it in view (a 7,756-image folder opened halfway down).
+  top** (`keep_first_while_loading` in `window/grid.rs`), until the user
+  clicks, types or scrolls in the grid. Batches arrive in any order and are
+  sorted as they come; the automatic selection stayed on whichever image
+  arrived first, and GTK kept it in view (a 7,756-image folder opened halfway
+  down).
 - **Re-sort at once, not incrementally** (`resort` in `library.rs`), so the
   selected image can be put back straight after (~5–13 ms for 3,000 images).
   Loading still sorts incrementally, so a big batch doesn't block a frame.
 - **A rescan re-shows the view's image only if it changed or went**
-  (`finished` in `window.rs`): rescans start on their own when anything in the
-  folder changes, and re-showing resets the zoom.
+  (`finished` in `window/mod.rs`): rescans start on their own when anything
+  in the folder changes, and re-showing resets the zoom.
 - **The selection is a ring that fades in while settling onto the thumbnail**
   (160 ms, `outline-color` and `outline-offset` in `style.scss`): the default
   theme's animated highlight looked choppy next to 144 Hz scrolling, and none
@@ -335,7 +349,7 @@ Things that broke and look like harmless cleanups:
   wins, hence the manual wrap.
 - **Undo restores an exact trash item, never "the newest".** GVfs's deletion
   dates have one-second resolution, so two deletes of the same path in a
-  second can't be told apart by date. `trash.rs` lists the path's
+  second can't be told apart by date. `desktop/trash.rs` lists the path's
   `trash:///` items just before and after trashing; the one new item is
   recorded and undo moves exactly that back.
 - **Testing trash code needs GVfs on a private bus with its own trash**, or it

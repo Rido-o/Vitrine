@@ -3,7 +3,11 @@
 //! the bottom) that fade out with the cursor in fullscreen; the fullscreen
 //! toggle, and the view's own keys.
 
-use crate::{autohide::AutoHide, preview::Preview};
+mod autohide;
+pub mod preview;
+pub mod zoomable;
+
+use self::{autohide::AutoHide, preview::Preview};
 use gtk::{gdk, prelude::*};
 use std::{
     cell::{Cell, RefCell},
@@ -112,7 +116,7 @@ impl View {
         let shown_ = shown.clone();
         filename_button.connect_clicked(move |_| {
             if let Some(path) = shown_.borrow().as_deref() {
-                crate::window::show_in_file_manager(path);
+                crate::desktop::show_in_file_manager(path);
             }
         });
         preview.connect_info(move |path: &Path, full: Option<(u32, u32)>| {

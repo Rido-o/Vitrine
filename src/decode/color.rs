@@ -2,7 +2,7 @@
 //! GdkPixbuf's images, and converted to sRGB (what GTK takes every texture to
 //! be) on the worker that decoded the image.
 
-use crate::decode::Rgba;
+use super::Rgba;
 use gtk::{gdk_pixbuf::Pixbuf, glib};
 use moxcms::{ColorProfile, DataColorSpace, Layout, Transform8BitExecutor, TransformOptions};
 use std::{

@@ -1,19 +1,14 @@
 mod actions;
-mod autohide;
-mod color;
 mod decode;
+mod desktop;
 mod history;
 mod library;
-mod preview;
 mod probe;
 mod properties;
 mod shortcuts;
 mod thumbnails;
-mod tiles;
-mod trash;
 mod view;
 mod window;
-mod zoomable;
 
 use gtk::{gdk, gio, glib, prelude::*};
 use std::{cell::Cell, path::Path, rc::Rc};

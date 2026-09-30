@@ -24,7 +24,7 @@ There are no unit tests, so:
 
 - `nix flake check` builds the crate, runs clippy with warnings as errors, and checks formatting (`cargo fmt` in the dev shell). Keep it passing; don't silence a lint with `#[allow]` without a comment saying why.
 - `nix build`, then `$(nix build --print-out-paths)/bin/vitrine --help`: catches wrapper and startup problems without opening a window.
-- The app has a built-in probe (`src/probe.rs`), run in a headless sway by `bench/run.sh` (see `bench/README.md`):
+- The app has a built-in probe (`src/probe/`), run in a headless sway by `bench/run.sh` (see `bench/README.md`):
   - `VITRINE_PROBE=1` (the default in `bench/run.sh`) is the benchmark: frame times, stalls, decode times, memory. Measure at the author's display where it matters: `BENCH_OUTPUT=3840x2160@144Hz BENCH_SCALE=1.5 GSK_RENDERER=gl bench/run.sh warm`.
   - `BENCH_PROBE=ui BENCH_ARGS= bench/run.sh warm DIR` drives the controls (sorting, menus, copy, history, properties, rescans, watching) and prints what it sees; extend it for new behaviour. Use a folder of synthetic images, not the user's: files are added, changed and removed when it holds `.vitrine-probe-scratch`. Its trash checks only run with `VITRINE_PROBE_TRASH=1`, on a private bus with its own `XDG_DATA_HOME`, never against the real trash.
   - `VITRINE_PROBE_SHOTS=DIR` (with `VITRINE_PROBE_GRIM` for device pixels and popovers) saves screenshots to look at.
@@ -32,7 +32,7 @@ There are no unit tests, so:
 
 ## Code
 
-- `src/main.rs` owns the `gtk::Application`, command line, CSS and startup tuning; `src/window.rs` owns layout and interaction; `library.rs` (scanning, sorting, the list model, rescans, watching), `thumbnails.rs` and `tiles.rs`, `preview.rs` and `zoomable.rs` (the full-screen view) with `decode.rs`, `properties.rs`, `trash.rs` and `history.rs` are the pieces; `view.rs`, `autohide.rs`, `actions.rs` and `shortcuts.rs` hold UI split out of `window.rs`. The README's "Layout" lists them all.
+- `src/main.rs` owns the `gtk::Application`, command line, CSS and startup tuning; `src/window/` owns layout and interaction (`Window` in `mod.rs`, one file per part: toolbar, grid, info bar, navigation to and from the view, menu, delete, keys, toast); `library.rs` (scanning, sorting, the list model, rescans, watching), `thumbnails/` (worker pool, disk cache, the grid's textures), `view/` (the full-screen view: page, decodes, zoomable widget, autohide), `decode/` (with colour profiles), `desktop/` (file manager, wallpaper command, trash), `properties.rs`, `shortcuts.rs`, `actions.rs` and `history.rs` are the pieces. The README's "Layout" lists them all.
 - All GTK work stays on the main thread; worker threads only produce pixels (see the README's "Layout" and "Gotchas"). Keep decoding, file reading and big frees off the main thread.
 - Rust style: `cargo fmt` (rustfmt defaults), edition 2024; Nix: alejandra. Styles are `style/style.scss` (with `style/theme.scss`), compiled into the binary by `build.rs`.
 - Keep comments sparse: explain why, not what.

@@ -126,7 +126,7 @@ tooltip {
     }
   }
 
-  // The thumbnail, at the image's shape (tiles.rs). The selection is a ring
+  // The thumbnail, at the image's shape (thumbnails/tiles.rs). The selection is a ring
   // that fades in while settling onto it: only the outline changes, so it
   // stays smooth at 144 Hz, where the default theme's animated highlight
   // looked choppy and none at all felt abrupt.
