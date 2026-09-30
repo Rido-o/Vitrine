@@ -37,8 +37,7 @@ pub fn run(window: &gtk::ApplicationWindow) {
         };
         let state = |what: &str| {
             let names: Vec<String> = (0..selection.n_items().min(4)).map(name_at).collect();
-            let mut labels = Vec::new();
-            find_all::<gtk::Label>(&root, &mut labels);
+            let labels = find_all::<gtk::Label>(&root);
             let info: Vec<String> = labels
                 .iter()
                 .filter(|label| {
@@ -98,16 +97,6 @@ pub fn run(window: &gtk::ApplicationWindow) {
                     .lookup_action(name)
                     .is_some_and(|action| action.is_enabled())
             };
-            let toast = || {
-                let mut boxes = Vec::new();
-                find_all::<gtk::Box>(&root, &mut boxes);
-                boxes
-                    .iter()
-                    .find(|b| b.has_css_class("viewer-toast"))
-                    .filter(|b| b.is_visible())
-                    .and_then(|b| b.first_child().and_downcast::<gtk::Label>())
-                    .map(|label| label.label().to_string())
-            };
             println!(
                 "RESULT ui menu_grid copy={} rotate={}",
                 enabled("copy-image"),
@@ -116,30 +105,22 @@ pub fn run(window: &gtk::ApplicationWindow) {
             let clipboard = window.clipboard();
             WidgetExt::activate_action(&window, "win.copy-path", None).ok();
             let text = clipboard.read_text_future().await.ok().flatten();
-            println!("RESULT ui copy_path text={text:?} toast={:?}", toast());
+            println!(
+                "RESULT ui copy_path text={text:?} toast={:?}",
+                toast_text(&root)
+            );
             WidgetExt::activate_action(&window, "win.copy-image", None).ok();
             sleep(1000).await;
             let texture = clipboard.read_texture_future().await.ok().flatten();
             println!(
                 "RESULT ui copy_image size={:?} toast={:?}",
                 texture.map(|t| (t.width(), t.height())),
-                toast()
+                toast_text(&root)
             );
             sleep(2200).await;
-            println!("RESULT ui toast_gone toast={:?}", toast());
+            println!("RESULT ui toast_gone toast={:?}", toast_text(&root));
 
-            let mut menus = Vec::new();
-            find_all::<gtk::MenuButton>(&root, &mut menus);
-            if let Some(menu) = menus
-                .iter()
-                .filter(|m| m.tooltip_text().as_deref() == Some("More actions"))
-                .find(|m| m.has_css_class("viewer-toolbar-menu"))
-            {
-                menu.popup();
-                sleep(300).await;
-                shot(&window, "ui-menu");
-                menu.popdown();
-            }
+            menu_shot(&window, false, "ui-menu").await;
 
             // The wallpaper command (VITRINE_WALLPAPER_COMMAND), in the menu only.
             println!(
@@ -149,7 +130,7 @@ pub fn run(window: &gtk::ApplicationWindow) {
             if window.lookup_action("set-wallpaper").is_some() {
                 press(&window, gdk::Key::w);
                 sleep(1000).await;
-                println!("RESULT ui wallpaper_set toast={:?}", toast());
+                println!("RESULT ui wallpaper_set toast={:?}", toast_text(&root));
             }
 
             WidgetExt::activate_action(&window, "win.shortcuts", None).ok();
@@ -187,16 +168,7 @@ pub fn run(window: &gtk::ApplicationWindow) {
                 enabled("copy-image"),
                 enabled("rotate-left")
             );
-            if let Some(menu) = menus
-                .iter()
-                .filter(|m| m.tooltip_text().as_deref() == Some("More actions"))
-                .find(|m| !m.has_css_class("viewer-toolbar-menu"))
-            {
-                menu.popup();
-                sleep(300).await;
-                shot(&window, "ui-view-menu");
-                menu.popdown();
-            }
+            menu_shot(&window, true, "ui-view-menu").await;
             // Colour assessment: b, the image decoded for the area inside the
             // border, the menu's check; b again.
             let assessment = |what: &str| {
@@ -223,16 +195,7 @@ pub fn run(window: &gtk::ApplicationWindow) {
             sleep(1000).await;
             assessment("assessment_on");
             shot(&window, "ui-assessment");
-            if let Some(menu) = menus
-                .iter()
-                .filter(|m| m.tooltip_text().as_deref() == Some("More actions"))
-                .find(|m| !m.has_css_class("viewer-toolbar-menu"))
-            {
-                menu.popup();
-                sleep(300).await;
-                shot(&window, "ui-assessment-menu");
-                menu.popdown();
-            }
+            menu_shot(&window, true, "ui-assessment-menu").await;
             for _ in 0..4 {
                 press(&window, gdk::Key::plus);
             }
@@ -341,16 +304,6 @@ pub fn run(window: &gtk::ApplicationWindow) {
             // (VITRINE_PROBE_TRASH=1, on a private bus with its own trash:
             // bench/README.md).
             if std::env::var_os("VITRINE_PROBE_TRASH").is_some() {
-                let toast = || {
-                    let mut boxes = Vec::new();
-                    find_all::<gtk::Box>(&root, &mut boxes);
-                    boxes
-                        .iter()
-                        .find(|b| b.has_css_class("viewer-toast"))
-                        .filter(|b| b.is_visible())
-                        .and_then(|b| b.first_child().and_downcast::<gtk::Label>())
-                        .map(|label| label.label().to_string())
-                };
                 let select_named = |name: &str| {
                     let position = (0..selection.n_items()).find(|&i| name_at(i) == name);
                     if let Some(position) = position {
@@ -369,7 +322,7 @@ pub fn run(window: &gtk::ApplicationWindow) {
                 sleep(200).await;
                 press(&window, gdk::Key::Delete);
                 wait_until(5000, || {
-                    toast().is_some_and(|t| t.starts_with("Moved") || t.contains("GVfs"))
+                    toast_text(&root).is_some_and(|t| t.starts_with("Moved") || t.contains("GVfs"))
                 })
                 .await;
                 println!(
@@ -377,18 +330,21 @@ pub fn run(window: &gtk::ApplicationWindow) {
                     selection.n_items(),
                     name_at(selection.selected()),
                     teal.exists(),
-                    toast()
+                    toast_text(&root)
                 );
                 shot(&window, "ui-toast-undo");
                 if crate::desktop::trash::available() {
                     undo();
-                    wait_until(5000, || toast().is_some_and(|t| t.starts_with("Restored"))).await;
+                    wait_until(5000, || {
+                        toast_text(&root).is_some_and(|t| t.starts_with("Restored"))
+                    })
+                    .await;
                     println!(
                         "RESULT ui undo items={} selected={:?} on_disk={} toast={:?}",
                         selection.n_items(),
                         name_at(selection.selected()),
                         teal.exists(),
-                        toast()
+                        toast_text(&root)
                     );
 
                     // The same path twice, quickly: undo restores the newer one;
@@ -411,11 +367,11 @@ pub fn run(window: &gtk::ApplicationWindow) {
                     println!(
                         "RESULT ui undo_newer size={:?} toast={:?}",
                         std::fs::metadata(&teal).map(|m| m.len()).ok(),
-                        toast()
+                        toast_text(&root)
                     );
                     undo();
                     sleep(1000).await;
-                    println!("RESULT ui undo_older toast={:?}", toast());
+                    println!("RESULT ui undo_older toast={:?}", toast_text(&root));
                     // Put the original back by hand.
                     let _ = std::fs::remove_file(&teal);
                     let trash = gio::File::for_uri("trash:///");
@@ -450,7 +406,10 @@ pub fn run(window: &gtk::ApplicationWindow) {
                     press(&window, gdk::Key::r);
                     wait_until(3000, || select_named("img-00-gone.jpg").is_some()).await;
                     press(&window, gdk::Key::Delete);
-                    wait_until(5000, || toast().is_some_and(|t| t.starts_with("Moved"))).await;
+                    wait_until(5000, || {
+                        toast_text(&root).is_some_and(|t| t.starts_with("Moved"))
+                    })
+                    .await;
                     let trash = gio::File::for_uri("trash:///");
                     if let Ok(enumerator) = trash.enumerate_children(
                         "standard::name,trash::orig-path",
@@ -466,10 +425,13 @@ pub fn run(window: &gtk::ApplicationWindow) {
                         }
                     }
                     undo();
-                    wait_until(5000, || toast().is_some_and(|t| t.starts_with("Couldn't"))).await;
+                    wait_until(5000, || {
+                        toast_text(&root).is_some_and(|t| t.starts_with("Couldn't"))
+                    })
+                    .await;
                     println!(
                         "RESULT ui undo_gone toast={:?} on_disk={} items={}",
-                        toast(),
+                        toast_text(&root),
                         gone.exists(),
                         selection.n_items()
                     );
@@ -481,10 +443,16 @@ pub fn run(window: &gtk::ApplicationWindow) {
                     grid.emit_by_name::<()>("activate", &[&selection.selected()]);
                     sleep(500).await;
                     press(&window, gdk::Key::Delete);
-                    wait_until(5000, || toast().is_some_and(|t| t.starts_with("Moved"))).await;
+                    wait_until(5000, || {
+                        toast_text(&root).is_some_and(|t| t.starts_with("Moved"))
+                    })
+                    .await;
                     let after_delete = shown_name(&root);
                     undo();
-                    wait_until(5000, || toast().is_some_and(|t| t.starts_with("Restored"))).await;
+                    wait_until(5000, || {
+                        toast_text(&root).is_some_and(|t| t.starts_with("Restored"))
+                    })
+                    .await;
                     println!(
                         "RESULT ui view_delete shown={after_delete:?} after_undo={:?} selected={:?} items={}",
                         shown_name(&root),
@@ -522,8 +490,7 @@ pub fn run(window: &gtk::ApplicationWindow) {
         entry.emit_by_name::<()>("icon-release", &[&gtk::EntryIconPosition::Secondary]);
         sleep(300).await;
         if let Some(panel) = find::<gtk::Popover>(entry.upcast_ref()) {
-            let mut buttons = Vec::new();
-            find_all::<gtk::Button>(panel.upcast_ref(), &mut buttons);
+            let buttons = find_all::<gtk::Button>(panel.upcast_ref());
             let focused = buttons.iter().position(|b| b.has_focus() || b.is_focus());
             println!(
                 "RESULT ui history visible={} entries={} focused={focused:?}",
@@ -549,15 +516,13 @@ pub fn run(window: &gtk::ApplicationWindow) {
             entry.emit_activate();
             sleep(500).await;
             let rows = |view: bool| {
-                let mut buttons = Vec::new();
-                find_all::<gtk::MenuButton>(&root, &mut buttons);
+                let buttons = find_all::<gtk::MenuButton>(&root);
                 let button = buttons
                     .into_iter()
                     .filter(|b| b.tooltip_text().as_deref() == Some("Image properties (i)"))
                     .find(|b| b.has_css_class("viewer-toolbar-menu") != view)?;
                 let popover = button.popover()?;
-                let mut labels = Vec::new();
-                find_all::<gtk::Label>(popover.upcast_ref(), &mut labels);
+                let labels = find_all::<gtk::Label>(popover.upcast_ref());
                 Some(
                     labels
                         .iter()
@@ -658,4 +623,19 @@ pub fn run(window: &gtk::ApplicationWindow) {
         idle(&window).await;
         finish(&window);
     });
+}
+
+// Opens the ⋯ menu (the toolbar's, or the view's), saves a screenshot and
+// closes it.
+async fn menu_shot(window: &gtk::ApplicationWindow, in_view: bool, name: &str) {
+    let menu = find_all::<gtk::MenuButton>(window.upcast_ref())
+        .into_iter()
+        .filter(|menu| menu.tooltip_text().as_deref() == Some("More actions"))
+        .find(|menu| menu.has_css_class("viewer-toolbar-menu") != in_view);
+    if let Some(menu) = menu {
+        menu.popup();
+        sleep(300).await;
+        shot(window, name);
+        menu.popdown();
+    }
 }

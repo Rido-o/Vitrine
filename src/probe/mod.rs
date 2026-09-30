@@ -302,15 +302,20 @@ fn find<T: IsA<gtk::Widget>>(root: &gtk::Widget) -> Option<T> {
     None
 }
 
-fn find_all<T: IsA<gtk::Widget>>(root: &gtk::Widget, out: &mut Vec<T>) {
-    if let Some(found) = root.downcast_ref::<T>() {
-        out.push(found.clone());
+fn find_all<T: IsA<gtk::Widget>>(root: &gtk::Widget) -> Vec<T> {
+    fn collect<T: IsA<gtk::Widget>>(widget: &gtk::Widget, out: &mut Vec<T>) {
+        if let Some(found) = widget.downcast_ref::<T>() {
+            out.push(found.clone());
+        }
+        let mut child = widget.first_child();
+        while let Some(widget) = child {
+            collect(&widget, out);
+            child = widget.next_sibling();
+        }
     }
-    let mut child = root.first_child();
-    while let Some(widget) = child {
-        find_all(&widget, out);
-        child = widget.next_sibling();
-    }
+    let mut found = Vec::new();
+    collect(root, &mut found);
+    found
 }
 
 fn ms_since(start: i64) -> i64 {
@@ -336,8 +341,7 @@ async fn wait_until(timeout_ms: i64, done: impl Fn() -> bool) -> i64 {
 
 // Every bound tile shows a thumbnail (trivially, while tiles have none).
 fn tiles_filled(grid: &gtk::GridView) -> bool {
-    let mut pictures = Vec::new();
-    find_all::<gtk::Picture>(grid.upcast_ref(), &mut pictures);
+    let pictures = find_all::<gtk::Picture>(grid.upcast_ref());
     pictures.iter().all(|p| p.paintable().is_some())
 }
 
@@ -454,8 +458,7 @@ fn press_with(window: &gtk::ApplicationWindow, key: gdk::Key, state: gdk::Modifi
 
 // The first button labelled `label`.
 fn button(root: &gtk::Widget, label: &str) -> Option<gtk::Button> {
-    let mut buttons = Vec::new();
-    find_all::<gtk::Button>(root, &mut buttons);
+    let buttons = find_all::<gtk::Button>(root);
     buttons
         .into_iter()
         .find(|button| button.label().as_deref() == Some(label))
@@ -508,21 +511,18 @@ fn finish(window: &gtk::ApplicationWindow) {
 
 // The file name of the image the full-screen view shows (its info label).
 fn shown_name(root: &gtk::Widget) -> Option<String> {
-    let mut boxes = Vec::new();
-    find_all::<gtk::Box>(root, &mut boxes);
-    let info = boxes
-        .iter()
+    let info = find_all::<gtk::Box>(root)
+        .into_iter()
         .find(|b| b.has_css_class("preview-image-info"))?;
-    let mut labels = Vec::new();
-    find_all::<gtk::Label>(info.upcast_ref(), &mut labels);
-    labels.first().map(|label| label.label().to_string())
+    find_all::<gtk::Label>(info.upcast_ref())
+        .first()
+        .map(|label| label.label().to_string())
 }
 
+// The toast's message while it shows.
 fn toast_text(root: &gtk::Widget) -> Option<String> {
-    let mut boxes = Vec::new();
-    find_all::<gtk::Box>(root, &mut boxes);
-    boxes
-        .iter()
+    find_all::<gtk::Box>(root)
+        .into_iter()
         .find(|b| b.has_css_class("viewer-toast"))
         .filter(|b| b.is_visible())
         .and_then(|b| b.first_child().and_downcast::<gtk::Label>())

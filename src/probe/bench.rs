@@ -245,8 +245,7 @@ pub fn run(window: &gtk::ApplicationWindow) {
             press(&window, gdk::Key::f);
             let entered = wait_until(3000, || window.is_fullscreen()).await;
             sleep(2500).await;
-            let mut boxes = Vec::new();
-            find_all::<gtk::Box>(&root, &mut boxes);
+            let boxes = find_all::<gtk::Box>(&root);
             let controls: Vec<_> = boxes
                 .iter()
                 .filter(|b| b.has_css_class("preview-controls"))
