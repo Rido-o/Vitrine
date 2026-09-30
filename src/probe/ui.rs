@@ -443,6 +443,38 @@ pub fn run(window: &gtk::ApplicationWindow) {
                     );
                     sleep(1500).await;
 
+                    // Undo once the item has left the trash (emptied): said
+                    // so, and nothing restored.
+                    let gone = directory.join("img-00-gone.jpg");
+                    let _ = std::fs::copy(directory.join("img-01-red.jpg"), &gone);
+                    press(&window, gdk::Key::r);
+                    wait_until(3000, || select_named("img-00-gone.jpg").is_some()).await;
+                    press(&window, gdk::Key::Delete);
+                    wait_until(5000, || toast().is_some_and(|t| t.starts_with("Moved"))).await;
+                    let trash = gio::File::for_uri("trash:///");
+                    if let Ok(enumerator) = trash.enumerate_children(
+                        "standard::name,trash::orig-path",
+                        gio::FileQueryInfoFlags::NONE,
+                        None::<&gio::Cancellable>,
+                    ) {
+                        for info in enumerator.flatten() {
+                            if info.attribute_byte_string("trash::orig-path").as_deref()
+                                == gone.to_str()
+                            {
+                                let _ = trash.child(info.name()).delete(None::<&gio::Cancellable>);
+                            }
+                        }
+                    }
+                    undo();
+                    wait_until(5000, || toast().is_some_and(|t| t.starts_with("Couldn't"))).await;
+                    println!(
+                        "RESULT ui undo_gone toast={:?} on_disk={} items={}",
+                        toast(),
+                        gone.exists(),
+                        selection.n_items()
+                    );
+                    sleep(1500).await;
+
                     // In the view: deleting shows the next image, undo the
                     // restored one.
                     select_named("img-06-blue.jpg");

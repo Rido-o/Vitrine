@@ -93,17 +93,18 @@ pub async fn move_to_trash(path: &Path) -> Result<Option<TrashedItem>, glib::Err
 /// GVfs never overwrites, so an existing file there is reported rather than
 /// replaced.
 pub async fn restore(item: &TrashedItem) -> Result<(), &'static str> {
-    let trashed = gio::File::for_uri(&item.uri);
-    if !trashed.query_exists(None::<&gio::Cancellable>) {
-        return Err("it's no longer in the trash");
-    }
-    let (moved, _progress) = trashed.move_future(
+    // No check that it's still there first: that would be a blocking call to
+    // GVfs on the main thread, and the move reports it anyway.
+    let (moved, _progress) = gio::File::for_uri(&item.uri).move_future(
         &gio::File::for_path(&item.original),
         gio::FileCopyFlags::NOFOLLOW_SYMLINKS,
         glib::Priority::DEFAULT,
     );
     match moved.await {
         Ok(()) => Ok(()),
+        Err(error) if error.matches(gio::IOErrorEnum::NotFound) => {
+            Err("it's no longer in the trash")
+        }
         Err(error) if error.matches(gio::IOErrorEnum::Exists) => {
             Err("a file already exists at its old path")
         }
