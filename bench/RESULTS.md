@@ -113,7 +113,7 @@ holding → on Vulkan). For the TypeScript app, cold is 183–211 ms to sharp an
 32–39 dropped frames holding →.
 
 The spike decodes at the window's size. Decoding at full resolution instead
-(`VITRINE_VIEWER=full`, warm, GL) opens as fast (29 ms), but holding → drops
+(`VITRINE_VIEWER=full`, a switch since removed; warm, GL) opens as fast (29 ms), but holding → drops
 17 frames with stalls up to 294 ms, and memory peaks at 908 MB instead of
 638 MB: uploading full-size textures on the main thread is what costs.
 

@@ -62,11 +62,6 @@ struct Shared {
     results: async_channel::Sender<(PathBuf, Result<Decoded, String>)>,
 }
 
-// VITRINE_VIEWER=full decodes at full resolution (to compare uploads).
-fn full_size() -> bool {
-    std::env::var("VITRINE_VIEWER").is_ok_and(|v| v == "full")
-}
-
 fn worker(shared: &Shared) {
     loop {
         let request = {
@@ -80,11 +75,6 @@ fn worker(shared: &Shared) {
         };
         let result = match request.kind {
             Kind::Fit(width, height) => {
-                let (width, height) = if full_size() {
-                    (u32::MAX, u32::MAX)
-                } else {
-                    (width, height)
-                };
                 decode::to_fit(&request.path, width, height).map(|fitted| Decoded::Fit {
                     pixels: fitted.rgba.premultiplied(),
                     full: fitted.full,
