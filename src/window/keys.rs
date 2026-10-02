@@ -78,11 +78,10 @@ impl Window {
         }
         let selected = self.selection.selected() as i64;
         if self.in_grid() {
-            match key {
-                gdk::Key::e if self.selection.selected_item().is_some() => self.show_at(selected),
-                gdk::Key::Escape | gdk::Key::q => self.window.close(),
-                _ => return false,
+            if key != gdk::Key::e || self.selection.selected_item().is_none() {
+                return false;
             }
+            self.show_at(selected);
             return true;
         }
         match key {

@@ -105,7 +105,7 @@ Keys (grid unless noted):
 | Delete | Move to trash (grid and view) |
 | Ctrl+Z | Undo the last delete; repeat to go further back (grid and view) |
 | Ctrl+W, Ctrl+Q | Close the window (grid and view) |
-| Esc, `q` | Close the view, or quit from the grid |
+| Esc, `q` (view) | Back to the grid |
 | ↓ (folder entry) | Open the folder history; Esc puts the entry back |
 | ←/→ (view) | Previous/next image |
 | click the left/right sixth (view, at fit) | Previous/next image; the cursor shows an arrow there |

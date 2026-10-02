@@ -83,7 +83,7 @@ impl Toolbar {
 
         let close = gtk::Button::builder()
             .css_classes(["viewer-toolbar-button"])
-            .tooltip_text("Close (Esc)")
+            .tooltip_text("Close (Ctrl+W)")
             .child(&icon("xmark-awesome-symbolic", 16))
             .build();
         let end = gtk::Box::builder()
