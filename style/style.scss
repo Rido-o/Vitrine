@@ -123,6 +123,8 @@ tooltip {
     > child {
       padding: 8px;
       background: none;
+      // The theme's keyboard focus ring; the selection ring already shows it.
+      outline: none;
     }
   }
 
