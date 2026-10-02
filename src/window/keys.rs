@@ -5,6 +5,11 @@ use super::Window;
 use gtk::{gdk, glib, prelude::*};
 use std::rc::Rc;
 
+// How often a held ←/→ moves on, at most: the compositor's key repeat (often
+// 25/s) passes images faster than they decode, so most went by as
+// thumbnails. In µs.
+const STEP_INTERVAL: i64 = 1_000_000 / 15;
+
 impl Window {
     pub(super) fn connect_keys(self: &Rc<Self>) {
         let keys = gtk::EventControllerKey::builder()
@@ -15,7 +20,31 @@ impl Window {
             Some(this) if this.key(key, state) => glib::Propagation::Stop,
             _ => glib::Propagation::Proceed,
         });
+        // Letting go ends the hold: the next press moves at once.
+        let weak = Rc::downgrade(self);
+        keys.connect_key_released(move |_, key, _, _| {
+            if let Some(this) = weak.upgrade()
+                && matches!(key, gdk::Key::Left | gdk::Key::Right)
+            {
+                this.next_step.set(0);
+            }
+        });
         self.window.add_controller(keys);
+    }
+
+    // To the previous or next image, unless a held key's repeat comes too
+    // soon. Due times are a steady `STEP_INTERVAL` apart rather than counted
+    // from each move, so the rate doesn't round down to the repeat's.
+    fn step(&self, by: i64) {
+        let now = glib::monotonic_time();
+        let due = self.next_step.get();
+        if now < due {
+            return;
+        }
+        let behind = now - due > STEP_INTERVAL;
+        self.next_step
+            .set(if behind { now } else { due } + STEP_INTERVAL);
+        self.show_at(self.selection.selected() as i64 + by);
     }
 
     // Whether `key` was handled.
@@ -85,8 +114,8 @@ impl Window {
             return true;
         }
         match key {
-            gdk::Key::Right => self.show_at(selected + 1),
-            gdk::Key::Left => self.show_at(selected - 1),
+            gdk::Key::Right => self.step(1),
+            gdk::Key::Left => self.step(-1),
             gdk::Key::Escape | gdk::Key::q => self.close_view(),
             // Through the action, so the menu's check follows.
             gdk::Key::b => {

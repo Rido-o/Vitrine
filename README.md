@@ -45,7 +45,8 @@ command of your choice.
   decodes the full resolution into tiles, of which only the visible ones are
   drawn. The two images on each side are decoded in the background, so ←/→
   are instant, and the image selected in the grid is decoded before you open
-  it. While an image is still decoding (e.g. holding an arrow key) its
+  it. A held ←/→ moves on at most 15 times a second, so images have time to
+  decode before they are reached. While one is still decoding its
   thumbnail is shown, then swapped for the full image. Nothing decodes on the
   main thread.
 - **Colour assessment** (`b` in the full-screen view, or the ⋯ menu), after
@@ -107,7 +108,7 @@ Keys (grid unless noted):
 | Ctrl+W, Ctrl+Q | Close the window (grid and view) |
 | Esc, `q` (view) | Back to the grid |
 | ↓ (folder entry) | Open the folder history; Esc puts the entry back |
-| ←/→ (view) | Previous/next image |
+| ←/→ (view) | Previous/next image; held, at most 15 a second |
 | click the left/right sixth (view, at fit) | Previous/next image; the cursor shows an arrow there |
 | scroll, drag (view) | Zoom around the cursor, pan when zoomed in |
 | double-click (view) | Toggle fit/100%: the middle at fit, anywhere when zoomed |

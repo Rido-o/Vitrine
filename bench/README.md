@@ -95,7 +95,7 @@ In order, in one run:
 | `jump` | to the middle in one step, until filled | `fill_ms` |
 | `sort` | click Date, Size, Random, Name, 300 ms apart | `date_us` etc. (each click on the main thread), `kept` (clicks after which the same image was still selected; 4 expected) |
 | `open` | activate the first image (from the top), 1.5 s | `placeholder_ms`, `sharp_ms` |
-| `hold` | → 60 times at 30/s, then until the last image is sharp | `last_sharp_ms` |
+| `hold` | → 60 times at 30/s (the view moves on at most 15 times a second), then until the last image is sharp | `moves`, `last_sharp_ms` |
 | `close` | Esc, 1 s | |
 | `open_selected` | select the 11th image, wait 300 ms, open it | `dwell_ms`, `sharp_ms` |
 | `zoom` | open the first `huge-` image and zoom to 100% at the centre, 1.5 s | `detail_ms` (until every visible full-resolution tile is drawn) |

@@ -139,17 +139,21 @@ pub fn run(window: &gtk::ApplicationWindow) {
             &format!("placeholder_ms={placeholder} sharp_ms={sharp_ms}"),
         );
 
-        // hold: → at 30 presses/s, then how long the last image takes.
+        // hold: → at 30 presses/s (the view moves on at its own, lower, rate),
+        // then how long the last image takes.
         let recorder = Recorder::start(&window);
         for _ in 0..HOLD_PRESSES {
             press(&window, gdk::Key::Right);
             sleep(HOLD_INTERVAL_MS).await;
         }
-        let last = path_at(OPEN_POSITION + HOLD_PRESSES);
+        let moves = model
+            .downcast_ref::<gtk::SingleSelection>()
+            .map_or(0, |selection| selection.selected() - OPEN_POSITION);
+        let last = path_at(OPEN_POSITION + moves);
         let settle = wait_until(5000, || is_sharp(&last)).await;
         recorder.finish(
             "hold",
-            &format!("presses={HOLD_PRESSES} last_sharp_ms={settle}"),
+            &format!("presses={HOLD_PRESSES} moves={moves} last_sharp_ms={settle}"),
         );
 
         let recorder = Recorder::start(&window);

@@ -50,6 +50,8 @@ pub struct Window {
     // The user clicked, typed or scrolled in the grid since the folder began
     // loading (see `keep_first_while_loading`).
     touched: Cell<bool>,
+    // When a held ←/→ may next move (monotonic µs; see `step`).
+    next_step: Cell<i64>,
     // The last image selected (not by a rescan) and its position: if a
     // rescan removes or replaces it, the same image, or the one now in its
     // place, is selected again.
@@ -142,6 +144,7 @@ impl Window {
             toast,
             pending: RefCell::default(),
             touched: Cell::new(false),
+            next_step: Cell::new(0),
             last_selected: RefCell::default(),
             modified: RefCell::default(),
             resolutions: RefCell::default(),
