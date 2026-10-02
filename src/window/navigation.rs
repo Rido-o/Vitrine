@@ -80,7 +80,7 @@ impl Window {
         self.stack.set_visible_child_name("preview");
     }
 
-    // Opening (Enter, double-click, View), the close button, and clicks at
+    // Opening (Enter, double-click, View), the grid button, and clicks at
     // the view's edges.
     pub(super) fn connect_preview(self: &Rc<Self>) {
         let weak = Rc::downgrade(self);
@@ -107,7 +107,7 @@ impl Window {
             });
 
         let weak = Rc::downgrade(self);
-        self.view.connect_close(move || {
+        self.view.connect_back(move || {
             if let Some(this) = weak.upgrade() {
                 this.close_view();
             }

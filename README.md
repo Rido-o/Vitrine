@@ -38,7 +38,8 @@ command of your choice.
   `s` for sharp (nearest-neighbour) pixels, `[`/`]` to rotate and `h`/`v` to
   flip (also in the ⋯ menu; only the view changes, never the file, and it
   resets for the next image), and a button (or `f`) to make the window
-  fullscreen; leaving the view restores it. When fullscreen, the buttons, info
+  fullscreen; leaving the view restores it. Next to it are a button back to
+  the grid (or Esc) and one that closes the window. When fullscreen, the buttons, info
   and cursor fade out after 2 s without mouse movement (not while the pointer
   is on them or a menu is open). An image is decoded at the view's size in
   device pixels and drawn at exactly those pixels at fit; zooming past it

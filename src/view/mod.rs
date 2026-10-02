@@ -1,5 +1,5 @@
 //! The full-screen view's page: the image, with the controls over it
-//! (fullscreen and close at the top right, the file's name and resolution at
+//! (fullscreen, back to the grid and close at the top right, the file's name and resolution at
 //! the bottom) that fade out with the cursor in fullscreen; the fullscreen
 //! toggle, and the view's own keys.
 
@@ -24,7 +24,7 @@ pub struct View {
     preview: Rc<Preview>,
     fullscreen_button: gtk::Button,
     fullscreen_icon: gtk::Image,
-    close_button: gtk::Button,
+    grid_button: gtk::Button,
     controls: gtk::Box,
     menu_buttons: Rc<RefCell<Vec<gtk::MenuButton>>>,
     // The view went fullscreen (f or the button), so leaving it restores the
@@ -50,8 +50,17 @@ impl View {
             .pixel_size(20)
             .build();
         let fullscreen_button = gtk::Button::builder().child(&fullscreen_icon).build();
-        let close_button = gtk::Button::builder()
+        let grid_button = gtk::Button::builder()
             .tooltip_text("Back to grid (Esc)")
+            .child(
+                &gtk::Image::builder()
+                    .icon_name("table-cells-large-awesome-symbolic")
+                    .pixel_size(20)
+                    .build(),
+            )
+            .build();
+        let close_button = gtk::Button::builder()
+            .tooltip_text("Close (Ctrl+W)")
             .child(
                 &gtk::Image::builder()
                     .icon_name("xmark-awesome-symbolic")
@@ -68,7 +77,10 @@ impl View {
             .spacing(8)
             .build();
         controls.append(&fullscreen_button);
+        controls.append(&grid_button);
         controls.append(&close_button);
+        let window_ = window.clone();
+        close_button.connect_clicked(move |_| window_.close());
         page.add_overlay(&controls);
 
         let filename = gtk::Label::builder()
@@ -137,7 +149,7 @@ impl View {
             preview: preview.clone(),
             fullscreen_button,
             fullscreen_icon,
-            close_button,
+            grid_button,
             controls,
             menu_buttons: menu_buttons.clone(),
             fullscreened_by_view: Cell::new(false),
@@ -173,9 +185,9 @@ impl View {
         self.menu_buttons.borrow_mut().push(button.clone());
     }
 
-    /// What the close button does (leaving the view).
-    pub fn connect_close(&self, close: impl Fn() + 'static) {
-        self.close_button.connect_clicked(move |_| close());
+    /// What the grid button does (leaving the view).
+    pub fn connect_back(&self, back: impl Fn() + 'static) {
+        self.grid_button.connect_clicked(move |_| back());
     }
 
     pub fn toggle_fullscreen(&self) {
