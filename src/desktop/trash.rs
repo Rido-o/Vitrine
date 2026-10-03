@@ -18,6 +18,9 @@ use std::{
 };
 use trash::{Error, TrashItem, os_limited};
 
+// Why a restore failed, when there's nothing more specific to say.
+const FAILED: &str = "moving it back failed";
+
 pub struct TrashedItem {
     pub original: PathBuf,
     item: TrashItem,
@@ -30,12 +33,14 @@ fn recorded_path(path: &Path) -> Option<PathBuf> {
     Some(path.parent()?.canonicalize().ok()?.join(path.file_name()?))
 }
 
-// The trash items that came from `recorded`.
-fn items_from(recorded: &Path) -> Result<Vec<TrashItem>, Error> {
-    Ok(os_limited::list()?
-        .into_iter()
-        .filter(|item| item.original_path() == recorded)
-        .collect())
+// The trash items that came from `recorded`; None (logged) if the trash
+// can't be read.
+fn items_from(recorded: &Path) -> Option<Vec<TrashItem>> {
+    let mut items = os_limited::list()
+        .inspect_err(|error| eprintln!("Could not read the trash: {error}"))
+        .ok()?;
+    items.retain(|item| item.original_path() == recorded);
+    Some(items)
 }
 
 /// Trashes `path` (an error if that fails); the item to restore it from, or
@@ -53,41 +58,39 @@ fn trash_blocking(path: PathBuf) -> Result<Option<TrashedItem>, String> {
         .ok()
         .filter(std::fs::Metadata::is_file)
         .and_then(|metadata| metadata.modified().ok());
-    let before: Option<HashSet<OsString>> = recorded.as_deref().and_then(|recorded| {
-        items_from(recorded)
-            .inspect_err(|error| eprintln!("Could not read the trash: {error}"))
-            .ok()
-            .map(|items| items.into_iter().map(|item| item.id).collect())
-    });
+    let before: Option<HashSet<OsString>> = recorded
+        .as_deref()
+        .and_then(items_from)
+        .map(|items| items.into_iter().map(|item| item.id).collect());
     trash::delete(&path).map_err(|error| error.to_string())?;
     let (Some(recorded), Some(before)) = (recorded, before) else {
         return Ok(None);
     };
-    match items_from(&recorded) {
-        Ok(after) => {
-            let mut added: Vec<TrashItem> = after
-                .into_iter()
-                .filter(|item| !before.contains(&item.id))
-                .collect();
-            if added.len() == 1 {
-                let item = added.remove(0);
-                if let (Some(file), Some(modified)) = (trashed_file(&item), modified) {
-                    keep_modified(&file, modified);
-                }
-                return Ok(Some(TrashedItem {
-                    original: path,
-                    item,
-                }));
-            }
+    let Some(after) = items_from(&recorded) else {
+        return Ok(None);
+    };
+    let added: Vec<TrashItem> = after
+        .into_iter()
+        .filter(|item| !before.contains(&item.id))
+        .collect();
+    let [item] = match <[TrashItem; 1]>::try_from(added) {
+        Ok(one) => one,
+        Err(added) => {
+            let count = added.len();
             eprintln!(
-                "Trashed {} but found {} new trash items",
-                path.display(),
-                added.len()
+                "Trashed {} but found {count} new trash items",
+                path.display()
             );
+            return Ok(None);
         }
-        Err(error) => eprintln!("Could not read the trash: {error}"),
+    };
+    if let (Some(file), Some(modified)) = (trashed_file(&item), modified) {
+        keep_modified(&file, modified);
     }
-    Ok(None)
+    Ok(Some(TrashedItem {
+        original: path,
+        item,
+    }))
 }
 
 // The item's own file, beside its record: <trash>/files/<name>.
@@ -125,15 +128,15 @@ pub async fn restore(item: &TrashedItem) -> Result<(), &'static str> {
     let item = item.item.clone();
     gio::spawn_blocking(move || restore_blocking(item))
         .await
-        .unwrap_or(Err("moving it back failed"))
+        .unwrap_or(Err(FAILED))
 }
 
 fn restore_blocking(item: TrashItem) -> Result<(), &'static str> {
+    let Some(file) = trashed_file(&item) else {
+        return Err(FAILED);
+    };
     let target = item.original_path();
     let info = PathBuf::from(&item.id);
-    let Some(file) = trashed_file(&item) else {
-        return Err("moving it back failed");
-    };
     let existed = target.symlink_metadata().is_ok();
     match os_limited::restore_all([item]) {
         Ok(()) => Ok(()),
@@ -145,7 +148,7 @@ fn restore_blocking(item: TrashItem) -> Result<(), &'static str> {
                 ErrorKind::CrossesDevices => copy_back(&file, &target, &info),
                 _ => {
                     eprintln!("Could not restore {}: {source}", target.display());
-                    Err("moving it back failed")
+                    Err(FAILED)
                 }
             }
         }
@@ -160,7 +163,7 @@ fn restore_blocking(item: TrashItem) -> Result<(), &'static str> {
         Err(error) => {
             remove_placeholder(&target, existed);
             eprintln!("Could not restore {}: {error}", target.display());
-            Err("moving it back failed")
+            Err(FAILED)
         }
     }
 }
@@ -195,7 +198,7 @@ fn copy_back(file: &Path, target: &Path, info: &Path) -> Result<(), &'static str
     if let Err(error) = copied {
         eprintln!("Could not restore {}: {error}", target.display());
         let _ = std::fs::remove_file(target);
-        return Err("moving it back failed");
+        return Err(FAILED);
     }
     if let Err(error) = std::fs::remove_file(file).and_then(|()| std::fs::remove_file(info)) {
         eprintln!(
