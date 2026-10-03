@@ -1,5 +1,5 @@
-//! The ⋯ menu: a menu model of window actions ("win.…"), one section per
-//! group.
+//! The menus' window actions ("win.…") and the menu models made of them
+//! (the ⋯ menu, a thumbnail's context menu), one section per group.
 
 use gtk::{gio, prelude::*};
 
@@ -44,50 +44,62 @@ impl MenuAction {
     }
 }
 
-pub struct ActionsMenu {
-    pub model: gio::Menu,
+pub struct Actions {
+    items: Vec<(&'static str, gio::MenuItem)>,
     view_actions: Vec<gio::SimpleAction>,
 }
 
-impl ActionsMenu {
-    /// The menu, with its actions added to `window`.
-    pub fn new(window: &gtk::ApplicationWindow, sections: Vec<Vec<MenuAction>>) -> Self {
-        let model = gio::Menu::new();
+impl Actions {
+    /// The actions, added to `window`.
+    pub fn new(window: &gtk::ApplicationWindow, actions: Vec<MenuAction>) -> Self {
+        let mut items = Vec::new();
         let mut view_actions = Vec::new();
-        for section in sections {
-            let menu = gio::Menu::new();
-            for action in section {
-                let item =
-                    gio::MenuItem::new(Some(action.label), Some(&format!("win.{}", action.name)));
-                if let Some(accel) = action.accel {
-                    item.set_attribute_value("accel", Some(&accel.to_variant()));
-                }
-                menu.append_item(&item);
-                let simple = match &action.checked {
-                    Some(checked) => {
-                        gio::SimpleAction::new_stateful(action.name, None, &checked().to_variant())
-                    }
-                    None => gio::SimpleAction::new(action.name, None),
-                };
-                simple.set_enabled(!action.view_only);
-                let (activate, checked) = (action.activate, action.checked);
-                simple.connect_activate(move |simple, _| {
-                    activate();
-                    if let Some(checked) = &checked {
-                        simple.set_state(&checked().to_variant());
-                    }
-                });
-                window.add_action(&simple);
-                if action.view_only {
-                    view_actions.push(simple);
-                }
+        for action in actions {
+            let item =
+                gio::MenuItem::new(Some(action.label), Some(&format!("win.{}", action.name)));
+            if let Some(accel) = action.accel {
+                item.set_attribute_value("accel", Some(&accel.to_variant()));
             }
-            model.append_section(None, &menu);
+            items.push((action.name, item));
+            let simple = match &action.checked {
+                Some(checked) => {
+                    gio::SimpleAction::new_stateful(action.name, None, &checked().to_variant())
+                }
+                None => gio::SimpleAction::new(action.name, None),
+            };
+            simple.set_enabled(!action.view_only);
+            let (activate, checked) = (action.activate, action.checked);
+            simple.connect_activate(move |simple, _| {
+                activate();
+                if let Some(checked) = &checked {
+                    simple.set_state(&checked().to_variant());
+                }
+            });
+            window.add_action(&simple);
+            if action.view_only {
+                view_actions.push(simple);
+            }
         }
         Self {
-            model,
+            items,
             view_actions,
         }
+    }
+
+    /// A menu of the named actions, a section per group; names without an
+    /// action (no wallpaper command) are left out.
+    pub fn menu(&self, sections: &[&[&str]]) -> gio::Menu {
+        let model = gio::Menu::new();
+        for names in sections {
+            let section = gio::Menu::new();
+            for name in *names {
+                if let Some((_, item)) = self.items.iter().find(|(action, _)| action == name) {
+                    section.append_item(item);
+                }
+            }
+            model.append_section(None, &section);
+        }
+        model
     }
 
     pub fn set_in_view(&self, in_view: bool) {

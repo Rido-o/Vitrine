@@ -44,6 +44,8 @@ pub struct Window {
     // The empty folder's message, over the grid.
     empty: gtk::Label,
     toast: Rc<Toast>,
+    // A thumbnail's context menu, over the grid.
+    context_menu: gtk::PopoverMenu,
     // An image to select once the scan finds it: the file opened, or the
     // selection kept while the subfolders are added or left out.
     pending: RefCell<Option<PathBuf>>,
@@ -128,6 +130,12 @@ impl Window {
         grid_properties.add_css_class("viewer-toolbar-menu");
         let view_properties = menu::properties_button(&selection, 20);
 
+        let context_menu = gtk::PopoverMenu::builder()
+            .has_arrow(false)
+            .halign(gtk::Align::Start)
+            .build();
+        context_menu.set_parent(&grid);
+
         let this = Rc::new(Self {
             window,
             stack,
@@ -142,6 +150,7 @@ impl Window {
             info,
             empty,
             toast,
+            context_menu,
             pending: RefCell::default(),
             touched: Cell::new(false),
             next_step: Cell::new(0),
@@ -191,6 +200,7 @@ impl Window {
         this.window.connect_destroy(move |_| {
             if let Some(this) = keep.take() {
                 this.toolbar.history_panel.unparent();
+                this.context_menu.unparent();
                 this.folder.dispose();
             }
         });

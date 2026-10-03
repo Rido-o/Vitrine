@@ -30,9 +30,33 @@ pub fn build(selection: &gtk::SingleSelection, tiles: &Rc<Tiles>) -> gtk::GridVi
             .layout_manager(&CellLayout::default())
             .build();
         cell.append(&frame);
-        item.downcast_ref::<gtk::ListItem>()
-            .expect("a ListItem")
-            .set_child(Some(&cell));
+        let item = item.downcast_ref::<gtk::ListItem>().expect("a ListItem");
+        item.set_child(Some(&cell));
+
+        // A right click opens the context menu on this cell's image
+        // ("win.context-menu", in `menu.rs`), at the pointer.
+        let click = gtk::GestureClick::builder()
+            .button(gdk::BUTTON_SECONDARY)
+            .build();
+        let item = item.downgrade();
+        click.connect_pressed(move |click, _, x, y| {
+            let Some(cell) = click.widget() else { return };
+            let (Some(item), Some(grid)) =
+                (item.upgrade(), cell.ancestor(gtk::GridView::static_type()))
+            else {
+                return;
+            };
+            let Some(point) =
+                cell.compute_point(&grid, &gtk::graphene::Point::new(x as f32, y as f32))
+            else {
+                return;
+            };
+            click.set_state(gtk::EventSequenceState::Claimed);
+            let at = (item.position(), point.x() as f64, point.y() as f64);
+            cell.activate_action("win.context-menu", Some(&at.to_variant()))
+                .ok();
+        });
+        cell.add_controller(click);
     });
     let bind_tiles = tiles.clone();
     factory.connect_bind(move |_, item| {

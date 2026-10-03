@@ -70,6 +70,10 @@ command of your choice.
   folder and Keyboard shortcuts (`?`, a window listing every key). On Wayland
   the clipboard is served by Vitrine, so a copy lasts only while it's open
   unless a clipboard manager keeps it.
+- **Thumbnail menu**: right-click a thumbnail (or press Menu or Shift+F10 for
+  the selected one) to select it and open a menu at the pointer: Open, Copy
+  image, Copy path, Set as wallpaper, Show in file manager, Properties and
+  Move to trash.
 - **Set as wallpaper** runs a configurable command with the image path and
   shows a "Wallpaper set" toast; the viewer stays open.
 - **Delete** moves the image to the trash, and **Ctrl+Z** (or the toast's Undo)
@@ -99,6 +103,7 @@ Keys (grid unless noted):
 | Key | Does |
 | --- | --- |
 | Enter, `e`, double-click | Open in the full-screen view |
+| right-click, Menu, Shift+F10 | The thumbnail's menu |
 | `w` | Set as wallpaper, with a wallpaper command (grid and view) |
 | `i` | Image properties (grid and view) |
 | Ctrl+C, Ctrl+Shift+C | Copy the image, or its path (grid and view) |
@@ -244,7 +249,8 @@ src/
                       image selected while loading
     info.rs           the info bar, title and empty-folder message
     navigation.rs     opening, moving through and closing the full-screen view
-    menu.rs           the ⋯ menu's actions, i buttons, copy, wallpaper
+    menu.rs           the ⋯ menu's and the thumbnail menu's actions, i
+                      buttons, copy, wallpaper
     delete.rs         trash and undo
     keys.rs           the window's keys
     toast.rs          brief messages over both pages
@@ -267,7 +273,7 @@ src/
                       to sRGB (moxcms)
   desktop/          the file manager (D-Bus) and wallpaper command (mod.rs)
     trash.rs          trash and exact-item restore (the `trash` crate)
-  actions.rs        the ⋯ menu: its model and window actions
+  actions.rs        the menus' window actions and models
   properties.rs     the i popover's contents (file info, GdkPixbuf, EXIF)
   shortcuts.rs      the keyboard shortcuts window
   history.rs        folder history file

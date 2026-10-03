@@ -23,10 +23,13 @@ const SECTIONS: [(&str, &[Row]); 3] = [
     ),
     (
         "Grid",
-        &[(
-            &["Enter", "e", "double-click"],
-            "Open in the full-screen view",
-        )],
+        &[
+            (
+                &["Enter", "e", "double-click"],
+                "Open in the full-screen view",
+            ),
+            (&["Menu", "Shift+F10", "right-click"], "Image menu"),
+        ],
     ),
     (
         "Full-screen view",

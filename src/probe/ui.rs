@@ -89,6 +89,56 @@ pub fn run(window: &gtk::ApplicationWindow) {
             button.emit_clicked();
         }
 
+        // A thumbnail's context menu: a right click on a tile that isn't
+        // selected (its gesture's handler), then the Menu key.
+        sleep(300).await;
+        if let Some(menu) = find::<gtk::PopoverMenu>(grid.upcast_ref()) {
+            let before = selection.selected();
+            let click = find_all::<gtk::AspectFrame>(grid.upcast_ref())
+                .into_iter()
+                .filter_map(|frame| frame.parent())
+                .filter(|cell| {
+                    cell.parent()
+                        .is_some_and(|item| !item.state_flags().contains(gtk::StateFlags::SELECTED))
+                })
+                .find_map(|cell| {
+                    let controllers = cell.observe_controllers();
+                    (0..controllers.n_items())
+                        .find_map(|i| controllers.item(i).and_downcast::<gtk::GestureClick>())
+                });
+            if let Some(click) = click {
+                click.emit_by_name::<()>("pressed", &[&1i32, &20f64, &20f64]);
+            }
+            sleep(300).await;
+            let labels: Vec<String> = find_all::<gtk::Label>(menu.upcast_ref())
+                .iter()
+                .map(|label| label.label().to_string())
+                .collect();
+            println!(
+                "RESULT ui context_menu open={} moved={} selected={:?} at={:?} items={labels:?}",
+                menu.is_visible(),
+                selection.selected() != before,
+                name_at(selection.selected()),
+                menu.pointing_to().1,
+            );
+            shot(&window, "ui-context-menu");
+            menu.popdown();
+            sleep(200).await;
+            press(&window, gdk::Key::Menu);
+            sleep(300).await;
+            println!(
+                "RESULT ui context_menu_key open={} selected={:?} at={:?}",
+                menu.is_visible(),
+                name_at(selection.selected()),
+                menu.pointing_to().1,
+            );
+            menu.popdown();
+            selection.set_selected(before);
+            sleep(200).await;
+        } else {
+            println!("RESULT ui context_menu missing");
+        }
+
         // The ⋯ menu's actions, the clipboard, the toast, the shortcuts
         // window, and the menu in the view.
         {

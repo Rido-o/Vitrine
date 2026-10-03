@@ -1,12 +1,12 @@
-//! The ⋯ menu (in the toolbar and in the view) and its actions, and the i
-//! buttons' properties popovers.
+//! The ⋯ menu (in the toolbar and in the view), a thumbnail's context menu,
+//! their actions, and the i buttons' properties popovers.
 
 use super::Window;
 use crate::{
-    actions::{self, ActionsMenu, MenuAction},
+    actions::{self, Actions, MenuAction},
     icon,
 };
-use gtk::{gio, glib, prelude::*};
+use gtk::{gdk, gio, glib, prelude::*};
 use std::rc::Rc;
 
 /// An i button: the selected image's properties.
@@ -33,76 +33,143 @@ impl Window {
                 }
             })
         };
-        let mut image = vec![
+        let mut all = vec![
+            action("open", "Open", |this| {
+                this.show_at(this.selection.selected() as i64)
+            })
+            .accel("Return"),
             action("copy-image", "Copy image", Self::copy_image).accel("<Control>c"),
             action("copy-path", "Copy path", Self::copy_path).accel("<Control><Shift>c"),
+            action("rotate-left", "Rotate left", |this| {
+                this.preview.image.rotate(false)
+            })
+            .accel("bracketleft")
+            .view_only(),
+            action("rotate-right", "Rotate right", |this| {
+                this.preview.image.rotate(true)
+            })
+            .accel("bracketright")
+            .view_only(),
+            action("flip-horizontally", "Flip horizontally", |this| {
+                this.preview.image.flip(true)
+            })
+            .accel("h")
+            .view_only(),
+            action("flip-vertically", "Flip vertically", |this| {
+                this.preview.image.flip(false)
+            })
+            .accel("v")
+            .view_only(),
+            action("color-assessment", "Colour assessment", |this| {
+                this.view.toggle_assessment()
+            })
+            .accel("b")
+            .view_only()
+            .checked({
+                let image = self.preview.image.clone();
+                move || image.assessment()
+            }),
+            action("show-in-file-manager", "Show in file manager", |this| {
+                if let Some(path) = this.selected_path() {
+                    crate::desktop::show_in_file_manager(&path);
+                }
+            }),
+            action("properties", "Properties", |this| this.toggle_properties()).accel("i"),
+            action("rescan", "Rescan folder", |this| this.folder.rescan()).accel("r"),
+            action("delete", "Move to trash", Self::delete_selected).accel("Delete"),
+            action("shortcuts", "Keyboard shortcuts", |this| {
+                crate::shortcuts::show(&this.window, this.wallpaper_argv.is_some())
+            })
+            .accel("question"),
         ];
         if self.wallpaper_argv.is_some() {
-            image.push(action("set-wallpaper", "Set as wallpaper", Self::set_wallpaper).accel("w"));
+            all.push(action("set-wallpaper", "Set as wallpaper", Self::set_wallpaper).accel("w"));
         }
-        let menu = ActionsMenu::new(
-            &self.window,
-            vec![
-                image,
-                vec![
-                    action("rotate-left", "Rotate left", |this| {
-                        this.preview.image.rotate(false)
-                    })
-                    .accel("bracketleft")
-                    .view_only(),
-                    action("rotate-right", "Rotate right", |this| {
-                        this.preview.image.rotate(true)
-                    })
-                    .accel("bracketright")
-                    .view_only(),
-                    action("flip-horizontally", "Flip horizontally", |this| {
-                        this.preview.image.flip(true)
-                    })
-                    .accel("h")
-                    .view_only(),
-                    action("flip-vertically", "Flip vertically", |this| {
-                        this.preview.image.flip(false)
-                    })
-                    .accel("v")
-                    .view_only(),
-                    action("color-assessment", "Colour assessment", |this| {
-                        this.view.toggle_assessment()
-                    })
-                    .accel("b")
-                    .view_only()
-                    .checked({
-                        let image = self.preview.image.clone();
-                        move || image.assessment()
-                    }),
-                ],
-                vec![
-                    action("show-in-file-manager", "Show in file manager", |this| {
-                        if let Some(path) = this.selected_path() {
-                            crate::desktop::show_in_file_manager(&path);
-                        }
-                    }),
-                    action("rescan", "Rescan folder", |this| this.folder.rescan()).accel("r"),
-                ],
-                vec![
-                    action("shortcuts", "Keyboard shortcuts", |this| {
-                        crate::shortcuts::show(&this.window, this.wallpaper_argv.is_some())
-                    })
-                    .accel("question"),
-                ],
+        let menu = Actions::new(&self.window, all);
+        let model = menu.menu(&[
+            &["copy-image", "copy-path", "set-wallpaper"],
+            &[
+                "rotate-left",
+                "rotate-right",
+                "flip-horizontally",
+                "flip-vertically",
+                "color-assessment",
             ],
-        );
+            &["show-in-file-manager", "rescan"],
+            &["shortcuts"],
+        ]);
+        self.context_menu.set_menu_model(Some(&menu.menu(&[
+            &["open"],
+            &["copy-image", "copy-path", "set-wallpaper"],
+            &["show-in-file-manager", "properties"],
+            &["delete"],
+        ])));
+        self.connect_context_menu();
         let toolbar_end = &self.toolbar.end;
-        let button = actions::more_button(&menu.model, 16);
+        let button = actions::more_button(&model, 16);
         button.add_css_class("viewer-toolbar-menu");
         toolbar_end.prepend(&button);
-        self.view
-            .add_menu_button(&actions::more_button(&menu.model, 20));
+        self.view.add_menu_button(&actions::more_button(&model, 20));
         // The i buttons, before the menus.
         toolbar_end.prepend(&self.grid_properties);
         self.view.add_menu_button(&self.view_properties);
         self.stack.connect_visible_child_name_notify(move |stack| {
             menu.set_in_view(stack.visible_child_name().as_deref() != Some("grid"));
         });
+    }
+
+    // A thumbnail's context menu: a right click on it (`grid.rs`, through
+    // "win.context-menu"), or the Menu key on the selected one.
+    fn connect_context_menu(self: &Rc<Self>) {
+        let open = gio::SimpleAction::new(
+            "context-menu",
+            Some(&<(u32, f64, f64)>::static_variant_type()),
+        );
+        let weak = Rc::downgrade(self);
+        open.connect_activate(move |_, parameter| {
+            if let Some(this) = weak.upgrade()
+                && let Some((position, x, y)) = parameter.and_then(|p| p.get::<(u32, f64, f64)>())
+            {
+                this.show_context_menu(position, x, y);
+            }
+        });
+        self.window.add_action(&open);
+    }
+
+    // Selects the image at `position`, as a click would, and opens the menu
+    // at that point in the grid.
+    fn show_context_menu(&self, position: u32, x: f64, y: f64) {
+        if position >= self.selection.n_items() {
+            return;
+        }
+        if self.selection.selected() != position {
+            self.select(position, true);
+        }
+        self.context_menu
+            .set_pointing_to(Some(&gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
+        self.context_menu.popup();
+    }
+
+    // The menu on the selected thumbnail's middle; at the grid's, when it's
+    // scrolled out of sight.
+    pub(super) fn show_context_menu_at_selected(&self) {
+        let grid = &self.grid;
+        let mut cell = grid.first_child();
+        while let Some(widget) = &cell {
+            if widget.state_flags().contains(gtk::StateFlags::SELECTED) {
+                break;
+            }
+            cell = widget.next_sibling();
+        }
+        let visible = gtk::graphene::Rect::new(0.0, 0.0, grid.width() as f32, grid.height() as f32);
+        let (x, y) = cell
+            .and_then(|cell| cell.compute_bounds(grid))
+            .and_then(|bounds| bounds.intersection(&visible))
+            .map_or_else(
+                || (visible.width() / 2.0, visible.height() / 2.0),
+                |shown| (shown.center().x(), shown.center().y()),
+            );
+        self.show_context_menu(self.selection.selected(), x as f64, y as f64);
     }
 
     pub(super) fn toggle_properties(&self) {
