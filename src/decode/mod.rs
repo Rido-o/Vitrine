@@ -35,17 +35,17 @@ pub struct Pixels {
 const FREE_ELSEWHERE: usize = 1 << 20;
 
 /// Pixel memory that frees itself off the main thread when large.
-struct Buffer(Option<Vec<u8>>);
+struct Buffer(Vec<u8>);
 
 impl AsRef<[u8]> for Buffer {
     fn as_ref(&self) -> &[u8] {
-        self.0.as_deref().unwrap_or_default()
+        &self.0
     }
 }
 
 impl Drop for Buffer {
     fn drop(&mut self) {
-        let Some(data) = self.0.take() else { return };
+        let data = std::mem::take(&mut self.0);
         if data.len() >= FREE_ELSEWHERE {
             // If the thread is gone, the buffer is freed here as usual.
             let _ = janitor().send(data);
@@ -122,7 +122,7 @@ impl Rgba {
         Pixels {
             width: self.width as i32,
             height: self.height as i32,
-            data: Buffer(Some(self.data)),
+            data: Buffer(self.data),
         }
     }
 }
@@ -143,18 +143,14 @@ pub fn to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> {
         .map(str::to_ascii_lowercase)
         .unwrap_or_default();
     let fast = match ext.as_str() {
-        "jpg" | "jpeg" => Some(jpeg_to_fit(path, max_w, max_h)),
-        "png" => Some(png_to_fit(path, max_w, max_h)),
-        _ => None,
+        "jpg" | "jpeg" => jpeg_to_fit(path, max_w, max_h),
+        "png" => png_to_fit(path, max_w, max_h),
+        _ => return pixbuf_to_fit(path, max_w, max_h),
     };
-    match fast {
-        Some(Ok(rgba)) => Ok(rgba),
-        Some(Err(error)) => {
-            eprintln!("Falling back to GdkPixbuf for {}: {error}", path.display());
-            pixbuf_to_fit(path, max_w, max_h)
-        }
-        None => pixbuf_to_fit(path, max_w, max_h),
-    }
+    fast.or_else(|error| {
+        eprintln!("Falling back to GdkPixbuf for {}: {error}", path.display());
+        pixbuf_to_fit(path, max_w, max_h)
+    })
 }
 
 pub fn fitted(width: u32, height: u32, max_w: u32, max_h: u32) -> (u32, u32) {
@@ -192,45 +188,46 @@ pub fn swaps(orientation: u32) -> bool {
     (5..=8).contains(&orientation)
 }
 
+type Size = (u32, u32);
+
 // The stored size that fits within `max_w`×`max_h` once turned upright, and
 // the image's own size as shown.
-fn fit_stored(width: u32, height: u32, max_w: u32, max_h: u32, orientation: u32) -> FitSizes {
+fn fit_stored(width: u32, height: u32, max_w: u32, max_h: u32, orientation: u32) -> (Size, Size) {
     if swaps(orientation) {
         let (w, h) = fitted(height, width, max_w, max_h);
-        FitSizes {
-            target: (h, w),
-            full: (height, width),
-        }
+        ((h, w), (height, width))
     } else {
-        FitSizes {
-            target: fitted(width, height, max_w, max_h),
-            full: (width, height),
-        }
+        (fitted(width, height, max_w, max_h), (width, height))
     }
 }
 
-struct FitSizes {
-    target: (u32, u32),
-    full: (u32, u32),
+// Converted to sRGB and turned upright, the last steps of every decode.
+fn finish(mut rgba: Rgba, icc: Option<&[u8]>, orientation: u32, full: Size) -> Fitted {
+    color::to_srgb(&mut rgba, icc);
+    Fitted {
+        rgba: orient(rgba, orientation),
+        full,
+    }
 }
 
 fn pixbuf_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> {
     let (_, width, height) = Pixbuf::file_info(path).ok_or("unknown format")?;
     let (width, height) = (width as u32, height as u32);
     let orientation = orientation(path);
-    let sizes = fit_stored(width, height, max_w, max_h, orientation);
-    let pixbuf = if sizes.target == (width, height) {
+    let (target, full) = fit_stored(width, height, max_w, max_h, orientation);
+    let pixbuf = if target == (width, height) {
         Pixbuf::from_file(path)
     } else {
-        Pixbuf::from_file_at_scale(path, sizes.target.0 as i32, sizes.target.1 as i32, true)
+        Pixbuf::from_file_at_scale(path, target.0 as i32, target.1 as i32, true)
     }
     .map_err(|error| error.to_string())?;
-    let mut rgba = Rgba::from_pixbuf(&pixbuf);
-    color::to_srgb(&mut rgba, color::pixbuf_profile(&pixbuf).as_deref());
-    Ok(Fitted {
-        rgba: orient(rgba, orientation),
-        full: sizes.full,
-    })
+    let icc = color::pixbuf_profile(&pixbuf);
+    Ok(finish(
+        Rgba::from_pixbuf(&pixbuf),
+        icc.as_deref(),
+        orientation,
+        full,
+    ))
 }
 
 fn jpeg_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> {
@@ -241,8 +238,7 @@ fn jpeg_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> {
         .read_header(&data)
         .map_err(|error| error.to_string())?;
     let (stored_w, stored_h) = (header.width as u32, header.height as u32);
-    let sizes = fit_stored(stored_w, stored_h, max_w, max_h, orientation);
-    let (target_w, target_h) = sizes.target;
+    let ((target_w, target_h), full) = fit_stored(stored_w, stored_h, max_w, max_h, orientation);
     let factor = turbojpeg::Decompressor::supported_scaling_factors()
         .into_iter()
         .filter(|f| f.num() <= f.denom())
@@ -278,12 +274,9 @@ fn jpeg_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> {
         data: pixels,
     };
     // Converted once resized: far fewer pixels.
-    let mut rgba = resize(decoded, target_w, target_h)?;
-    color::to_srgb(&mut rgba, color::jpeg_profile(&data).as_deref());
-    Ok(Fitted {
-        rgba: orient(rgba, orientation),
-        full: sizes.full,
-    })
+    let rgba = resize(decoded, target_w, target_h)?;
+    let icc = color::jpeg_profile(&data);
+    Ok(finish(rgba, icc.as_deref(), orientation, full))
 }
 
 // PNG can't decode smaller: in full, then resized (alpha-aware).
@@ -291,13 +284,9 @@ fn png_to_fit(path: &Path, max_w: u32, max_h: u32) -> Result<Fitted, String> {
     let data = std::fs::read(path).map_err(|error| error.to_string())?;
     let orientation = orientation_in(&mut std::io::Cursor::new(&data));
     let (image, profile) = decode_png_with_profile(&data)?;
-    let sizes = fit_stored(image.width, image.height, max_w, max_h, orientation);
-    let mut rgba = resize(image, sizes.target.0, sizes.target.1)?;
-    color::to_srgb(&mut rgba, profile.as_deref());
-    Ok(Fitted {
-        rgba: orient(rgba, orientation),
-        full: sizes.full,
-    })
+    let (target, full) = fit_stored(image.width, image.height, max_w, max_h, orientation);
+    let rgba = resize(image, target.0, target.1)?;
+    Ok(finish(rgba, profile.as_deref(), orientation, full))
 }
 
 pub fn resize(image: Rgba, width: u32, height: u32) -> Result<Rgba, String> {
@@ -330,8 +319,7 @@ fn orient(image: Rgba, orientation: u32) -> Rgba {
         return image;
     }
     let (w, h) = (image.width as usize, image.height as usize);
-    let swapped = (5..=8).contains(&orientation);
-    let (out_w, out_h) = if swapped { (h, w) } else { (w, h) };
+    let (out_w, out_h) = if swaps(orientation) { (h, w) } else { (w, h) };
     let mut data = vec![0; image.data.len()];
     for y in 0..h {
         for x in 0..w {
@@ -365,7 +353,8 @@ pub fn decode_png(data: &[u8]) -> Result<Rgba, String> {
 // With its embedded colour profile (iCCP), if any.
 fn decode_png_with_profile(data: &[u8]) -> Result<(Rgba, Option<Vec<u8>>), String> {
     let mut decoder = png::Decoder::new(std::io::Cursor::new(data));
-    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    // ALPHA leaves only RGBA and grey with alpha.
+    decoder.set_transformations(png::Transformations::ALPHA | png::Transformations::STRIP_16);
     let mut reader = decoder.read_info().map_err(|error| error.to_string())?;
     let profile = reader.info().icc_profile.as_ref().map(|icc| icc.to_vec());
     let mut buffer = vec![0; reader.output_buffer_size().ok_or("PNG too large")?];
@@ -375,19 +364,13 @@ fn decode_png_with_profile(data: &[u8]) -> Result<(Rgba, Option<Vec<u8>>), Strin
     buffer.truncate(info.buffer_size());
     let data = match info.color_type {
         png::ColorType::Rgba => buffer,
-        png::ColorType::Rgb => buffer
-            .as_chunks::<3>()
-            .0
-            .iter()
-            .flat_map(|p| [p[0], p[1], p[2], 255])
-            .collect(),
         png::ColorType::GrayscaleAlpha => buffer
             .as_chunks::<2>()
             .0
             .iter()
             .flat_map(|p| [p[0], p[0], p[0], p[1]])
             .collect(),
-        _ => buffer.iter().flat_map(|&g| [g, g, g, 255]).collect(),
+        other => return Err(format!("unexpected PNG colour type {other:?}")),
     };
     Ok((
         Rgba {
@@ -456,7 +439,7 @@ pub fn split(image: Rgba, size: u32, pad: u32) -> (Vec<(Tile, Pixels)>, u32, u32
             let pixels = Pixels {
                 width: tw as i32,
                 height: th as i32,
-                data: Buffer(Some(data)),
+                data: Buffer(data),
             };
             tiles.push((tile, pixels));
         }

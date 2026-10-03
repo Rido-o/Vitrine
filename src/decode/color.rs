@@ -7,7 +7,7 @@ use gtk::{gdk_pixbuf::Pixbuf, glib};
 use moxcms::{ColorProfile, DataColorSpace, Layout, Transform8BitExecutor, TransformOptions};
 use std::{
     collections::HashMap,
-    hash::{DefaultHasher, Hash, Hasher},
+    hash::{BuildHasher, BuildHasherDefault, DefaultHasher},
     sync::{Arc, Mutex, OnceLock},
 };
 
@@ -33,9 +33,7 @@ pub fn to_srgb(image: &mut Rgba, icc: Option<&[u8]>) {
 
 fn transform(icc: &[u8]) -> Option<Transform> {
     static CACHE: OnceLock<Mutex<HashMap<u64, Option<Transform>>>> = OnceLock::new();
-    let mut hasher = DefaultHasher::new();
-    icc.hash(&mut hasher);
-    let key = hasher.finish();
+    let key = BuildHasherDefault::<DefaultHasher>::default().hash_one(icc);
     let mut cache = CACHE.get_or_init(Mutex::default).lock().ok()?;
     if let Some(transform) = cache.get(&key) {
         return transform.clone();
@@ -121,6 +119,7 @@ pub fn jpeg_profile(jpeg: &[u8]) -> Option<Vec<u8>> {
 /// The profile GdkPixbuf's loader read (JPEG, PNG, TIFF, and WebP with a
 /// recent loader), if any.
 pub fn pixbuf_profile(pixbuf: &Pixbuf) -> Option<Vec<u8>> {
-    let encoded = pixbuf.option("icc-profile")?;
-    Some(glib::base64_decode(&encoded))
+    pixbuf
+        .option("icc-profile")
+        .map(|encoded| glib::base64_decode(&encoded))
 }
