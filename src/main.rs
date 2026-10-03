@@ -18,10 +18,10 @@ pub const APP_NAME: &str = "vitrine";
 // style/style.scss, compiled by build.rs.
 const CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
 
-// The symbolic icons (icons/), installed by package.nix.
 // Pruning the thumbnail cache waits this long after startup.
 const HOUSEKEEPING_DELAY_SECONDS: u32 = 5;
 
+// The symbolic icons (icons/), installed by package.nix.
 const ICONS_DIR: &str = match option_env!("VITRINE_ICONS_DIR") {
     Some(dir) => dir,
     None => concat!(env!("CARGO_MANIFEST_DIR"), "/icons"),
@@ -107,6 +107,14 @@ fn main() -> glib::ExitCode {
         }
     });
     app.run()
+}
+
+/// One of the symbolic icons, at `size` pixels.
+pub fn icon(name: &str, size: i32) -> gtk::Image {
+    gtk::Image::builder()
+        .icon_name(name)
+        .pixel_size(size)
+        .build()
 }
 
 // The styles' light palette only when the desktop prefers light: GTK treats

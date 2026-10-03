@@ -1,8 +1,11 @@
 //! The ⋯ menu (in the toolbar and in the view) and its actions, and the i
 //! buttons' properties popovers.
 
-use super::{Window, icon};
-use crate::actions::{self, ActionsMenu, MenuAction};
+use super::Window;
+use crate::{
+    actions::{self, ActionsMenu, MenuAction},
+    icon,
+};
 use gtk::{gio, glib, prelude::*};
 use std::rc::Rc;
 

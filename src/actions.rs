@@ -103,11 +103,6 @@ pub fn more_button(model: &gio::Menu, pixel_size: i32) -> gtk::MenuButton {
         .tooltip_text("More actions")
         .menu_model(model)
         .build();
-    button.set_child(Some(
-        &gtk::Image::builder()
-            .icon_name("ellipsis-awesome-symbolic")
-            .pixel_size(pixel_size)
-            .build(),
-    ));
+    button.set_child(Some(&crate::icon("ellipsis-awesome-symbolic", pixel_size)));
     button
 }

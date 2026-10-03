@@ -2,8 +2,11 @@
 //! pill, Subfolders and, at the end, the i and ⋯ buttons (`menu.rs`) and
 //! close.
 
-use super::{Window, icon};
-use crate::library::{Folder, SortKey};
+use super::Window;
+use crate::{
+    icon,
+    library::{Folder, SortKey},
+};
 use gtk::{gdk, glib, pango, prelude::*};
 use std::rc::Rc;
 

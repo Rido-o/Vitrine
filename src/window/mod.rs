@@ -318,13 +318,6 @@ fn file_name(path: &Path) -> String {
     )
 }
 
-fn icon(name: &str, size: i32) -> gtk::Image {
-    gtk::Image::builder()
-        .icon_name(name)
-        .pixel_size(size)
-        .build()
-}
-
 // Surrounding space trimmed, ~ expanded.
 fn expand_home(input: &str) -> PathBuf {
     let input = input.trim();

@@ -7,7 +7,7 @@ use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet},
     fs,
-    hash::{DefaultHasher, Hash, Hasher},
+    hash::{BuildHasher, BuildHasherDefault, DefaultHasher},
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
     rc::Rc,
@@ -145,10 +145,7 @@ struct Order {
 impl Order {
     fn compare(&self, a: &Image, b: &Image) -> Ordering {
         let shuffled = |path: &Path| {
-            let mut hasher = DefaultHasher::new();
-            self.seed.get().hash(&mut hasher);
-            path.hash(&mut hasher);
-            hasher.finish()
+            BuildHasherDefault::<DefaultHasher>::default().hash_one((self.seed.get(), path))
         };
         let key = self.key.get();
         let order = match key {
@@ -306,12 +303,10 @@ impl Folder {
     /// was there.
     pub fn remove(&self, path: &Path) -> Option<u32> {
         let position = self.position(path);
-        let index = (0..self.store.n_items()).find(|&i| {
-            self.store
-                .item(i)
-                .is_some_and(|object| image(&object).path == path)
-        });
-        if let Some(index) = index {
+        if let Some(index) = self
+            .store
+            .find_with_equal_func(|object| image(object).path == path)
+        {
             self.store.remove(index);
         }
         if self.scanning.get() {
@@ -479,18 +474,16 @@ impl Folder {
                 let Some(object) = store.item(i) else {
                     continue;
                 };
-                let unchanged = {
-                    let old = image(&object);
-                    match fresh.get(&old.path) {
-                        Some(new) if new.mtime == old.mtime && new.size == old.size => true,
-                        Some(_) => {
-                            modified.push(old.path.clone());
-                            false
-                        }
-                        None => false,
+                let old = image(&object).clone();
+                let unchanged = match fresh.get(&old.path) {
+                    Some(new) if new.mtime == old.mtime && new.size == old.size => true,
+                    Some(_) => {
+                        modified.push(old.path.clone());
+                        false
                     }
+                    None => false,
                 };
-                let path = image(&object).path.clone();
+                let path = old.path;
                 if unchanged || folder.added_during_scan.borrow().contains(&path) {
                     fresh.remove(&path);
                 } else {
@@ -574,12 +567,7 @@ impl Folder {
     }
 
     fn unwatch(&self) {
-        for monitor in self
-            .monitors
-            .borrow_mut()
-            .drain()
-            .map(|(_, monitor)| monitor)
-        {
+        for (_, monitor) in self.monitors.borrow_mut().drain() {
             monitor.cancel();
         }
         if let Some(id) = self.rescan_timeout.borrow_mut().take() {

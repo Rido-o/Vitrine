@@ -1,13 +1,14 @@
 //! The full-screen view's page: the image, with the controls over it
-//! (fullscreen, back to the grid and close at the top right, the file's name and resolution at
-//! the bottom) that fade out with the cursor in fullscreen; the fullscreen
-//! toggle, and the view's own keys.
+//! (fullscreen, back to the grid and close at the top right, the file's name
+//! and resolution at the bottom) that fade out with the cursor in fullscreen;
+//! the fullscreen toggle, and the view's own keys.
 
 mod autohide;
 pub mod preview;
 pub mod zoomable;
 
 use self::{autohide::AutoHide, preview::Preview};
+use crate::icon;
 use gtk::{gdk, prelude::*};
 use std::{
     cell::{Cell, RefCell},
@@ -45,28 +46,15 @@ impl View {
             .child(&preview.image)
             .build();
 
-        let fullscreen_icon = gtk::Image::builder()
-            .icon_name("expand-awesome-symbolic")
-            .pixel_size(20)
-            .build();
+        let fullscreen_icon = icon("expand-awesome-symbolic", 20);
         let fullscreen_button = gtk::Button::builder().child(&fullscreen_icon).build();
         let grid_button = gtk::Button::builder()
             .tooltip_text("Back to grid (Esc)")
-            .child(
-                &gtk::Image::builder()
-                    .icon_name("table-cells-large-awesome-symbolic")
-                    .pixel_size(20)
-                    .build(),
-            )
+            .child(&icon("table-cells-large-awesome-symbolic", 20))
             .build();
         let close_button = gtk::Button::builder()
             .tooltip_text("Close (Ctrl+W)")
-            .child(
-                &gtk::Image::builder()
-                    .icon_name("xmark-awesome-symbolic")
-                    .pixel_size(20)
-                    .build(),
-            )
+            .child(&icon("xmark-awesome-symbolic", 20))
             .build();
         let controls = gtk::Box::builder()
             .css_classes(["preview-controls"])

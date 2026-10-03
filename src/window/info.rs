@@ -46,18 +46,14 @@ impl InfoBar {
         let view_button = gtk::Button::builder()
             .label("View")
             .tooltip_text("Full-screen view (Enter)")
-            .build();
-        let actions = gtk::Box::builder()
             .halign(gtk::Align::End)
-            .spacing(6)
             .build();
-        actions.append(&view_button);
         let root = gtk::Box::builder()
             .css_classes(["viewer-info"])
             .spacing(8)
             .build();
         root.append(&labels);
-        root.append(&actions);
+        root.append(&view_button);
         Self {
             root,
             filename,

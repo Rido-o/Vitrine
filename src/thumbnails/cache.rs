@@ -124,13 +124,12 @@ fn encode_png(rgba: &Rgba) -> Result<Vec<u8>, String> {
     let mut writer = encoder.write_header().map_err(|error| error.to_string())?;
     writer
         .write_image_data(&rgba.data)
+        .and_then(|()| writer.finish())
         .map_err(|error| error.to_string())?;
-    drop(writer);
     Ok(out)
 }
 
-/// Deletes cache files unused for PRUNE_AFTER, and earlier versions' caches;
-/// how many files each removed. On a thread of its own, at low priority.
+/// Deletes cache files unused for PRUNE_AFTER, and earlier versions' caches. On a thread of its own, at low priority.
 pub fn housekeeping() {
     let spawn = std::thread::Builder::new()
         .name("housekeeping".into())
@@ -140,9 +139,12 @@ pub fn housekeeping() {
             if pruned > 0 {
                 println!("Pruned {pruned} unused thumbnails");
             }
-            let removed: usize = old_caches().iter().map(|dir| remove_tree(dir)).sum();
-            if removed > 0 {
-                println!("Removed {removed} outdated thumbnails");
+            for dir in old_caches() {
+                match std::fs::remove_dir_all(&dir) {
+                    Ok(()) => println!("Removed outdated thumbnails in {}", dir.display()),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => eprintln!("Could not remove {}: {error}", dir.display()),
+                }
             }
         });
     if let Err(error) = spawn {
@@ -181,24 +183,4 @@ fn prune(cache_dir: &Path) -> usize {
         }
     }
     pruned
-}
-
-// Deletes `dir` and everything in it; how many files.
-fn remove_tree(dir: &Path) -> usize {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return 0;
-    };
-    let mut removed = 0;
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
-            removed += remove_tree(&path);
-        } else if std::fs::remove_file(&path).is_ok() {
-            removed += 1;
-        }
-    }
-    if let Err(error) = std::fs::remove_dir(dir) {
-        eprintln!("Could not remove {}: {error}", dir.display());
-    }
-    removed
 }

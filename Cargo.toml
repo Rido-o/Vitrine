@@ -8,8 +8,9 @@ publish = false
 
 [dependencies]
 gtk = { package = "gtk4", version = "0.11", features = ["v4_20"] }
-# For File::move_future (restoring from the trash); the same gio as gtk's.
-gio = { version = "0.22", features = ["v2_72"] }
+# Only for features: ListStore::find_with_equal_func, and glib::user_state_dir
+# (glib/v2_72, which this turns on); the same gio as gtk's.
+gio = { version = "0.22", features = ["v2_74"] }
 async-channel = "2"
 libc = "0.2"
 turbojpeg = { version = "1.5", default-features = false, features = ["pkg-config"] }

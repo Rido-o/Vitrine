@@ -45,6 +45,9 @@ const SCAN_SETTLE_MS: i64 = 1000;
 thread_local! {
     // What the full-screen view shows, and whether it's the decoded image.
     static SHOWN: RefCell<Option<(PathBuf, bool)>> = const { RefCell::new(None) };
+    static FRAMES: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    // When the view showed something (a move, or the sharp image arriving).
+    static SHOWS: RefCell<Vec<i64>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Called by the full-screen view when it shows `path` (`sharp`: decoded,
@@ -64,19 +67,16 @@ pub fn animation_frame() {
     }
 }
 
-thread_local! {
-    static FRAMES: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
-}
-
-thread_local! {
-    // When the view showed something (a move, or the sharp image arriving).
-    static SHOWS: RefCell<Vec<i64>> = const { RefCell::new(Vec::new()) };
+// Milliseconds per clock tick, the unit of /proc's CPU times.
+fn tick_ms() -> f64 {
+    // SAFETY: sysconf takes no pointers.
+    1000.0 / unsafe { libc::sysconf(libc::_SC_CLK_TCK) } as f64
 }
 
 // CPU time (ms) used so far by each named thread ("main" for the process's
 // own), from /proc/self/task/*/stat.
 fn cpu_by_thread() -> std::collections::BTreeMap<String, f64> {
-    let tick_ms = 1000.0 / unsafe { libc::sysconf(libc::_SC_CLK_TCK) } as f64;
+    let tick_ms = tick_ms();
     let pid = std::process::id().to_string();
     let mut totals = std::collections::BTreeMap::new();
     let Ok(tasks) = std::fs::read_dir("/proc/self/task") else {
@@ -113,7 +113,6 @@ fn cpu_by_thread() -> std::collections::BTreeMap<String, f64> {
 // CPU time (ms) the whole system has spent busy so far, all cores, from
 // /proc/stat (to see work done outside the app, e.g. by NFS).
 fn system_busy() -> f64 {
-    let tick_ms = 1000.0 / unsafe { libc::sysconf(libc::_SC_CLK_TCK) } as f64;
     let stat = std::fs::read_to_string("/proc/stat").unwrap_or_default();
     let Some(line) = stat.lines().next() else {
         return 0.0;
@@ -131,7 +130,7 @@ fn system_busy() -> f64 {
         .take(6)
         .map(|(_, v)| v)
         .sum();
-    busy * tick_ms
+    busy * tick_ms()
 }
 
 fn cpu_total() -> f64 {
@@ -289,17 +288,7 @@ fn late_ms() -> f64 {
 }
 
 fn find<T: IsA<gtk::Widget>>(root: &gtk::Widget) -> Option<T> {
-    if let Some(found) = root.downcast_ref::<T>() {
-        return Some(found.clone());
-    }
-    let mut child = root.first_child();
-    while let Some(widget) = child {
-        if let Some(found) = find::<T>(&widget) {
-            return Some(found);
-        }
-        child = widget.next_sibling();
-    }
-    None
+    find_all(root).into_iter().next()
 }
 
 fn find_all<T: IsA<gtk::Widget>>(root: &gtk::Widget) -> Vec<T> {

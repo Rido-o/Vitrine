@@ -51,14 +51,9 @@ enum Decoded {
     },
 }
 
-#[derive(Default)]
-struct Queue {
-    // Next first; replaced on every move, so passed images are never decoded.
-    requests: Vec<Request>,
-}
-
 struct Shared {
-    queue: Mutex<Queue>,
+    // Next first; replaced on every move, so passed images are never decoded.
+    queue: Mutex<Vec<Request>>,
     work: Condvar,
     results: async_channel::Sender<(PathBuf, Result<Decoded, String>)>,
 }
@@ -68,8 +63,8 @@ fn worker(shared: &Shared) {
         let request = {
             let mut queue = shared.queue.lock().unwrap();
             loop {
-                if !queue.requests.is_empty() {
-                    break queue.requests.remove(0);
+                if !queue.is_empty() {
+                    break queue.remove(0);
                 }
                 queue = shared.work.wait(queue).unwrap();
             }
@@ -124,14 +119,11 @@ fn decode_frames(path: &Path, max: (u32, u32), frames: &mpsc::SyncSender<Frame>)
     let mut time = SystemTime::UNIX_EPOCH;
     let iter = animation.iter(Some(time));
     loop {
-        let mut rgba = decode::Rgba::from_pixbuf(&iter.pixbuf());
+        let rgba = decode::Rgba::from_pixbuf(&iter.pixbuf());
         let (width, height) = decode::fitted(rgba.width, rgba.height, max.0, max.1);
-        if (width, height) != (rgba.width, rgba.height) {
-            match decode::resize(rgba, width, height) {
-                Ok(resized) => rgba = resized,
-                Err(_) => return,
-            }
-        }
+        let Ok(rgba) = decode::resize(rgba, width, height) else {
+            return;
+        };
         let delay = iter.delay_time().map(|delay| delay.max(MIN_FRAME_DELAY));
         let frame = Frame {
             pixels: rgba.premultiplied(),
@@ -258,7 +250,6 @@ impl Preview {
         if cached.is_some() && !fresh {
             self.redecode(&path, width, height);
         }
-        let sharp = fresh;
         self.info(&path, cached.as_ref().map(|(_, full)| *full));
         let shown = cached
             .map(|(texture, (w, h))| (texture, (w as f64, h as f64)))
@@ -274,8 +265,8 @@ impl Preview {
             self.image.set_image(&texture, full, true);
             *self.displayed.borrow_mut() = Some(path.clone());
         }
-        crate::probe::preview_shown(&path, sharp);
-        if sharp && is_animation(&path) {
+        crate::probe::preview_shown(&path, fresh);
+        if fresh && is_animation(&path) {
             self.start_animation(&path);
         }
         *self.shown.borrow_mut() = Some(path);
@@ -320,7 +311,7 @@ impl Preview {
         // counting, so they can be asked for again later.
         let mut queue = self.shared.queue.lock().unwrap();
         let mut decoding = self.decoding.borrow_mut();
-        for dropped in queue.requests.drain(..) {
+        for dropped in queue.drain(..) {
             if let Kind::Fit(..) = dropped.kind {
                 decoding.remove(&dropped.path);
             }
@@ -328,7 +319,7 @@ impl Preview {
         let textures = self.textures.borrow();
         for path in &wanted {
             if !textures.contains_key(path) && decoding.insert(path.clone()) {
-                queue.requests.push(Request {
+                queue.push(Request {
                     path: path.clone(),
                     kind: Kind::Fit(width, height),
                 });
@@ -366,14 +357,10 @@ impl Preview {
     // stays until then.
     fn redecode(&self, path: &Path, width: u32, height: u32) {
         self.decoding.borrow_mut().insert(path.to_owned());
-        self.shared.queue.lock().unwrap().requests.insert(
-            0,
-            Request {
-                path: path.to_owned(),
-                kind: Kind::Fit(width, height),
-            },
-        );
-        self.shared.work.notify_one();
+        self.first(Request {
+            path: path.to_owned(),
+            kind: Kind::Fit(width, height),
+        });
     }
 
     // Full resolution of the image shown, ahead of any preload.
@@ -381,16 +368,17 @@ impl Preview {
         let Some(path) = self.shown.borrow().clone() else {
             return;
         };
-        if is_animation(&path) {
-            return;
-        }
-        self.shared.queue.lock().unwrap().requests.insert(
-            0,
-            Request {
+        if !is_animation(&path) {
+            self.first(Request {
                 path,
                 kind: Kind::Full,
-            },
-        );
+            });
+        }
+    }
+
+    // Queued ahead of everything else.
+    fn first(&self, request: Request) {
+        self.shared.queue.lock().unwrap().insert(0, request);
         self.shared.work.notify_one();
     }
 

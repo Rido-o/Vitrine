@@ -8,24 +8,16 @@ use std::{
     path::{Path, PathBuf},
 };
 
-// $XDG_STATE_HOME, as g_get_user_state_dir (not in glib-rs 0.22).
-fn state_dir() -> PathBuf {
-    std::env::var_os("XDG_STATE_HOME")
-        .map(PathBuf::from)
-        .filter(|dir| dir.is_absolute())
-        .unwrap_or_else(|| glib::home_dir().join(".local/state"))
-}
-
 const LIMIT: usize = 10;
 
 fn file() -> PathBuf {
-    state_dir().join("vitrine/history")
+    glib::user_state_dir().join("vitrine/history")
 }
 
 // The Rust port kept its own list while both apps were in use; being the
 // newer, it replaces the TypeScript app's, once.
 fn migrate() {
-    let old = state_dir().join("vitrine-spike");
+    let old = glib::user_state_dir().join("vitrine-spike");
     let old_file = old.join("history");
     if !old_file.exists() {
         return;
