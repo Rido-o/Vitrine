@@ -55,6 +55,7 @@ struct Area {
     height: f64,
     white: f64,
 }
+
 /// Full-resolution tiles of the shown image.
 pub struct Tiles {
     pub tiles: Vec<(Tile, gdk::Texture)>,
@@ -119,8 +120,10 @@ mod imp {
             obj.set_overflow(gtk::Overflow::Hidden);
             obj.set_hexpand(true);
             obj.set_vexpand(true);
-            self.state.borrow_mut().fitted = true;
-            self.state.borrow_mut().scale = 1.0;
+            let mut state = self.state.borrow_mut();
+            state.fitted = true;
+            state.scale = 1.0;
+            drop(state);
 
             let motion = gtk::EventControllerMotion::new();
             let weak = obj.downgrade();
@@ -308,18 +311,21 @@ impl ZoomableImage {
     }
 
     pub fn zoom_in(&self) {
-        let (x, y) = self.centre();
-        self.zoom_at(ZOOM_STEP, x, y);
+        self.zoom_centred(ZOOM_STEP);
     }
 
     pub fn zoom_out(&self) {
-        let (x, y) = self.centre();
-        self.zoom_at(1.0 / ZOOM_STEP, x, y);
+        self.zoom_centred(1.0 / ZOOM_STEP);
     }
 
-    fn centre(&self) -> (f64, f64) {
+    // Around the middle of the image's area.
+    fn zoom_centred(&self, factor: f64) {
         let area = self.area(&self.imp().state.borrow());
-        (area.x + area.width / 2.0, area.y + area.height / 2.0)
+        self.zoom_at(
+            factor,
+            area.x + area.width / 2.0,
+            area.y + area.height / 2.0,
+        );
     }
 
     pub fn reset_zoom(&self) {
@@ -477,13 +483,19 @@ impl ZoomableImage {
             .map_or(self.scale_factor() as f64, |surface| surface.scale())
     }
 
-    // The size shown on screen before scaling: rotated by 90° swaps it.
-    fn shown_size(state: &State) -> (f64, f64) {
+    // A size in the image's axes on screen: rotated by 90° swaps it (and
+    // back).
+    fn turned(state: &State, (w, h): (f64, f64)) -> (f64, f64) {
         if state.rotation % 180 != 0 {
-            (state.full_h, state.full_w)
+            (h, w)
         } else {
-            (state.full_w, state.full_h)
+            (w, h)
         }
+    }
+
+    // The size shown on screen before scaling.
+    fn shown_size(state: &State) -> (f64, f64) {
+        Self::turned(state, (state.full_w, state.full_h))
     }
 
     fn fit_scale(&self) -> f64 {
@@ -526,8 +538,7 @@ impl ZoomableImage {
         let fit = self.fit_scale();
         let actual = self.actual_scale();
         let target = if actual > fit { actual } else { fit * 2.0 };
-        let scale = self.imp().state.borrow().scale;
-        self.zoom_at(target / scale, x, y);
+        self.zoom_at(target / self.scale(), x, y);
     }
 
     fn clamp_offsets(&self) {
@@ -600,14 +611,10 @@ impl ZoomableImage {
     }
 
     fn check_detail(&self) {
-        let wants = {
-            let mut state = self.imp().state.borrow_mut();
-            let wants = state.tiles.is_none() && !state.wants_detail && self.needs_detail(&state);
-            if wants {
-                state.wants_detail = true;
-            }
-            wants
-        };
+        let mut state = self.imp().state.borrow_mut();
+        let wants = state.tiles.is_none() && !state.wants_detail && self.needs_detail(&state);
+        state.wants_detail |= wants;
+        drop(state);
         if wants && let Some(detail) = self.imp().on_detail.borrow().as_ref() {
             detail();
         }
@@ -628,11 +635,7 @@ impl ZoomableImage {
         // at exactly its own pixels, centred on whole device pixels: any
         // scaling, even by 0.97, softens it.
         if let Some(base) = state.base.as_ref().filter(|_| state.fitted) {
-            let (tw, th) = if state.rotation % 180 != 0 {
-                (base.height() as f64, base.width() as f64)
-            } else {
-                (base.width() as f64, base.height() as f64)
-            };
+            let (tw, th) = Self::turned(state, (base.width() as f64, base.height() as f64));
             if (bw * device - tw).abs() <= 2.0 && (bh * device - th).abs() <= 2.0 {
                 bw = tw / device;
                 bh = th / device;
@@ -641,11 +644,7 @@ impl ZoomableImage {
                 top = snap(area.y + (area.height - bh) / 2.0);
             }
         }
-        let (dw, dh) = if state.rotation % 180 != 0 {
-            (bh, bw)
-        } else {
-            (bw, bh)
-        };
+        let (dw, dh) = Self::turned(state, (bw, bh));
         (
             graphene::Rect::new(left as f32, top as f32, bw as f32, bh as f32),
             dw,
@@ -692,18 +691,10 @@ impl ZoomableImage {
         let (x1, y1) = (area.x + area.width, area.y + area.height);
         let corners = [(x0, y0), (x1, y0), (x0, y1), (x1, y1)]
             .map(|(x, y)| Self::to_image(state, &bounds, dw, dh, x, y));
-        let min_x = corners
-            .iter()
-            .map(|c| c.0)
-            .fold(f64::MAX, f64::min)
-            .max(0.0);
-        let max_x = corners.iter().map(|c| c.0).fold(f64::MIN, f64::max);
-        let min_y = corners
-            .iter()
-            .map(|c| c.1)
-            .fold(f64::MAX, f64::min)
-            .max(0.0);
-        let max_y = corners.iter().map(|c| c.1).fold(f64::MIN, f64::max);
+        let (xs, ys) = (corners.map(|c| c.0), corners.map(|c| c.1));
+        let min = |values: [f64; 4]| values.into_iter().fold(f64::MAX, f64::min).max(0.0);
+        let max = |values: [f64; 4]| values.into_iter().fold(f64::MIN, f64::max);
+        let (min_x, max_x, min_y, max_y) = (min(xs), max(xs), min(ys), max(ys));
         tiles
             .tiles
             .iter()
@@ -720,18 +711,15 @@ impl ZoomableImage {
     }
 
     fn draw(&self, snapshot: &gtk::Snapshot) {
-        let visible = {
-            let state = self.imp().state.borrow();
-            if state.base.is_none() {
-                return;
-            }
-            if self.needs_detail(&state) {
-                self.visible_tiles(&state)
-            } else {
-                Vec::new()
-            }
-        };
         let mut state = self.imp().state.borrow_mut();
+        let Some(base) = state.base.clone() else {
+            return;
+        };
+        let visible = if self.needs_detail(&state) {
+            self.visible_tiles(&state)
+        } else {
+            Vec::new()
+        };
         let (bounds, dw, dh) = self.layout(&state);
         let assessment = state.assessment;
         if assessment {
@@ -776,7 +764,6 @@ impl ZoomableImage {
             snapshot.scale(-1.0, 1.0);
         }
         let (x0, y0) = (-dw / 2.0, -dh / 2.0);
-        let base = state.base.clone().expect("checked above");
         append(
             &base,
             &graphene::Rect::new(x0 as f32, y0 as f32, dw as f32, dh as f32),
