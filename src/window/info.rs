@@ -3,7 +3,7 @@
 //! and the empty folder's message.
 
 use super::{APP_TITLE, Window};
-use crate::library::image;
+use crate::library::{Image, image};
 use gtk::{gio, glib, pango, prelude::*};
 use std::{path::Path, rc::Rc};
 
@@ -125,8 +125,9 @@ impl Window {
             .set_label(name.as_deref().unwrap_or("No image selected"));
         // With nothing selected, only the name's place says so.
         info.resolution.set_visible(path.is_some());
-        if let Some(path) = &path {
-            info.resolution.set_label(&self.resolution_of(path));
+        if let Some(object) = self.selection.selected_item() {
+            info.resolution
+                .set_label(&self.resolution_of(&image(&object)));
         }
         info.view_button.set_sensitive(path.is_some());
         let size = self
@@ -161,15 +162,18 @@ impl Window {
         });
     }
 
-    // The size in the file's header, read on a worker the first time (a
-    // slow disk mustn't hold up moving the selection).
-    fn resolution_of(self: &Rc<Self>, path: &Path) -> String {
-        let format = |size: Option<(i32, i32)>| match size {
-            Some((width, height)) => format!("{width} × {height}"),
-            None => "0 × 0".into(),
-        };
+    // The size that came with the image's thumbnail, or else the one in the
+    // file's header, read on a worker the first time (a slow disk mustn't
+    // hold up moving the selection). The thumbnail's is there for most tiles
+    // in view, and still wanted once the read has started (`thumbnail_sized`):
+    // on a network folder, opening the image can block for seconds.
+    fn resolution_of(self: &Rc<Self>, image: &Image) -> String {
+        let path = &image.path;
         if let Some(size) = self.resolutions.borrow().get(path) {
-            return format(*size);
+            return size_label(*size);
+        }
+        if let Some((width, height)) = self.tiles.size(image) {
+            return size_label(Some((width as i32, height as i32)));
         }
         // One read each, however often the bar is synced meanwhile.
         if !self.resolving.borrow_mut().insert(path.to_owned()) {
@@ -186,9 +190,25 @@ impl Window {
             this.resolving.borrow_mut().remove(&path);
             this.resolutions.borrow_mut().insert(path.clone(), size);
             if this.selected_path().as_ref() == Some(&path) {
-                this.info.resolution.set_label(&format(size));
+                this.info.resolution.set_label(&size_label(size));
             }
         });
         "…".into()
+    }
+
+    // The selected image's thumbnail arrived before its header was read.
+    pub(super) fn thumbnail_sized(&self, path: &Path, (width, height): (u32, u32)) {
+        if self.selected_path().as_deref() == Some(path) {
+            self.info
+                .resolution
+                .set_label(&size_label(Some((width as i32, height as i32))));
+        }
+    }
+}
+
+fn size_label(size: Option<(i32, i32)>) -> String {
+    match size {
+        Some((width, height)) => format!("{width} × {height}"),
+        None => "0 × 0".into(),
     }
 }

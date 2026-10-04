@@ -175,6 +175,12 @@ impl Window {
 
         this.connect_toolbar();
         this.connect_info();
+        let weak = Rc::downgrade(&this);
+        this.tiles.connect_sized(move |path, size| {
+            if let Some(this) = weak.upgrade() {
+                this.thumbnail_sized(path, size);
+            }
+        });
         this.connect_preview();
         this.connect_keys();
         this.connect_drop();

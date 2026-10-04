@@ -143,9 +143,10 @@ Keys (grid unless noted):
 
 Files:
 
-- Thumbnails: `~/.cache/vitrine/thumbnails-4`, fitting 440×320: JPEG, or PNG
+- Thumbnails: `~/.cache/vitrine/thumbnails-5`, fitting 440×320: JPEG, or PNG
   for images with transparent pixels, named after the image's path and
-  modification time. A thumbnail is refreshed when it's used, and a few
+  modification time. Each holds its image's own size (a JPEG comment or PNG
+  text chunk), which the info bar shows without opening the image. A thumbnail is refreshed when it's used, and a few
   seconds after launch Vitrine deletes any not used for 90 days, so
   thumbnails of edited, moved or deleted images don't pile up (and any left
   half-written by a Vitrine that was killed, after an hour).
@@ -156,7 +157,8 @@ set `GSK_RENDERER` to override it (e.g. `GSK_RENDERER=vulkan`).
 
 (Earlier versions' thumbnail caches, `~/.cache/vitrine/thumbnails`,
 `~/.cache/vitrine/thumbnails-2`, `~/.cache/vitrine/thumbnails-3` (before
-colour profiles were read), `~/.cache/vitrine-spike` and
+colour profiles were read), `~/.cache/vitrine/thumbnails-4` (before the
+image's size was kept), `~/.cache/vitrine-spike` and
 `~/.cache/shard-view`, are deleted in the background, as is the folder history earlier versions kept,
 `~/.local/state/vitrine/history`.)
 
@@ -387,6 +389,12 @@ Things that broke and look like harmless cleanups:
   as the files it trashes**, or it trashes into your real trash, or that
   filesystem's own (e.g. `/tmp/.Trash-<uid>`); the UI check only trashes with
   `VITRINE_PROBE_TRASH=1` (see `bench/README.md`).
+- **The info bar's size comes with the thumbnail, not from the image**
+  (`thumbnails/cache.rs`, `resolution_of` in `window/info.rs`). On an NFS
+  folder, opening an image sometimes blocked for about five seconds in the
+  kernel (while a second open of the same file returned at once), and the
+  size waited with it. The header is only read while no thumbnail has come,
+  and whichever arrives first is shown.
 - **Find EXIF by seeking, not with kamadak-exif's own search**
   (`decode/metadata.rs`). Its search reads through the image data, the whole
   file when there is no EXIF, which most wallpapers lack.

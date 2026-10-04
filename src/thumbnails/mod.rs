@@ -2,6 +2,7 @@
 //! disk cache (`cache.rs`) or generate them, and hand back pixels ready for a
 //! texture; `tiles.rs` is the grid's side, on the main thread. Only `Pixels`
 //! cross threads; textures are made on the main thread (`Pixels::texture`).
+//! A thumbnail comes with its image's own size, which the info bar shows.
 
 mod cache;
 mod pool;

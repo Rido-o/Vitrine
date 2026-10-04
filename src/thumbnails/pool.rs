@@ -2,7 +2,7 @@
 //! no tile wants them), then, while none wait, the folder's missing
 //! thumbnails in the background on half of them.
 
-use super::{HEIGHT, WIDTH, cache, lower_priority};
+use super::{HEIGHT, WIDTH, cache, cache::Size, lower_priority};
 use crate::decode::{self, Pixels};
 use std::{
     collections::HashMap,
@@ -12,7 +12,8 @@ use std::{
 };
 
 pub enum Outcome {
-    Loaded(Pixels),
+    /// With the image's own size (not in a thumbnail another version wrote).
+    Loaded(Pixels, Option<Size>),
     Failed,
     /// No tile wanted it any more by the time its turn came.
     Skipped,
@@ -152,7 +153,7 @@ fn worker(shared: &Shared) {
                     Outcome::Skipped
                 } else {
                     match thumbnail(&shared.cache_dir, &job) {
-                        Ok((pixels, _)) => Outcome::Loaded(pixels),
+                        Ok((pixels, full, _)) => Outcome::Loaded(pixels, full),
                         Err(error) => {
                             eprintln!("No thumbnail for {}: {error}", job.path.display());
                             Outcome::Failed
@@ -166,7 +167,7 @@ fn worker(shared: &Shared) {
             }
             Task::Background(job) => {
                 let generated = cache::cached_file(&shared.cache_dir, &job.key).is_none()
-                    && matches!(thumbnail(&shared.cache_dir, &job), Ok((_, true)));
+                    && matches!(thumbnail(&shared.cache_dir, &job), Ok((_, _, true)));
                 let mut state = shared.state.lock().unwrap();
                 state.background_active -= 1;
                 state.background_generated += usize::from(generated);
@@ -187,21 +188,22 @@ fn worker(shared: &Shared) {
     }
 }
 
-/// The thumbnail's pixels, from the cache or generated (then true).
-fn thumbnail(cache_dir: &Path, job: &Job) -> Result<(Pixels, bool), String> {
+/// The thumbnail's pixels and its image's size, from the cache or generated
+/// (then true).
+fn thumbnail(cache_dir: &Path, job: &Job) -> Result<(Pixels, Option<Size>, bool), String> {
     if let Some(file) = cache::cached_file(cache_dir, &job.key) {
         match cache::load_cached(&file) {
-            Ok(rgba) => return Ok((rgba.premultiplied(), false)),
+            Ok((rgba, full)) => return Ok((rgba.premultiplied(), full, false)),
             Err(error) => eprintln!("Bad cached thumbnail {}: {error}", file.display()),
         }
     }
-    generate(cache_dir, job).map(|pixels| (pixels, true))
+    generate(cache_dir, job).map(|(pixels, full)| (pixels, Some(full), true))
 }
 
-fn generate(cache_dir: &Path, job: &Job) -> Result<Pixels, String> {
+fn generate(cache_dir: &Path, job: &Job) -> Result<(Pixels, Size), String> {
     let started = Instant::now();
-    let rgba = decode::to_fit(&job.path, WIDTH, HEIGHT)?.rgba;
-    cache::save(cache_dir, job, &rgba);
+    let decode::Fitted { rgba, full } = decode::to_fit(&job.path, WIDTH, HEIGHT)?;
+    cache::save(cache_dir, job, &rgba, full);
     if std::env::var_os("VITRINE_PROBE_VERBOSE").is_some() {
         eprintln!(
             "generated {} in {:?}",
@@ -209,5 +211,5 @@ fn generate(cache_dir: &Path, job: &Job) -> Result<Pixels, String> {
             started.elapsed()
         );
     }
-    Ok(rgba.premultiplied())
+    Ok((rgba.premultiplied(), full))
 }

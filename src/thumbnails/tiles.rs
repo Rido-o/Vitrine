@@ -1,13 +1,13 @@
 //! The grid's side of thumbnails, on the main thread: which tiles show which
 //! thumbnail, a memory cache of textures, and requests to the worker pool.
 
-use super::{Done, Job, Outcome, Pool};
+use super::{Done, Job, Outcome, Pool, cache::Size};
 use crate::library::Image;
 use gtk::{gdk, glib, prelude::*};
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
-    path::PathBuf,
+    path::{Path, PathBuf},
     rc::Rc,
 };
 
@@ -64,6 +64,8 @@ impl TextureCache {
     }
 }
 
+type Sized = Box<dyn Fn(&Path, Size)>;
+
 pub struct Tiles {
     pool: Pool,
     cache: RefCell<TextureCache>,
@@ -74,6 +76,11 @@ pub struct Tiles {
     pictures: RefCell<HashMap<String, Vec<gtk::Picture>>>,
     // Shown for images that couldn't be read, so they aren't retried.
     failed: gdk::Texture,
+    // The size of each image whose thumbnail has loaded, kept after the
+    // texture goes (a few dozen bytes each).
+    sizes: RefCell<HashMap<String, Size>>,
+    // Told the image and size when a bound tile's arrives.
+    sized: RefCell<Option<Sized>>,
 }
 
 impl Tiles {
@@ -94,6 +101,8 @@ impl Tiles {
             keys: RefCell::default(),
             pictures: RefCell::default(),
             failed,
+            sizes: RefCell::default(),
+            sized: RefCell::default(),
         });
         let weak = Rc::downgrade(&tiles);
         glib::spawn_future_local(async move {
@@ -133,6 +142,21 @@ impl Tiles {
             .get(&super::key(&image.path, image.mtime))
     }
 
+    /// `image`'s own size, if its thumbnail has loaded: known without
+    /// opening the image, which can take seconds on a network folder.
+    pub fn size(&self, image: &Image) -> Option<Size> {
+        self.sizes
+            .borrow()
+            .get(&super::key(&image.path, image.mtime))
+            .copied()
+    }
+
+    /// Calls `sized` with an image and its size when a bound tile's
+    /// thumbnail brings it.
+    pub fn connect_sized(&self, sized: impl Fn(&Path, Size) + 'static) {
+        *self.sized.borrow_mut() = Some(Box::new(sized));
+    }
+
     pub fn unbind(&self, picture: &gtk::Picture) {
         let Some((key, _)) = self.keys.borrow_mut().remove(picture) else {
             return;
@@ -170,7 +194,17 @@ impl Tiles {
         };
         self.loading.borrow_mut().remove(&key);
         let texture = match outcome {
-            Outcome::Loaded(pixels) => pixels.texture(),
+            Outcome::Loaded(pixels, full) => {
+                if let Some(full) = full {
+                    self.sizes.borrow_mut().insert(key.clone(), full);
+                    if let (Some(path), Some(sized)) =
+                        (self.bound_path(&key), self.sized.borrow().as_ref())
+                    {
+                        sized(&path, full);
+                    }
+                }
+                pixels.texture()
+            }
             Outcome::Failed => self.failed.clone(),
             Outcome::Skipped => {
                 // Bound again after the worker decided nobody wanted it.
