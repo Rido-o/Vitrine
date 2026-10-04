@@ -59,6 +59,14 @@ impl Window {
             self.grid.grab_focus();
             return true;
         }
+        if state.contains(gdk::ModifierType::CONTROL_MASK) && key == gdk::Key::o {
+            if state.contains(gdk::ModifierType::SHIFT_MASK) {
+                self.choose_image();
+            } else {
+                self.choose_folder();
+            }
+            return true;
+        }
         if state.contains(gdk::ModifierType::CONTROL_MASK) && key == gdk::Key::z {
             self.undo_delete();
             return true;

@@ -3,7 +3,7 @@
 use super::*;
 
 /// VITRINE_PROBE=ui: drives the grid's chrome (sorting, subfolders, rescan,
-/// the folder entry and its history, the empty state) on a small folder and
+/// the folder entry, the open choosers, the empty state) on a small folder and
 /// prints what it sees, as `RESULT ui …` lines. Only in a folder holding a
 /// `.vitrine-probe-scratch` file does it add and remove files (for rescan).
 pub fn run(window: &gtk::ApplicationWindow) {
@@ -575,26 +575,94 @@ pub fn run(window: &gtk::ApplicationWindow) {
         entry.emit_activate();
         sleep(800).await;
         state("open_sub");
-        entry.emit_by_name::<()>("icon-release", &[&gtk::EntryIconPosition::Secondary]);
-        sleep(300).await;
-        if let Some(panel) = find::<gtk::Popover>(entry.upcast_ref()) {
-            let buttons = find_all::<gtk::Button>(panel.upcast_ref());
-            let focused = buttons.iter().position(|b| b.has_focus() || b.is_focus());
+        // The open buttons (the grid's and the view's) and Ctrl+O,
+        // Ctrl+Shift+O: a chooser each (GTK's own window here; none to count
+        // where a portal shows it), which a probe can only close.
+        let open: Vec<gtk::MenuButton> = find_all::<gtk::MenuButton>(&root)
+            .into_iter()
+            .filter(|b| b.tooltip_text().as_deref() == Some("Open a folder or an image"))
+            .collect();
+        println!("RESULT ui open_buttons found={}", open.len());
+        if let Some(button) = open.iter().find(|b| b.is_mapped()) {
+            button.popup();
+            sleep(300).await;
+            let items: Vec<String> = button
+                .popover()
+                .map(|popover| find_all::<gtk::Label>(popover.upcast_ref()))
+                .unwrap_or_default()
+                .iter()
+                .map(|label| label.label().to_string())
+                .collect();
+            println!("RESULT ui open_menu items={items:?}");
+            shot(&window, "ui-open-menu");
+            button.popdown();
+        }
+        for (what, state_) in [
+            ("folder", gdk::ModifierType::CONTROL_MASK),
+            (
+                "image",
+                gdk::ModifierType::CONTROL_MASK | gdk::ModifierType::SHIFT_MASK,
+            ),
+        ] {
+            press_with(&window, gdk::Key::o, state_);
+            sleep(500).await;
+            let choosers: Vec<gtk::Window> = gtk::Window::list_toplevels()
+                .iter()
+                .filter_map(|w| w.downcast_ref::<gtk::Window>())
+                .filter(|w| {
+                    w.is_visible() && w.transient_for().is_some_and(|parent| parent == window)
+                })
+                .cloned()
+                .collect();
+            let titles: Vec<String> = choosers
+                .iter()
+                .filter_map(|w| w.title().map(Into::into))
+                .collect();
+            for chooser in &choosers {
+                chooser.close();
+            }
+            sleep(300).await;
             println!(
-                "RESULT ui history visible={} entries={} focused={focused:?}",
-                panel.is_visible(),
-                buttons.len()
+                "RESULT ui choose what={what} choosers={titles:?} text={:?} error={}",
+                entry.text(),
+                entry.has_css_class("error")
             );
-            shot(&window, "ui-history");
-            // (Esc is the popover's own shortcut, which a probe can't press.)
-            panel.popdown();
-            println!(
-                "RESULT ui history_closed visible={} entry_focused={}",
-                panel.is_visible(),
-                gtk::prelude::GtkWindowExt::focus(&window)
-                    .is_some_and(|focus| focus.is_ancestor(&entry)
-                        || focus == *entry.upcast_ref::<gtk::Widget>())
-            );
+        }
+        // What a chosen path opens (through "win.open-path", as the choosers
+        // can't be driven): in the grid, an image's folder with it selected;
+        // in the view, the image, or a folder's first.
+        let choose = |path: &Path| {
+            WidgetExt::activate_action(&window, "win.open-path", Some(&path.to_variant())).ok();
+        };
+        let shown = || shown_name(&root);
+        if let Some(third) = selection.item(2) {
+            let third = crate::library::image(&third).path.clone();
+            choose(&directory);
+            sleep(800).await;
+            choose(&third);
+            sleep(800).await;
+            state("grid_chose_image");
+            press(&window, gdk::Key::e);
+            sleep(500).await;
+            choose(&directory);
+            sleep(1000).await;
+            state("view_chose_folder");
+            println!("RESULT ui view_chose_folder shown={:?}", shown());
+            choose(&third);
+            sleep(1000).await;
+            state("view_chose_image");
+            println!("RESULT ui view_chose_image shown={:?}", shown());
+            let empty = directory.join("empty");
+            if empty.is_dir() {
+                choose(&empty);
+                sleep(800).await;
+                state("view_chose_empty");
+            } else {
+                press(&window, gdk::Key::Escape);
+            }
+            choose(&directory.join("no-such.txt"));
+            println!("RESULT ui chose_other toast={:?}", toast_text(&root));
+            sleep(300).await;
         }
         // Properties: the i popover in the grid and the view, on a photo with
         // EXIF and a PNG without.
@@ -700,12 +768,6 @@ pub fn run(window: &gtk::ApplicationWindow) {
             sleep(500).await;
             state("empty");
             shot(&window, "ui-empty");
-            entry.emit_by_name::<()>("icon-release", &[&gtk::EntryIconPosition::Secondary]);
-            sleep(300).await;
-            shot(&window, "ui-empty-history");
-            if let Some(panel) = find::<gtk::Popover>(entry.upcast_ref()) {
-                panel.popdown();
-            }
         }
         idle(&window).await;
         finish(&window);

@@ -1,7 +1,6 @@
 mod actions;
 mod decode;
 mod desktop;
-mod history;
 mod library;
 mod probe;
 mod properties;

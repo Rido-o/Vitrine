@@ -41,6 +41,15 @@ fn old_caches() -> [PathBuf; 5] {
     ]
 }
 
+// The folder history's files, from when the entry listed recent folders.
+fn old_history() -> [PathBuf; 2] {
+    let state = glib::user_state_dir();
+    [
+        state.join("vitrine/history"),
+        state.join("vitrine-spike/history"),
+    ]
+}
+
 /// The cache key: a thumbnail belongs to a file's path and modification time.
 /// The path's bytes, so names that aren't UTF-8 don't collide (the same key
 /// as the text for those that are).
@@ -129,7 +138,8 @@ fn encode_png(rgba: &Rgba) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
-/// Deletes cache files unused for PRUNE_AFTER, and earlier versions' caches. On a thread of its own, at low priority.
+/// Deletes cache files unused for PRUNE_AFTER, and earlier versions' caches
+/// and folder history. On a thread of its own, at low priority.
 pub fn housekeeping() {
     let spawn = std::thread::Builder::new()
         .name("housekeeping".into())
@@ -144,6 +154,17 @@ pub fn housekeeping() {
                     Ok(()) => println!("Removed outdated thumbnails in {}", dir.display()),
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
                     Err(error) => eprintln!("Could not remove {}: {error}", dir.display()),
+                }
+            }
+            for file in old_history() {
+                match std::fs::remove_file(&file) {
+                    Ok(()) => {
+                        println!("Removed the folder history, {}", file.display());
+                        // Its folder too, if that leaves it empty.
+                        let _ = file.parent().map(std::fs::remove_dir);
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => eprintln!("Could not remove {}: {error}", file.display()),
                 }
             }
         });

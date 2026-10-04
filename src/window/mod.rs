@@ -8,13 +8,13 @@ mod info;
 mod keys;
 mod menu;
 mod navigation;
+mod open;
 mod toast;
 mod toolbar;
 
 use self::{info::InfoBar, toast::Toast, toolbar::Toolbar};
 use crate::{
     desktop::trash::TrashedItem,
-    history::History,
     library::{Finished, Folder, image},
     thumbnails::tiles::Tiles,
     view::{View, preview::Preview},
@@ -38,7 +38,6 @@ pub struct Window {
     tiles: Rc<Tiles>,
     preview: Rc<Preview>,
     view: Rc<View>,
-    history: RefCell<History>,
     toolbar: Toolbar,
     info: InfoBar,
     // The empty folder's message, over the grid.
@@ -145,7 +144,6 @@ impl Window {
             tiles,
             preview,
             view,
-            history: RefCell::new(History::load()),
             toolbar,
             info,
             empty,
@@ -199,14 +197,12 @@ impl Window {
         let keep = RefCell::new(Some(this.clone()));
         this.window.connect_destroy(move |_| {
             if let Some(this) = keep.take() {
-                this.toolbar.history_panel.unparent();
                 this.context_menu.unparent();
                 this.view.dispose();
                 this.folder.dispose();
             }
         });
 
-        this.render_history();
         this.sync_sort_buttons();
         if let Some(file) = &file {
             this.show_file(file.clone());
@@ -216,6 +212,9 @@ impl Window {
         }
         this.window.present();
         this.grid.grab_focus();
+        if std::env::var_os("VITRINE_PROBE").is_some() {
+            this.add_probe_open();
+        }
         match std::env::var("VITRINE_PROBE").as_deref() {
             Ok("ui") => crate::probe::ui::run(&this.window),
             Ok(_) => crate::probe::bench::run(&this.window),
@@ -256,8 +255,6 @@ impl Window {
         self.touched.set(false);
         self.folder.load(path.clone());
         self.reset_entry();
-        self.history.borrow_mut().remember(&path);
-        self.render_history();
         self.grid.grab_focus();
         self.sync_info();
         true
@@ -276,10 +273,17 @@ impl Window {
         match finished {
             Finished::Load => {
                 let pending = self.pending.borrow_mut().take();
+                let asked = pending.is_some();
                 match pending.and_then(|path| self.folder.position(&path)) {
                     Some(position) => self.select(position, self.in_grid()),
                     None if count > 0 && !self.touched.get() => self.select(0, self.in_grid()),
                     None => {}
+                }
+                // A folder opened from the view: its first image is shown
+                // there. (An image's folder mustn't replace an image the
+                // scan doesn't find.)
+                if !asked {
+                    self.refresh_view_if_open();
                 }
             }
             Finished::Rescan => {

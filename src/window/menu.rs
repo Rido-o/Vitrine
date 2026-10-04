@@ -39,6 +39,8 @@ impl Window {
                 this.show_at(this.selection.selected() as i64)
             })
             .accel("Return"),
+            action("choose-folder", "Open folder…", Self::choose_folder).accel("<Control>o"),
+            action("choose-image", "Open image…", Self::choose_image).accel("<Control><Shift>o"),
             action("copy-image", "Copy image", Self::copy_image).accel("<Control>c"),
             action("copy-path", "Copy path", Self::copy_path).accel("<Control><Shift>c"),
             action("rotate-left", "Rotate left", |this| {
@@ -126,6 +128,12 @@ impl Window {
         // The i buttons, before the menus.
         toolbar_end.prepend(&self.grid_properties);
         self.view.add_menu_button(&self.view_properties);
+        // The open buttons, first in each.
+        let open = menu.menu(&[&["choose-folder", "choose-image"]]);
+        let button = actions::open_button(&open, 16);
+        button.add_css_class("viewer-toolbar-menu");
+        self.toolbar.root.prepend(&button);
+        self.view.add_menu_button(&actions::open_button(&open, 20));
         self.stack.connect_visible_child_name_notify(move |stack| {
             menu.set_in_view(stack.visible_child_name().as_deref() != Some("grid"));
         });

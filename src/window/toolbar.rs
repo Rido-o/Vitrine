@@ -1,13 +1,13 @@
-//! The grid's toolbar: the folder entry with its history panel, the sort
-//! pill, Subfolders and, at the end, the i and ⋯ buttons (`menu.rs`) and
-//! close.
+//! The grid's toolbar: the folder entry (after the open button, `menu.rs`),
+//! the sort pill, Subfolders and, at the end, the i and ⋯ buttons (`menu.rs`)
+//! and close.
 
 use super::Window;
 use crate::{
     icon,
     library::{Folder, SortKey},
 };
-use gtk::{gdk, glib, pango, prelude::*};
+use gtk::prelude::*;
 use std::rc::Rc;
 
 const SORTS: [(SortKey, &str, &str); 4] = [
@@ -24,10 +24,6 @@ const SORTS: [(SortKey, &str, &str); 4] = [
 pub struct Toolbar {
     pub root: gtk::Box,
     pub entry: gtk::Entry,
-    // The recent folders, under the entry. A popover closes itself on a
-    // click outside or Esc.
-    pub history_panel: gtk::Popover,
-    history_list: gtk::Box,
     sort_buttons: Vec<(SortKey, gtk::Button)>,
     direction: gtk::Button,
     subfolders: gtk::ToggleButton,
@@ -40,23 +36,9 @@ impl Toolbar {
     pub fn new(subfolders: bool) -> Self {
         let entry = gtk::Entry::builder()
             .css_classes(["viewer-directory"])
-            .primary_icon_name("folder-awesome-symbolic")
-            .secondary_icon_name("chevron-down-awesome-symbolic")
-            .secondary_icon_tooltip_text("Recent folders (↓)")
             .tooltip_text("Folder (Enter to open)")
             .width_chars(36)
             .build();
-        let history_list = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .spacing(2)
-            .build();
-        let history_panel = gtk::Popover::builder()
-            .css_classes(["viewer-history"])
-            .has_arrow(false)
-            .position(gtk::PositionType::Bottom)
-            .child(&history_list)
-            .build();
-        history_panel.set_parent(&entry);
 
         let sorts = gtk::Box::builder()
             .css_classes(["viewer-pill"])
@@ -107,8 +89,6 @@ impl Toolbar {
         Self {
             root,
             entry,
-            history_panel,
-            history_list,
             sort_buttons,
             direction,
             subfolders,
@@ -127,28 +107,6 @@ impl Window {
                 this.open_directory(&entry.text(), None);
             }
         });
-        let weak = Rc::downgrade(self);
-        toolbar.entry.connect_icon_release(move |_, position| {
-            if let Some(this) = weak.upgrade()
-                && position == gtk::EntryIconPosition::Secondary
-            {
-                this.toggle_history();
-            }
-        });
-        let keys = gtk::EventControllerKey::builder()
-            .propagation_phase(gtk::PropagationPhase::Capture)
-            .build();
-        let weak = Rc::downgrade(self);
-        keys.connect_key_pressed(move |_, key, _, _| {
-            if key != gdk::Key::Down {
-                return glib::Propagation::Proceed;
-            }
-            if let Some(this) = weak.upgrade() {
-                this.show_history();
-            }
-            glib::Propagation::Stop
-        });
-        toolbar.entry.add_controller(keys);
 
         for (key, button) in &toolbar.sort_buttons {
             let (weak, key) = (Rc::downgrade(self), *key);
@@ -172,7 +130,6 @@ impl Window {
         });
         let window = self.window.clone();
         toolbar.close.connect_clicked(move |_| window.close());
-        self.connect_history();
     }
 
     pub(super) fn sync_sort_buttons(&self) {
@@ -218,100 +175,5 @@ impl Window {
         let entry = &self.toolbar.entry;
         gtk::prelude::GtkWindowExt::focus(&self.window)
             .is_some_and(|focus| focus == *entry || focus.is_ancestor(entry))
-    }
-
-    // --- history panel ---------------------------------------------------------
-
-    fn connect_history(self: &Rc<Self>) {
-        let keys = gtk::EventControllerKey::new();
-        let list = self.toolbar.history_list.clone();
-        keys.connect_key_pressed(move |_, key, _, _| {
-            let direction = match key {
-                gdk::Key::Down => gtk::DirectionType::TabForward,
-                gdk::Key::Up => gtk::DirectionType::TabBackward,
-                _ => return glib::Propagation::Proceed,
-            };
-            if list.child_focus(direction) {
-                glib::Propagation::Stop
-            } else {
-                glib::Propagation::Proceed
-            }
-        });
-        self.toolbar.history_list.add_controller(keys);
-
-        // Back to the entry (Esc, a click outside); a chosen folder moves
-        // the focus on to the grid afterwards.
-        let entry = self.toolbar.entry.clone();
-        self.toolbar.history_panel.connect_closed(move |_| {
-            entry.grab_focus();
-        });
-    }
-
-    pub(super) fn render_history(self: &Rc<Self>) {
-        let list = &self.toolbar.history_list;
-        while let Some(child) = list.first_child() {
-            list.remove(&child);
-        }
-        for entry in &self.history.borrow().entries {
-            let text = entry.to_string_lossy();
-            let button = gtk::Button::builder()
-                .child(
-                    &gtk::Label::builder()
-                        .label(&*text)
-                        .xalign(0.0)
-                        .ellipsize(pango::EllipsizeMode::Start)
-                        .build(),
-                )
-                .tooltip_text(&*text)
-                .build();
-            let (weak, path) = (Rc::downgrade(self), entry.clone());
-            button.connect_clicked(move |_| {
-                if let Some(this) = weak.upgrade() {
-                    this.toolbar.history_panel.popdown();
-                    this.open_path(&path, None);
-                }
-            });
-            list.append(&button);
-        }
-    }
-
-    // Opens the panel, as wide as the entry, with the current folder's entry
-    // marked and focused.
-    fn show_history(&self) {
-        // The popover's padding and border (style.scss) on each side.
-        const INSET: i32 = 2 * (6 + 1);
-        let list = &self.toolbar.history_list;
-        list.set_width_request(self.toolbar.entry.width() - INSET);
-        self.toolbar.history_panel.popup();
-        let directory = self.folder.directory();
-        let current = self
-            .history
-            .borrow()
-            .entries
-            .iter()
-            .position(|entry| *entry == directory);
-        let mut button = list.first_child();
-        let mut focus = None;
-        for index in 0.. {
-            let Some(widget) = button else { break };
-            if Some(index) == current {
-                widget.add_css_class("current");
-                focus = Some(widget.clone());
-            } else {
-                widget.remove_css_class("current");
-            }
-            button = widget.next_sibling();
-        }
-        if let Some(button) = focus.or_else(|| list.first_child()) {
-            button.grab_focus();
-        }
-    }
-
-    fn toggle_history(&self) {
-        if self.toolbar.history_panel.is_visible() {
-            self.toolbar.history_panel.popdown();
-        } else {
-            self.show_history();
-        }
     }
 }

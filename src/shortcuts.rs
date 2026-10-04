@@ -10,6 +10,8 @@ const SECTIONS: [(&str, &[Row]); 3] = [
     (
         "Grid and full-screen view",
         &[
+            (&["Ctrl+O"], "Open a folder"),
+            (&["Ctrl+Shift+O"], "Open an image"),
             (&["i"], "Image properties"),
             (&["Ctrl+C"], "Copy image"),
             (&["Ctrl+Shift+C"], "Copy path"),

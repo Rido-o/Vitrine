@@ -14,7 +14,7 @@ use std::{
     time::{Duration, Instant, UNIX_EPOCH},
 };
 
-const EXTENSIONS: [&str; 7] = ["gif", "jpeg", "jpg", "png", "tif", "tiff", "webp"];
+pub const EXTENSIONS: [&str; 7] = ["gif", "jpeg", "jpg", "png", "tif", "tiff", "webp"];
 // A batch goes to the main thread when it's this big or this old, so the
 // first images show quickly and a big folder isn't one item-changed per file.
 const BATCH_SIZE: usize = 512;
@@ -41,7 +41,7 @@ fn mtime(metadata: &fs::Metadata) -> i64 {
         .map_or(0, |duration| duration.as_secs() as i64)
 }
 
-fn is_image(path: &Path) -> bool {
+pub fn is_image(path: &Path) -> bool {
     path.extension()
         .and_then(|ext| ext.to_str())
         .is_some_and(|ext| EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))

@@ -24,8 +24,10 @@ command of your choice.
   up to 1,000 folders, at most one rescan a second); changes made on another
   machine, e.g. directly on an NFS server, aren't seen, so press `r` (or use
   the ⋯ menu) for those.
-- **Top bar**: a folder entry (`~` works) with a popover of the last 10
-  folders; a sort pill with Name (full path), Date modified, Size and Random
+- **Top bar**: an open button, with a menu of Open folder… (Ctrl+O) and Open
+  image… (Ctrl+Shift+O), each a chooser (a chooser picks folders or files,
+  not either); an image opens its folder with the image selected. Next to it,
+  a folder entry to type a path in (`~` works); a sort pill with Name (full path), Date modified, Size and Random
   (click again to reshuffle), and ↑/↓ to flip the direction (Date and Size
   start descending); a Subfolders toggle; and, on the right, image properties
   (i), more actions (⋯) and close.
@@ -39,7 +41,9 @@ command of your choice.
   flip (also in the ⋯ menu; only the view changes, never the file, and it
   resets for the next image), and a button (or `f`) to make the window
   fullscreen; leaving the view restores it. Next to it are a button back to
-  the grid (or Esc) and one that closes the window. When fullscreen, the buttons, info
+  the grid (or Esc) and one that closes the window. The open button is here
+  too: a folder chosen from the view shows its first image, an image is shown
+  itself (and an empty folder goes back to the grid). When fullscreen, the buttons, info
   and cursor fade out after 2 s without mouse movement (not while the pointer
   is on them or a menu is open). An image is decoded at the view's size in
   device pixels and drawn at exactly those pixels at fit; zooming past it
@@ -115,7 +119,8 @@ Keys (grid unless noted):
 | Ctrl+Z | Undo the last delete; repeat to go further back (grid and view) |
 | Ctrl+W, Ctrl+Q | Close the window (grid and view) |
 | Esc, `q` (view) | Back to the grid |
-| ↓ (folder entry) | Open the folder history; Esc puts the entry back |
+| Ctrl+O, Ctrl+Shift+O | Open a folder, or an image, in a chooser (grid and view) |
+| Esc (folder entry) | Put the entry back |
 | ←/→ (view) | Previous/next image; held, at most 15 a second |
 | click the left/right sixth (view, at fit) | Previous/next image; the cursor shows an arrow there |
 | scroll, drag (view) | Zoom around the cursor, pan when zoomed in |
@@ -135,7 +140,6 @@ Files:
   seconds after launch Vitrine deletes any not used for 90 days, so
   thumbnails of edited, moved or deleted images don't pile up (and any left
   half-written by a Vitrine that was killed, after an hour).
-- Folder history: `~/.local/state/vitrine/history`.
 - Your own styles (optional): `~/.config/vitrine/style.css`, see "Theming".
 
 With NVIDIA's driver loaded, Vitrine uses GTK's GL renderer (see "Gotchas");
@@ -144,8 +148,8 @@ set `GSK_RENDERER` to override it (e.g. `GSK_RENDERER=vulkan`).
 (Earlier versions' thumbnail caches, `~/.cache/vitrine/thumbnails`,
 `~/.cache/vitrine/thumbnails-2`, `~/.cache/vitrine/thumbnails-3` (before
 colour profiles were read), `~/.cache/vitrine-spike` and
-`~/.cache/shard-view`, are deleted in the background. The Rust port's own
-folder history, `~/.local/state/vitrine-spike/history`, is moved over once.)
+`~/.cache/shard-view`, are deleted in the background, as is the folder history earlier versions kept,
+`~/.local/state/vitrine/history`.)
 
 ## Installing
 
@@ -246,11 +250,12 @@ src/
                     renderer tuning
   window/           a window (`Window`: its state, building it, loading
                     folders), split by part:
-    toolbar.rs        folder entry and history panel, sorting, Subfolders
+    toolbar.rs        folder entry, sorting, Subfolders
     grid.rs           the thumbnail grid, its 16:9 cells, keeping the first
                       image selected while loading
     info.rs           the info bar, title and empty-folder message
     navigation.rs     opening, moving through and closing the full-screen view
+    open.rs           the open button's folder and image choosers
     menu.rs           the ⋯ menu's and the image menus' actions, i buttons,
                       copy, wallpaper
     delete.rs         trash and undo
@@ -278,7 +283,6 @@ src/
   actions.rs        the menus' window actions and models
   properties.rs     the i popover's contents (file info, GdkPixbuf, EXIF)
   shortcuts.rs      the keyboard shortcuts window
-  history.rs        folder history file
   probe/            VITRINE_PROBE: hooks and helpers (mod.rs), the benchmark
                     (bench.rs) and the UI check (ui.rs)
 style/
