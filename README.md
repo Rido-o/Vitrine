@@ -27,14 +27,16 @@ command of your choice.
 - **Top bar**: an open button, with a menu of Open folder… (Ctrl+O) and Open
   image… (Ctrl+Shift+O), each a chooser (a chooser picks folders or files,
   not either); an image opens its folder with the image selected, and so does
-  a folder or an image dropped on the window. Next to it, a folder entry to
+  a folder or an image dropped on the window (outlined while one is dragged
+  over it). Next to it, a folder entry to
   type a path in (Ctrl+L, `~` works; a path that isn't a folder says so); a sort pill with Name (full path), Date modified, Size and Random
   (click again to reshuffle), and ↑/↓ to flip the direction (Date and Size
   start descending); a Subfolders toggle; and, on the right, image properties
   (i), more actions (⋯) and close.
 - **Info bar**: the filename (click to show it in your file manager over
   `org.freedesktop.FileManager1`), its resolution (as shown, after EXIF
-  rotation), its file size and View.
+  rotation), its file size, its position in the folder ("12 of 340", as
+  sorted; in the full-screen view too) and View.
 - **Full-screen view**: scroll to zoom around the cursor (from fit up to 8×
   actual pixels), drag to pan, click the left/right edge (a sixth of the width)
   for the previous/next image, double-click (the middle) to toggle fit/100%,

@@ -1,5 +1,5 @@
-//! The info bar under the grid (the selected image's name, resolution and
-//! size, and View), and what else follows the selection: the window's title
+//! The info bar under the grid (the selected image's name, resolution, size
+//! and position in the folder, and View), and what else follows the selection: the window's title
 //! and the empty folder's message.
 
 use super::{APP_TITLE, Window};
@@ -13,6 +13,7 @@ pub struct InfoBar {
     filename_button: gtk::Button,
     resolution: gtk::Label,
     file_size: gtk::Label,
+    position: gtk::Label,
     view_button: gtk::Button,
 }
 
@@ -35,6 +36,11 @@ impl InfoBar {
             .css_classes(["viewer-chip"])
             .visible(false)
             .build();
+        let position = gtk::Label::builder()
+            .css_classes(["viewer-chip"])
+            .tooltip_text("Position in the folder, as sorted")
+            .visible(false)
+            .build();
         let labels = gtk::Box::builder()
             .hexpand(true)
             .halign(gtk::Align::Start)
@@ -43,6 +49,7 @@ impl InfoBar {
         labels.append(&filename_button);
         labels.append(&resolution);
         labels.append(&file_size);
+        labels.append(&position);
         let view_button = gtk::Button::builder()
             .label("View")
             .tooltip_text("Full-screen view (Enter)")
@@ -60,6 +67,7 @@ impl InfoBar {
             filename_button,
             resolution,
             file_size,
+            position,
             view_button,
         }
     }
@@ -127,6 +135,17 @@ impl Window {
         if let Some(size) = size {
             info.file_size.set_label(&glib::format_size(size));
         }
+        // "3 of 120", here and in the view.
+        let position = path.is_some().then(|| {
+            format!(
+                "{} of {}",
+                self.selection.selected() + 1,
+                self.selection.n_items()
+            )
+        });
+        info.position.set_visible(position.is_some());
+        info.position.set_label(position.as_deref().unwrap_or(""));
+        self.view.set_position(position.as_deref());
         self.window.set_title(Some(&match &name {
             Some(name) => format!("{name} — {APP_TITLE}"),
             None => APP_TITLE.into(),

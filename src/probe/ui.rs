@@ -654,7 +654,19 @@ pub fn run(window: &gtk::ApplicationWindow) {
         let choose = |path: &Path| {
             WidgetExt::activate_action(&window, "win.open-path", Some(&path.to_variant())).ok();
         };
-        let shown = || shown_name(&root);
+        // The view's info: name, resolution, position.
+        let shown = || {
+            find_all::<gtk::Box>(&root)
+                .into_iter()
+                .find(|b| b.has_css_class("preview-image-info"))
+                .map(|info| {
+                    find_all::<gtk::Label>(info.upcast_ref())
+                        .iter()
+                        .filter(|label| label.is_visible())
+                        .map(|label| label.label().to_string())
+                        .collect::<Vec<_>>()
+                })
+        };
         if let Some(third) = selection.item(2) {
             let third = crate::library::image(&third).path.clone();
             choose(&directory);
@@ -667,6 +679,10 @@ pub fn run(window: &gtk::ApplicationWindow) {
             choose(&directory);
             sleep(1000).await;
             state("view_chose_folder");
+            window.set_state_flags(gtk::StateFlags::DROP_ACTIVE, false);
+            sleep(300).await;
+            shot(&window, "ui-drop-active");
+            window.unset_state_flags(gtk::StateFlags::DROP_ACTIVE);
             println!("RESULT ui view_chose_folder shown={:?}", shown());
             choose(&third);
             sleep(1000).await;

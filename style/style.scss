@@ -18,6 +18,12 @@
 window {
   background-color: var(--bg);
   color: var(--fg);
+
+  // A folder or an image dragged over it (drawn over the contents).
+  &:drop(active) {
+    outline: 3px solid var(--accent);
+    outline-offset: -3px;
+  }
 }
 
 tooltip {

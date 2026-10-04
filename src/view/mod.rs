@@ -1,6 +1,7 @@
 //! The full-screen view's page: the image, with the controls over it
-//! (fullscreen, back to the grid and close at the top right, the file's name
-//! and resolution at the bottom) that fade out with the cursor in fullscreen;
+//! (fullscreen, back to the grid and close at the top right, the file's name,
+//! resolution and position in the folder at the bottom) that fade out with
+//! the cursor in fullscreen;
 //! the image's context menu, the fullscreen toggle, and the view's own keys.
 
 mod autohide;
@@ -26,6 +27,7 @@ pub struct View {
     fullscreen_button: gtk::Button,
     fullscreen_icon: gtk::Image,
     grid_button: gtk::Button,
+    position: gtk::Label,
     controls: gtk::Box,
     menu_buttons: Rc<RefCell<Vec<gtk::MenuButton>>>,
     // The image's context menu.
@@ -84,6 +86,7 @@ impl View {
             .child(&filename)
             .build();
         let resolution = gtk::Label::builder().label("0 × 0").build();
+        let position = gtk::Label::builder().visible(false).build();
         let info = gtk::Box::builder()
             .css_classes(["preview-image-info", "preview-controls"])
             .halign(gtk::Align::Center)
@@ -93,6 +96,7 @@ impl View {
             .build();
         info.append(&filename_button);
         info.append(&resolution);
+        info.append(&position);
         page.add_overlay(&info);
 
         let (window_, stack_) = (window.clone(), stack.clone());
@@ -152,6 +156,7 @@ impl View {
             fullscreen_button,
             fullscreen_icon,
             grid_button,
+            position,
             controls,
             menu_buttons: menu_buttons.clone(),
             context_menu,
@@ -223,6 +228,13 @@ impl View {
     /// Before the window goes: the context menu was parented by hand.
     pub fn dispose(&self) {
         self.context_menu.unparent();
+    }
+
+    /// The image's position in the folder ("3 of 120"), after its
+    /// resolution; none with nothing selected.
+    pub fn set_position(&self, position: Option<&str>) {
+        self.position.set_visible(position.is_some());
+        self.position.set_label(position.unwrap_or(""));
     }
 
     /// What the grid button does (leaving the view).
