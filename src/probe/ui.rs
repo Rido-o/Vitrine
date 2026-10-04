@@ -219,6 +219,78 @@ pub fn run(window: &gtk::ApplicationWindow) {
                 enabled("rotate-left")
             );
             menu_shot(&window, true, "ui-view-menu").await;
+            // The view's context menu: a right click on the image (its
+            // gesture's handler), then the Menu key.
+            let image = find::<crate::view::zoomable::ZoomableImage>(&root);
+            let menu = image
+                .as_ref()
+                .and_then(|image| find::<gtk::PopoverMenu>(image.upcast_ref()));
+            if let (Some(image), Some(menu)) = (image, menu) {
+                let controllers = image.observe_controllers();
+                let click = (0..controllers.n_items())
+                    .filter_map(|i| controllers.item(i).and_downcast::<gtk::GestureClick>())
+                    .find(|click| click.button() == gdk::BUTTON_SECONDARY);
+                if let Some(click) = click {
+                    click.emit_by_name::<()>("pressed", &[&1i32, &300f64, &200f64]);
+                }
+                sleep(300).await;
+                let labels: Vec<String> = find_all::<gtk::Label>(menu.upcast_ref())
+                    .iter()
+                    .map(|label| label.label().to_string())
+                    .collect();
+                println!(
+                    "RESULT ui view_context_menu open={} at={:?} items={labels:?}",
+                    menu.is_visible(),
+                    menu.pointing_to().1,
+                );
+                shot(&window, "ui-view-context-menu");
+                menu.popdown();
+                sleep(200).await;
+                press(&window, gdk::Key::Menu);
+                sleep(300).await;
+                println!(
+                    "RESULT ui view_context_menu_key open={} at={:?}",
+                    menu.is_visible(),
+                    menu.pointing_to().1,
+                );
+                menu.popdown();
+                sleep(200).await;
+                // Its Properties item opens the i button's popover.
+                press(&window, gdk::Key::Menu);
+                sleep(300).await;
+                let item = find_all::<gtk::Label>(menu.upcast_ref())
+                    .into_iter()
+                    .find(|label| label.label() == "Properties")
+                    .and_then(|label| {
+                        let mut widget = label.parent();
+                        while let Some(parent) = &widget {
+                            if parent.css_name() == "modelbutton" {
+                                break;
+                            }
+                            widget = parent.parent();
+                        }
+                        widget
+                    });
+                if let Some(item) = item {
+                    item.emit_by_name::<()>("clicked", &[]);
+                }
+                sleep(400).await;
+                let properties = find_all::<gtk::MenuButton>(&root)
+                    .into_iter()
+                    .find(|button| button.is_active());
+                println!(
+                    "RESULT ui view_context_menu_properties menu_open={} properties_open={} focus_on_image={}",
+                    menu.is_visible(),
+                    properties.is_some(),
+                    gtk::prelude::RootExt::focus(&window).is_some_and(|focus| focus == image),
+                );
+                if let Some(properties) = properties {
+                    properties.set_active(false);
+                }
+                sleep(200).await;
+            } else {
+                println!("RESULT ui view_context_menu missing");
+            }
             // Colour assessment: b, the image decoded for the area inside the
             // border, the menu's check; b again.
             let assessment = |what: &str| {

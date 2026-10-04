@@ -1,7 +1,7 @@
 //! The full-screen view's page: the image, with the controls over it
 //! (fullscreen, back to the grid and close at the top right, the file's name
 //! and resolution at the bottom) that fade out with the cursor in fullscreen;
-//! the fullscreen toggle, and the view's own keys.
+//! the image's context menu, the fullscreen toggle, and the view's own keys.
 
 mod autohide;
 pub mod preview;
@@ -9,7 +9,7 @@ pub mod zoomable;
 
 use self::{autohide::AutoHide, preview::Preview};
 use crate::icon;
-use gtk::{gdk, prelude::*};
+use gtk::{gdk, gio, prelude::*};
 use std::{
     cell::{Cell, RefCell},
     path::{Path, PathBuf},
@@ -28,6 +28,8 @@ pub struct View {
     grid_button: gtk::Button,
     controls: gtk::Box,
     menu_buttons: Rc<RefCell<Vec<gtk::MenuButton>>>,
+    // The image's context menu.
+    context_menu: gtk::PopoverMenu,
     // The view went fullscreen (f or the button), so leaving it restores the
     // window.
     fullscreened_by_view: Cell<bool>,
@@ -106,8 +108,20 @@ impl View {
             move |hidden| image.set_cursor_hidden(hidden),
         );
         let menu_buttons: Rc<RefCell<Vec<gtk::MenuButton>>> = Rc::default();
-        let open = menu_buttons.clone();
-        autohide.set_busy(move || open.borrow().iter().any(|button| button.is_active()));
+        let context_menu = gtk::PopoverMenu::builder()
+            .has_arrow(false)
+            .halign(gtk::Align::Start)
+            .build();
+        // On the image, which can take the focus: when the menu closes, the
+        // window gives the focus to its nearest ancestor that takes it. With
+        // none it searches the window instead, and GTK warns
+        // (gtk_widget_is_ancestor) when that search meets the properties
+        // popover the menu has just opened.
+        context_menu.set_parent(&preview.image);
+        let (open, context) = (menu_buttons.clone(), context_menu.clone());
+        autohide.set_busy(move || {
+            context.is_visible() || open.borrow().iter().any(|button| button.is_active())
+        });
         autohide.add(&controls);
         autohide.add(&info);
         autohide.watch(&page);
@@ -140,6 +154,7 @@ impl View {
             grid_button,
             controls,
             menu_buttons: menu_buttons.clone(),
+            context_menu,
             fullscreened_by_view: Cell::new(false),
             autohide,
         });
@@ -149,6 +164,18 @@ impl View {
                 view.toggle_fullscreen();
             }
         });
+        // A right click on the image opens its context menu, at the pointer.
+        let click = gtk::GestureClick::builder()
+            .button(gdk::BUTTON_SECONDARY)
+            .build();
+        let weak = Rc::downgrade(&view);
+        click.connect_pressed(move |click, _, x, y| {
+            if let Some(view) = weak.upgrade() {
+                click.set_state(gtk::EventSequenceState::Claimed);
+                view.show_context_menu(Some((x, y)));
+            }
+        });
+        preview.image.add_controller(click);
         let weak = Rc::downgrade(&view);
         window.connect_fullscreened_notify(move |_| {
             if let Some(view) = weak.upgrade() {
@@ -171,6 +198,31 @@ impl View {
     pub fn add_menu_button(&self, button: &gtk::MenuButton) {
         self.controls.prepend(button);
         self.menu_buttons.borrow_mut().push(button.clone());
+    }
+
+    /// The image's context menu (a right click, or the Menu key).
+    pub fn set_context_menu(&self, model: &gio::Menu) {
+        self.context_menu.set_menu_model(Some(model));
+    }
+
+    /// Opens the context menu at a point of the image's widget, or in its
+    /// middle; the controls come back, for the menu's Properties (the i
+    /// button's popover).
+    pub fn show_context_menu(&self, at: Option<(f64, f64)>) {
+        let image = &self.preview.image;
+        if !image.has_image() {
+            return;
+        }
+        let (x, y) = at.unwrap_or((image.width() as f64 / 2.0, image.height() as f64 / 2.0));
+        self.context_menu
+            .set_pointing_to(Some(&gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
+        self.context_menu.popup();
+        self.autohide.show();
+    }
+
+    /// Before the window goes: the context menu was parented by hand.
+    pub fn dispose(&self) {
+        self.context_menu.unparent();
     }
 
     /// What the grid button does (leaving the view).

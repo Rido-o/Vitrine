@@ -201,6 +201,7 @@ impl Window {
             if let Some(this) = keep.take() {
                 this.toolbar.history_panel.unparent();
                 this.context_menu.unparent();
+                this.view.dispose();
                 this.folder.dispose();
             }
         });

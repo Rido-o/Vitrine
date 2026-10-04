@@ -120,6 +120,8 @@ mod imp {
             obj.set_overflow(gtk::Overflow::Hidden);
             obj.set_hexpand(true);
             obj.set_vexpand(true);
+            // Takes the focus back from its context menu (`View`).
+            obj.set_focusable(true);
             let mut state = self.state.borrow_mut();
             state.fitted = true;
             state.scale = 1.0;
@@ -212,6 +214,15 @@ mod imp {
 
         fn size_allocate(&self, width: i32, height: i32, baseline: i32) {
             self.parent_size_allocate(width, height, baseline);
+            // A popover parented here (the view's context menu) is placed by
+            // its parent's allocation.
+            let mut child = self.obj().first_child();
+            while let Some(widget) = child {
+                if let Some(popover) = widget.downcast_ref::<gtk::Popover>() {
+                    popover.present();
+                }
+                child = widget.next_sibling();
+            }
             self.obj().relayout();
         }
 

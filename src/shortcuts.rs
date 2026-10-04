@@ -13,6 +13,7 @@ const SECTIONS: [(&str, &[Row]); 3] = [
             (&["i"], "Image properties"),
             (&["Ctrl+C"], "Copy image"),
             (&["Ctrl+Shift+C"], "Copy path"),
+            (&["Menu", "Shift+F10", "right-click"], "Image menu"),
             (&["w"], "Set as wallpaper"),
             (&["r"], "Rescan folder"),
             (&["Delete"], "Move to trash"),
@@ -23,13 +24,10 @@ const SECTIONS: [(&str, &[Row]); 3] = [
     ),
     (
         "Grid",
-        &[
-            (
-                &["Enter", "e", "double-click"],
-                "Open in the full-screen view",
-            ),
-            (&["Menu", "Shift+F10", "right-click"], "Image menu"),
-        ],
+        &[(
+            &["Enter", "e", "double-click"],
+            "Open in the full-screen view",
+        )],
     ),
     (
         "Full-screen view",

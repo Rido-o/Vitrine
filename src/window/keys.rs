@@ -105,16 +105,18 @@ impl Window {
             crate::shortcuts::show(&self.window, self.wallpaper_argv.is_some());
             return true;
         }
+        if key == gdk::Key::Menu
+            || key == gdk::Key::F10 && state.contains(gdk::ModifierType::SHIFT_MASK)
+        {
+            if !self.in_grid() {
+                self.view.show_context_menu(None);
+            } else if self.selection.selected_item().is_some() {
+                self.show_context_menu_at_selected();
+            }
+            return true;
+        }
         let selected = self.selection.selected() as i64;
         if self.in_grid() {
-            if key == gdk::Key::Menu
-                || key == gdk::Key::F10 && state.contains(gdk::ModifierType::SHIFT_MASK)
-            {
-                if self.selection.selected_item().is_some() {
-                    self.show_context_menu_at_selected();
-                }
-                return true;
-            }
             if key != gdk::Key::e || self.selection.selected_item().is_none() {
                 return false;
             }

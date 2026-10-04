@@ -1,5 +1,6 @@
-//! The ⋯ menu (in the toolbar and in the view), a thumbnail's context menu,
-//! their actions, and the i buttons' properties popovers.
+//! The ⋯ menu (in the toolbar and in the view), the context menus (a
+//! thumbnail's, and the view's image's), their actions, and the i buttons'
+//! properties popovers.
 
 use super::Window;
 use crate::{
@@ -104,6 +105,18 @@ impl Window {
             &["show-in-file-manager", "properties"],
             &["delete"],
         ])));
+        self.view.set_context_menu(&menu.menu(&[
+            &["copy-image", "copy-path", "set-wallpaper"],
+            &[
+                "rotate-left",
+                "rotate-right",
+                "flip-horizontally",
+                "flip-vertically",
+                "color-assessment",
+            ],
+            &["show-in-file-manager", "properties"],
+            &["delete"],
+        ]));
         self.connect_context_menu();
         let toolbar_end = &self.toolbar.end;
         let button = actions::more_button(&model, 16);
