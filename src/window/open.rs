@@ -1,8 +1,8 @@
-//! The open button's choosers (a folder, or an image) and what a chosen
-//! path opens, in the grid and in the full-screen view.
+//! The open button's choosers (a folder, or an image), drops on the window,
+//! and what a chosen or dropped path opens, in the grid and in the full-screen view.
 
 use super::Window;
-use gtk::{gio, glib, prelude::*};
+use gtk::{gdk, gio, glib, prelude::*};
 use std::{
     path::{Path, PathBuf},
     rc::Rc,
@@ -59,6 +59,36 @@ impl Window {
                 self.toast.show("Could not open the chooser", false);
             }
         }
+    }
+
+    // A folder or an image dropped on the window (the first, of several)
+    // opens as a chosen one does.
+    pub(super) fn connect_drop(self: &Rc<Self>) {
+        // A move is accepted too, though copy is asked for (nothing is moved):
+        // where the compositor names the source's preferred action before
+        // this side's (Hyprland, a move from Thunar), GTK takes that for the
+        // only one on offer, and a copy-only target refuses the drop.
+        let drop = gtk::DropTarget::new(
+            gdk::FileList::static_type(),
+            gdk::DragAction::COPY | gdk::DragAction::MOVE,
+        );
+        drop.connect_enter(|_, _, _| gdk::DragAction::COPY);
+        drop.connect_motion(|_, _, _| gdk::DragAction::COPY);
+        let weak = Rc::downgrade(self);
+        drop.connect_drop(move |_, value, _, _| {
+            let path = value
+                .get::<gdk::FileList>()
+                .ok()
+                .and_then(|list| list.files().first().and_then(|file| file.path()));
+            match (weak.upgrade(), path) {
+                (Some(this), Some(path)) => {
+                    this.open_chosen(&path);
+                    true
+                }
+                _ => false,
+            }
+        });
+        self.window.add_controller(drop);
     }
 
     // A folder opens with its first image selected, an image opens its

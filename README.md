@@ -26,8 +26,9 @@ command of your choice.
   the ⋯ menu) for those.
 - **Top bar**: an open button, with a menu of Open folder… (Ctrl+O) and Open
   image… (Ctrl+Shift+O), each a chooser (a chooser picks folders or files,
-  not either); an image opens its folder with the image selected. Next to it,
-  a folder entry to type a path in (`~` works); a sort pill with Name (full path), Date modified, Size and Random
+  not either); an image opens its folder with the image selected, and so does
+  a folder or an image dropped on the window. Next to it, a folder entry to
+  type a path in (Ctrl+L, `~` works; a path that isn't a folder says so); a sort pill with Name (full path), Date modified, Size and Random
   (click again to reshuffle), and ↑/↓ to flip the direction (Date and Size
   start descending); a Subfolders toggle; and, on the right, image properties
   (i), more actions (⋯) and close.
@@ -119,8 +120,9 @@ Keys (grid unless noted):
 | Ctrl+Z | Undo the last delete; repeat to go further back (grid and view) |
 | Ctrl+W, Ctrl+Q | Close the window (grid and view) |
 | Esc, `q` (view) | Back to the grid |
-| Ctrl+O, Ctrl+Shift+O | Open a folder, or an image, in a chooser (grid and view) |
-| Esc (folder entry) | Put the entry back |
+| Ctrl+O, Ctrl+Shift+O | Open a folder, or an image, in a chooser (grid and view, and from the folder entry) |
+| drop a folder or an image on the window | Open it, as from a chooser (grid and view) |
+| Ctrl+L | To the folder entry; Enter opens the path, Esc puts the entry back |
 | ←/→ (view) | Previous/next image; held, at most 15 a second |
 | click the left/right sixth (view, at fit) | Previous/next image; the cursor shows an arrow there |
 | scroll, drag (view) | Zoom around the cursor, pan when zoomed in |
@@ -384,6 +386,11 @@ Things that broke and look like harmless cleanups:
   do it elsewhere: the frame that first shows a 4K image still spends ~55 ms
   uploading it. Hence screen-size textures, and tiles uploaded at most 3 per
   frame.
+- **The drop target accepts a move as well as a copy** (and asks for copy;
+  nothing is moved). Hyprland names the source's preferred action, a move
+  from Thunar, before Vitrine has set its own; GTK then takes that for the
+  only action on offer, so a copy-only target refuses every drop (seen with
+  `WAYLAND_DEBUG=1`: `set_actions(0, 0)` for each motion, and no drop).
 
 ## Roadmap
 

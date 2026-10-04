@@ -166,6 +166,7 @@ impl Window {
         this.connect_info();
         this.connect_preview();
         this.connect_keys();
+        this.connect_drop();
         this.connect_trash(undo_receiver);
         this.build_menu();
         this.keep_first_while_loading();
@@ -240,7 +241,11 @@ impl Window {
 
     // A folder typed in the entry.
     fn open_directory(self: &Rc<Self>, input: &str, select: Option<PathBuf>) -> bool {
-        self.open_path(&expand_home(input), select)
+        let opened = self.open_path(&expand_home(input), select);
+        if !opened {
+            self.toast.show("No such folder", false);
+        }
+        opened
     }
 
     // Paths stay paths (not text) until here, so names that aren't UTF-8

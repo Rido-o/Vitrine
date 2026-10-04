@@ -561,9 +561,29 @@ pub fn run(window: &gtk::ApplicationWindow) {
         entry.set_text("/nonexistent");
         entry.emit_activate();
         println!(
-            "RESULT ui bad_folder error={}",
-            entry.has_css_class("error")
+            "RESULT ui bad_folder error={} toast={:?}",
+            entry.has_css_class("error"),
+            toast_text(&root)
         );
+        press(&window, gdk::Key::Escape);
+        press_with(&window, gdk::Key::l, gdk::ModifierType::CONTROL_MASK);
+        println!(
+            "RESULT ui ctrl_l entry_focused={}",
+            entry.has_focus() || entry.first_child().is_some_and(|text| text.has_focus())
+        );
+        press_with(&window, gdk::Key::o, gdk::ModifierType::CONTROL_MASK);
+        sleep(500).await;
+        let choosers: Vec<gtk::Window> = gtk::Window::list_toplevels()
+            .iter()
+            .filter_map(|w| w.downcast_ref::<gtk::Window>())
+            .filter(|w| w.is_visible() && w.transient_for().is_some_and(|parent| parent == window))
+            .cloned()
+            .collect();
+        println!("RESULT ui ctrl_o_from_entry choosers={}", choosers.len());
+        for chooser in &choosers {
+            chooser.close();
+        }
+        sleep(300).await;
         entry.grab_focus();
         press(&window, gdk::Key::Escape);
         println!(

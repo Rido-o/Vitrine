@@ -51,6 +51,15 @@ impl Window {
     fn key(self: &Rc<Self>, key: gdk::Key, state: gdk::ModifierType) -> bool {
         // Letters match in either case (Shift, Caps Lock).
         let key = key.to_lower();
+        // Also from the folder entry.
+        if state.contains(gdk::ModifierType::CONTROL_MASK) && key == gdk::Key::o {
+            if state.contains(gdk::ModifierType::SHIFT_MASK) {
+                self.choose_image();
+            } else {
+                self.choose_folder();
+            }
+            return true;
+        }
         if self.editing_directory() {
             if key != gdk::Key::Escape {
                 return false;
@@ -59,12 +68,8 @@ impl Window {
             self.grid.grab_focus();
             return true;
         }
-        if state.contains(gdk::ModifierType::CONTROL_MASK) && key == gdk::Key::o {
-            if state.contains(gdk::ModifierType::SHIFT_MASK) {
-                self.choose_image();
-            } else {
-                self.choose_folder();
-            }
+        if state.contains(gdk::ModifierType::CONTROL_MASK) && key == gdk::Key::l && self.in_grid() {
+            self.toolbar.entry.grab_focus();
             return true;
         }
         if state.contains(gdk::ModifierType::CONTROL_MASK) && key == gdk::Key::z {
