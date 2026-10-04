@@ -112,7 +112,7 @@ impl Actions {
 /// An open button: `model` has the folder and image choosers.
 pub fn open_button(model: &gio::Menu, pixel_size: i32) -> gtk::MenuButton {
     let button = gtk::MenuButton::builder()
-        .tooltip_text("Open a folder or an image")
+        .tooltip_text("Open a folder (Ctrl+O) or an image (Ctrl+Shift+O)")
         .menu_model(model)
         .build();
     button.set_child(Some(&crate::icon("folder-awesome-symbolic", pixel_size)));

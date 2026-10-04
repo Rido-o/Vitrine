@@ -26,6 +26,16 @@ window {
   }
 }
 
+.viewer-drop-hint {
+  background-color: translucent(var(--accent), 14%);
+  opacity: 0;
+  transition: opacity 150ms t.$ease;
+
+  window:drop(active) & {
+    opacity: 1;
+  }
+}
+
 tooltip {
   border: 1px solid var(--border-solid);
   border-radius: 8px;
@@ -221,6 +231,12 @@ tooltip {
       border-radius: 8px;
       background-color: var(--bg-surface);
 
+      separator {
+        min-width: 1px;
+        margin: 5px 3px;
+        background-color: var(--border);
+      }
+
       button {
         @include pill-button;
       }
@@ -243,6 +259,10 @@ tooltip {
     button {
       @include chip;
       transition: t.$transition;
+
+      &:disabled {
+        opacity: 0.4;
+      }
 
       &:hover {
         background-color: var(--bg-raised);

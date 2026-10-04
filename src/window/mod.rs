@@ -115,6 +115,14 @@ impl Window {
         let toast = Toast::new();
         let overlay = gtk::Overlay::builder().child(&stack).build();
         overlay.add_overlay(&toast.widget);
+        // A tint over everything while a folder or an image is dragged over
+        // the window (style.scss).
+        overlay.add_overlay(
+            &gtk::Box::builder()
+                .css_classes(["viewer-drop-hint"])
+                .can_target(false)
+                .build(),
+        );
         let window = gtk::ApplicationWindow::builder()
             .application(app)
             .title(APP_TITLE)

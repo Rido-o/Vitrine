@@ -133,7 +133,7 @@ impl Window {
         let button = actions::open_button(&open, 16);
         button.add_css_class("viewer-toolbar-menu");
         self.toolbar.root.prepend(&button);
-        self.view.add_menu_button(&actions::open_button(&open, 20));
+        self.view.add_open_button(&actions::open_button(&open, 20));
         self.stack.connect_visible_child_name_notify(move |stack| {
             menu.set_in_view(stack.visible_child_name().as_deref() != Some("grid"));
         });

@@ -600,7 +600,10 @@ pub fn run(window: &gtk::ApplicationWindow) {
         // where a portal shows it), which a probe can only close.
         let open: Vec<gtk::MenuButton> = find_all::<gtk::MenuButton>(&root)
             .into_iter()
-            .filter(|b| b.tooltip_text().as_deref() == Some("Open a folder or an image"))
+            .filter(|b| {
+                b.tooltip_text()
+                    .is_some_and(|tip| tip.starts_with("Open a folder"))
+            })
             .collect();
         println!("RESULT ui open_buttons found={}", open.len());
         if let Some(button) = open.iter().find(|b| b.is_mapped()) {

@@ -36,8 +36,9 @@ impl Toolbar {
     pub fn new(subfolders: bool) -> Self {
         let entry = gtk::Entry::builder()
             .css_classes(["viewer-directory"])
-            .tooltip_text("Folder (Enter to open)")
+            .tooltip_text("Folder (Ctrl+L; Enter opens it)")
             .width_chars(36)
+            .hexpand(true)
             .build();
 
         let sorts = gtk::Box::builder()
@@ -55,6 +56,8 @@ impl Toolbar {
                 (key, button)
             })
             .collect();
+        // The direction isn't one more key.
+        sorts.append(&gtk::Separator::new(gtk::Orientation::Vertical));
         let direction = gtk::Button::with_label("↑");
         sorts.append(&direction);
 
@@ -71,11 +74,7 @@ impl Toolbar {
             .tooltip_text("Close (Ctrl+W)")
             .child(&icon("xmark-awesome-symbolic", 16))
             .build();
-        let end = gtk::Box::builder()
-            .hexpand(true)
-            .halign(gtk::Align::End)
-            .spacing(8)
-            .build();
+        let end = gtk::Box::builder().spacing(8).build();
         end.append(&close);
 
         let root = gtk::Box::builder()
@@ -168,6 +167,8 @@ impl Window {
     pub(super) fn reset_entry(&self) {
         let entry = &self.toolbar.entry;
         entry.set_text(&self.folder.directory().to_string_lossy());
+        // A path longer than the entry shows its end, the folder's name.
+        entry.set_position(-1);
         entry.remove_css_class("error");
     }
 

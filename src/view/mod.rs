@@ -1,7 +1,8 @@
 //! The full-screen view's page: the image, with the controls over it
-//! (fullscreen, back to the grid and close at the top right, the file's name,
-//! resolution and position in the folder at the bottom) that fade out with
-//! the cursor in fullscreen;
+//! (open at the top left; properties, the ⋯ menu and close at the top right;
+//! the file's name, resolution and position in the folder at the bottom,
+//! between fullscreen and back to the grid) that fade out with the cursor in
+//! fullscreen;
 //! the image's context menu, the fullscreen toggle, and the view's own keys.
 
 mod autohide;
@@ -29,6 +30,7 @@ pub struct View {
     grid_button: gtk::Button,
     position: gtk::Label,
     controls: gtk::Box,
+    open_slot: gtk::Box,
     menu_buttons: Rc<RefCell<Vec<gtk::MenuButton>>>,
     // The image's context menu.
     context_menu: gtk::PopoverMenu,
@@ -60,6 +62,8 @@ impl View {
             .tooltip_text("Close (Ctrl+W)")
             .child(&icon("xmark-awesome-symbolic", 20))
             .build();
+        // Top right: the image's i and ⋯ (`add_menu_button`), then close,
+        // apart from them.
         let controls = gtk::Box::builder()
             .css_classes(["preview-controls"])
             .halign(gtk::Align::End)
@@ -68,9 +72,17 @@ impl View {
             .margin_end(16)
             .spacing(8)
             .build();
-        controls.append(&fullscreen_button);
-        controls.append(&grid_button);
+        close_button.set_margin_start(12);
         controls.append(&close_button);
+        // Top left, as in the grid's toolbar: the open button.
+        let open_slot = gtk::Box::builder()
+            .css_classes(["preview-controls"])
+            .halign(gtk::Align::Start)
+            .valign(gtk::Align::Start)
+            .margin_top(16)
+            .margin_start(16)
+            .build();
+        page.add_overlay(&open_slot);
         let window_ = window.clone();
         close_button.connect_clicked(move |_| window_.close());
         page.add_overlay(&controls);
@@ -88,16 +100,24 @@ impl View {
         let resolution = gtk::Label::builder().label("0 × 0").build();
         let position = gtk::Label::builder().visible(false).build();
         let info = gtk::Box::builder()
-            .css_classes(["preview-image-info", "preview-controls"])
-            .halign(gtk::Align::Center)
-            .valign(gtk::Align::End)
-            .margin_bottom(24)
+            .css_classes(["preview-image-info"])
             .spacing(8)
             .build();
         info.append(&filename_button);
         info.append(&resolution);
         info.append(&position);
-        page.add_overlay(&info);
+        // At the bottom: fullscreen, the info, back to the grid.
+        let bottom = gtk::Box::builder()
+            .css_classes(["preview-controls"])
+            .halign(gtk::Align::Center)
+            .valign(gtk::Align::End)
+            .margin_bottom(24)
+            .spacing(8)
+            .build();
+        bottom.append(&fullscreen_button);
+        bottom.append(&info);
+        bottom.append(&grid_button);
+        page.add_overlay(&bottom);
 
         let (window_, stack_) = (window.clone(), stack.clone());
         let (image, image_) = (preview.image.clone(), preview.image.clone());
@@ -127,7 +147,8 @@ impl View {
             context.is_visible() || open.borrow().iter().any(|button| button.is_active())
         });
         autohide.add(&controls);
-        autohide.add(&info);
+        autohide.add(&open_slot);
+        autohide.add(&bottom);
         autohide.watch(&page);
 
         let shown: Rc<RefCell<Option<PathBuf>>> = Rc::default();
@@ -158,6 +179,7 @@ impl View {
             grid_button,
             position,
             controls,
+            open_slot,
             menu_buttons: menu_buttons.clone(),
             context_menu,
             fullscreened_by_view: Cell::new(false),
@@ -202,6 +224,13 @@ impl View {
     /// while any of these is open.
     pub fn add_menu_button(&self, button: &gtk::MenuButton) {
         self.controls.prepend(button);
+        self.menu_buttons.borrow_mut().push(button.clone());
+    }
+
+    /// The open button, alone at the top left; the controls stay while its
+    /// menu is open too.
+    pub fn add_open_button(&self, button: &gtk::MenuButton) {
+        self.open_slot.append(button);
         self.menu_buttons.borrow_mut().push(button.clone());
     }
 

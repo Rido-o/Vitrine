@@ -29,8 +29,8 @@ impl InfoBar {
             .child(&filename)
             .build();
         let resolution = gtk::Label::builder()
-            .label("0 × 0")
             .css_classes(["viewer-chip"])
+            .visible(false)
             .build();
         let file_size = gtk::Label::builder()
             .css_classes(["viewer-chip"])
@@ -123,10 +123,12 @@ impl Window {
         let info = &self.info;
         info.filename
             .set_label(name.as_deref().unwrap_or("No image selected"));
-        info.resolution.set_label(&match &path {
-            Some(path) => self.resolution_of(path),
-            None => "0 × 0".into(),
-        });
+        // With nothing selected, only the name's place says so.
+        info.resolution.set_visible(path.is_some());
+        if let Some(path) = &path {
+            info.resolution.set_label(&self.resolution_of(path));
+        }
+        info.view_button.set_sensitive(path.is_some());
         let size = self
             .selection
             .selected_item()

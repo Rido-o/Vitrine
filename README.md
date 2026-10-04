@@ -27,25 +27,29 @@ command of your choice.
 - **Top bar**: an open button, with a menu of Open folder… (Ctrl+O) and Open
   image… (Ctrl+Shift+O), each a chooser (a chooser picks folders or files,
   not either); an image opens its folder with the image selected, and so does
-  a folder or an image dropped on the window (outlined while one is dragged
-  over it). Next to it, a folder entry to
-  type a path in (Ctrl+L, `~` works; a path that isn't a folder says so); a sort pill with Name (full path), Date modified, Size and Random
+  a folder or an image dropped on the window (outlined and tinted while one
+  is dragged over it). Next to it, a folder entry to
+  type a path in (Ctrl+L, `~` works; a path that isn't a folder says so),
+  filling the bar, and showing the end of a path too long for it; a sort pill with Name (full path), Date modified, Size and Random
   (click again to reshuffle), and ↑/↓ to flip the direction (Date and Size
   start descending); a Subfolders toggle; and, on the right, image properties
   (i), more actions (⋯) and close.
 - **Info bar**: the filename (click to show it in your file manager over
   `org.freedesktop.FileManager1`), its resolution (as shown, after EXIF
   rotation), its file size, its position in the folder ("12 of 340", as
-  sorted; in the full-screen view too) and View.
+  sorted; in the full-screen view too) and View; with nothing selected, only "No
+  image selected".
 - **Full-screen view**: scroll to zoom around the cursor (from fit up to 8×
   actual pixels), drag to pan, click the left/right edge (a sixth of the width)
   for the previous/next image, double-click (the middle) to toggle fit/100%,
   `s` for sharp (nearest-neighbour) pixels, `[`/`]` to rotate and `h`/`v` to
   flip (also in the ⋯ menu; only the view changes, never the file, and it
   resets for the next image), and a button (or `f`) to make the window
-  fullscreen; leaving the view restores it. Next to it are a button back to
-  the grid (or Esc) and one that closes the window. The open button is here
-  too: a folder chosen from the view shows its first image, an image is shown
+  fullscreen; leaving the view restores it. That button and one back to
+  the grid (or Esc) sit either side of the file's name, resolution and
+  position at the bottom; image properties, the ⋯ menu and, apart from them,
+  close are at the top right. The open button is at the top left, as in the
+  grid: a folder chosen from the view shows its first image, an image is shown
   itself (and an empty folder goes back to the grid). When fullscreen, the buttons, info
   and cursor fade out after 2 s without mouse movement (not while the pointer
   is on them or a menu is open). An image is decoded at the view's size in
