@@ -387,6 +387,9 @@ Things that broke and look like harmless cleanups:
   as the files it trashes**, or it trashes into your real trash, or that
   filesystem's own (e.g. `/tmp/.Trash-<uid>`); the UI check only trashes with
   `VITRINE_PROBE_TRASH=1` (see `bench/README.md`).
+- **Find EXIF by seeking, not with kamadak-exif's own search**
+  (`decode/metadata.rs`). Its search reads through the image data, the whole
+  file when there is no EXIF, which most wallpapers lack.
 - **No transition between the grid and the full-screen view.** A 150 ms
   crossfade rendered cleanly but still looked laggy, so the switch is instant.
 - **GTK uploads textures on the main thread when first drawn**, with no API to

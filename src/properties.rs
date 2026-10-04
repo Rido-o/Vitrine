@@ -206,9 +206,7 @@ fn orientation_name(orientation: u32) -> Option<&'static str> {
 
 fn read_exif(path: &Path) -> Option<Exif> {
     let file = File::open(path).ok()?;
-    exif::Reader::new()
-        .read_from_container(&mut BufReader::new(file))
-        .ok()
+    decode::exif_in(&mut BufReader::new(file))
 }
 
 /// Width × height as shown: the header's, turned by the orientation decoding

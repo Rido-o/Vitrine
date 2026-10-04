@@ -30,8 +30,8 @@ arguments before the folder, which can also be a file.
 of the benchmark: sorting, subfolders, a thumbnail's menu, the ⋯ menu, the view's image menu,
 copying, the shortcuts window, the wallpaper command (with `VITRINE_WALLPAPER_COMMAND`), the folder
 entry, the open menu and its choosers (what a chosen path opens goes through
-the probe's own `win.open-path` action, as a chooser can't be driven), properties (and EXIF orientation outside JPEG, with
-`props/rotated.png` and `props/rotated.webp`) and the empty state on a small
+the probe's own `win.open-path` action, as a chooser can't be driven), properties (and EXIF orientation, with
+`props/rotated.jpg`, `rotated.png`, `late.png` (EXIF after the image data), `rotated.webp`, and `noexif.jpg` and `noexif.webp` without) and the empty state on a small
 folder (rescan and watching too, changing files, only if DIR holds a
 `.vitrine-probe-scratch` file), printed as `ui` lines, with screenshots under
 `VITRINE_PROBE_SHOTS`. Its trash and undo checks trash files for real, so they

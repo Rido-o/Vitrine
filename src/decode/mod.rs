@@ -6,6 +6,9 @@
 //! (`color.rs`).
 
 mod color;
+mod metadata;
+
+pub use metadata::exif_in;
 
 use gtk::{gdk, gdk_pixbuf::Pixbuf, glib};
 use std::{
@@ -178,9 +181,7 @@ pub fn orientation_of(exif: &exif::Exif) -> u32 {
 }
 
 fn orientation_in(container: &mut (impl std::io::BufRead + std::io::Seek)) -> u32 {
-    exif::Reader::new()
-        .read_from_container(container)
-        .map_or(1, |exif| orientation_of(&exif))
+    exif_in(container).map_or(1, |exif| orientation_of(&exif))
 }
 
 /// Orientations 5–8 swap width and height.

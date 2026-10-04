@@ -785,9 +785,18 @@ pub fn run(window: &gtk::ApplicationWindow) {
                     sleep(300).await;
                 }
             }
-            // EXIF orientation outside JPEG, when present: the info bar's
-            // size and the view's texture should both be turned.
-            for name in ["rotated.png", "rotated.webp"] {
+            // EXIF orientation in each format it is searched for, when
+            // present: the info bar's size and the view's texture should
+            // both be turned (late.png has its EXIF after the image data),
+            // and neither without EXIF.
+            for name in [
+                "rotated.jpg",
+                "rotated.png",
+                "late.png",
+                "rotated.webp",
+                "noexif.jpg",
+                "noexif.webp",
+            ] {
                 let Some(position) = (0..selection.n_items()).find(|&i| name_at(i) == name) else {
                     continue;
                 };

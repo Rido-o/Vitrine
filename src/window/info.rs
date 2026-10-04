@@ -171,6 +171,10 @@ impl Window {
         if let Some(size) = self.resolutions.borrow().get(path) {
             return format(*size);
         }
+        // One read each, however often the bar is synced meanwhile.
+        if !self.resolving.borrow_mut().insert(path.to_owned()) {
+            return "…".into();
+        }
         let (weak, path) = (Rc::downgrade(self), path.to_owned());
         glib::spawn_future_local(async move {
             let read = path.clone();
@@ -179,6 +183,7 @@ impl Window {
                 .ok()
                 .flatten();
             let Some(this) = weak.upgrade() else { return };
+            this.resolving.borrow_mut().remove(&path);
             this.resolutions.borrow_mut().insert(path.clone(), size);
             if this.selected_path().as_ref() == Some(&path) {
                 this.info.resolution.set_label(&format(size));

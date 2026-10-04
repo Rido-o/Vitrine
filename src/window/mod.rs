@@ -61,6 +61,8 @@ pub struct Window {
     modified: RefCell<HashSet<PathBuf>>,
     // Width × height from each file's header, read off the main thread.
     resolutions: RefCell<HashMap<PathBuf, Option<(i32, i32)>>>,
+    // Those being read.
+    resolving: RefCell<HashSet<PathBuf>>,
     // The i buttons: the grid's and the view's.
     grid_properties: gtk::MenuButton,
     view_properties: gtk::MenuButton,
@@ -163,6 +165,7 @@ impl Window {
             last_selected: RefCell::default(),
             modified: RefCell::default(),
             resolutions: RefCell::default(),
+            resolving: RefCell::default(),
             grid_properties,
             view_properties,
             wallpaper_argv: crate::desktop::wallpaper_command(),
