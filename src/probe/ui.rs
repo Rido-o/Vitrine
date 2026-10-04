@@ -591,6 +591,19 @@ pub fn run(window: &gtk::ApplicationWindow) {
             entry.text(),
             entry.has_css_class("error")
         );
+        // Typing after a bad path clears the error; leaving the entry puts
+        // the folder back.
+        entry.set_text("/nonexistent");
+        entry.emit_activate();
+        entry.grab_focus();
+        entry.set_text("/nonexisten");
+        println!(
+            "RESULT ui typing_clears_error error={}",
+            entry.has_css_class("error")
+        );
+        grid.grab_focus();
+        sleep(100).await;
+        println!("RESULT ui leaving_resets text={:?}", entry.text());
         entry.set_text(&format!("{}/sub", directory.display()));
         entry.emit_activate();
         sleep(800).await;
@@ -687,6 +700,17 @@ pub fn run(window: &gtk::ApplicationWindow) {
             shot(&window, "ui-drop-active");
             window.unset_state_flags(gtk::StateFlags::DROP_ACTIVE);
             println!("RESULT ui view_chose_folder shown={:?}", shown());
+            // The controls fade in a window too (not only in fullscreen).
+            sleep(2500).await;
+            let hidden = find_all::<gtk::Box>(&root)
+                .iter()
+                .filter(|b| b.has_css_class("preview-controls") && b.has_css_class("hidden"))
+                .count();
+            println!(
+                "RESULT ui view_idle fullscreen={} hidden_controls={hidden}",
+                window.is_fullscreen()
+            );
+            shot(&window, "ui-view-idle");
             choose(&third);
             sleep(1000).await;
             state("view_chose_image");

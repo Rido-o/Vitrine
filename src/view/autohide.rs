@@ -11,7 +11,7 @@ use std::{
 
 pub struct AutoHide {
     delay: Duration,
-    // Whether the controls hide at all (the full-screen view, fullscreen).
+    // Whether the controls hide at all (in the full-screen view).
     active: Box<dyn Fn() -> bool>,
     set_cursor_hidden: Box<dyn Fn(bool)>,
     // Whether something keeps the controls up (an open menu).

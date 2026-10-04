@@ -1,6 +1,6 @@
 //! The full-screen view's page: the image, with the controls over it
 //! (open at the top left; properties, the ⋯ menu and close at the top right;
-//! the file's name, resolution and position in the folder at the bottom,
+//! the file's name, resolution, size and position in the folder at the bottom,
 //! between fullscreen and back to the grid) that fade out with the cursor in
 //! fullscreen;
 //! the image's context menu, the fullscreen toggle, and the view's own keys.
@@ -28,6 +28,7 @@ pub struct View {
     fullscreen_button: gtk::Button,
     fullscreen_icon: gtk::Image,
     grid_button: gtk::Button,
+    file_size: gtk::Label,
     position: gtk::Label,
     controls: gtk::Box,
     open_slot: gtk::Box,
@@ -98,6 +99,7 @@ impl View {
             .child(&filename)
             .build();
         let resolution = gtk::Label::builder().label("0 × 0").build();
+        let file_size = gtk::Label::builder().visible(false).build();
         let position = gtk::Label::builder().visible(false).build();
         let info = gtk::Box::builder()
             .css_classes(["preview-image-info"])
@@ -105,6 +107,7 @@ impl View {
             .build();
         info.append(&filename_button);
         info.append(&resolution);
+        info.append(&file_size);
         info.append(&position);
         // At the bottom: fullscreen, the info, back to the grid.
         let bottom = gtk::Box::builder()
@@ -120,16 +123,15 @@ impl View {
         page.add_overlay(&bottom);
 
         let (window_, stack_) = (window.clone(), stack.clone());
-        let (image, image_) = (preview.image.clone(), preview.image.clone());
-        // In fullscreen, and in colour assessment (the controls would sit in
-        // its neutral surround).
+        let image = preview.image.clone();
+        // The controls, wherever the view is shown; the cursor only in
+        // fullscreen and in colour assessment, not over a window among others.
         let autohide = AutoHide::new(
             HIDE_CONTROLS_AFTER,
-            move || {
-                (window_.is_fullscreen() || image_.assessment())
-                    && stack_.visible_child_name().as_deref() == Some("preview")
+            move || stack_.visible_child_name().as_deref() == Some("preview"),
+            move |hidden| {
+                image.set_cursor_hidden(hidden && (window_.is_fullscreen() || image.assessment()))
             },
-            move |hidden| image.set_cursor_hidden(hidden),
         );
         let menu_buttons: Rc<RefCell<Vec<gtk::MenuButton>>> = Rc::default();
         let context_menu = gtk::PopoverMenu::builder()
@@ -177,6 +179,7 @@ impl View {
             fullscreen_button,
             fullscreen_icon,
             grid_button,
+            file_size,
             position,
             controls,
             open_slot,
@@ -259,11 +262,13 @@ impl View {
         self.context_menu.unparent();
     }
 
-    /// The image's position in the folder ("3 of 120"), after its
-    /// resolution; none with nothing selected.
-    pub fn set_position(&self, position: Option<&str>) {
-        self.position.set_visible(position.is_some());
-        self.position.set_label(position.unwrap_or(""));
+    /// The image's file size and position in the folder ("3 of 120"), after
+    /// its resolution; none with nothing selected.
+    pub fn set_details(&self, file_size: Option<&str>, position: Option<&str>) {
+        for (label, text) in [(&self.file_size, file_size), (&self.position, position)] {
+            label.set_visible(text.is_some());
+            label.set_label(text.unwrap_or(""));
+        }
     }
 
     /// What the grid button does (leaving the view).

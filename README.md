@@ -29,7 +29,8 @@ command of your choice.
   not either); an image opens its folder with the image selected, and so does
   a folder or an image dropped on the window (outlined and tinted while one
   is dragged over it). Next to it, a folder entry to
-  type a path in (Ctrl+L, `~` works; a path that isn't a folder says so),
+  type a path in (Ctrl+L, `~` works; a path that isn't a folder says so;
+  leaving the entry puts the folder shown back),
   filling the bar, and showing the end of a path too long for it; a sort pill with Name (full path), Date modified, Size and Random
   (click again to reshuffle), and ↑/↓ to flip the direction (Date and Size
   start descending); a Subfolders toggle; and, on the right, image properties
@@ -37,7 +38,7 @@ command of your choice.
 - **Info bar**: the filename (click to show it in your file manager over
   `org.freedesktop.FileManager1`), its resolution (as shown, after EXIF
   rotation), its file size, its position in the folder ("12 of 340", as
-  sorted; in the full-screen view too) and View; with nothing selected, only "No
+  sorted; both in the full-screen view too) and View; with nothing selected, only "No
   image selected".
 - **Full-screen view**: scroll to zoom around the cursor (from fit up to 8×
   actual pixels), drag to pan, click the left/right edge (a sixth of the width)
@@ -50,9 +51,9 @@ command of your choice.
   position at the bottom; image properties, the ⋯ menu and, apart from them,
   close are at the top right. The open button is at the top left, as in the
   grid: a folder chosen from the view shows its first image, an image is shown
-  itself (and an empty folder goes back to the grid). When fullscreen, the buttons, info
-  and cursor fade out after 2 s without mouse movement (not while the pointer
-  is on them or a menu is open). An image is decoded at the view's size in
+  itself (and an empty folder goes back to the grid). The buttons and info
+  fade out after 2 s without mouse movement (not while the pointer is on them
+  or a menu is open), and in fullscreen the cursor does too. An image is decoded at the view's size in
   device pixels and drawn at exactly those pixels at fit; zooming past it
   decodes the full resolution into tiles, of which only the visible ones are
   drawn. The two images on each side are decoded in the background, so ←/→
@@ -67,7 +68,7 @@ command of your choice.
   exposure and a white reference for contrast, instead of black. The border
   on each side is 20% of the view's shorter side, 40% of it white; the image
   is decoded for the area inside it, and when zoomed in it stays clipped
-  within the frame. The buttons and info fade out as in fullscreen. It stays
+  within the frame. The cursor fades out with the buttons and info, as in fullscreen. It stays
   on for the window until it's closed.
 - **Image properties** (the i button on either screen, or `i`): name, folder,
   size, type and dates; dimensions (as shown, after EXIF rotation), megapixels,

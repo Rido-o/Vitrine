@@ -133,10 +133,9 @@ impl Window {
             .selection
             .selected_item()
             .map(|object| image(&object).size);
+        let size = size.map(glib::format_size);
         info.file_size.set_visible(size.is_some());
-        if let Some(size) = size {
-            info.file_size.set_label(&glib::format_size(size));
-        }
+        info.file_size.set_label(size.as_deref().unwrap_or(""));
         // "3 of 120", here and in the view.
         let position = path.is_some().then(|| {
             format!(
@@ -147,7 +146,7 @@ impl Window {
         });
         info.position.set_visible(position.is_some());
         info.position.set_label(position.as_deref().unwrap_or(""));
-        self.view.set_position(position.as_deref());
+        self.view.set_details(size.as_deref(), position.as_deref());
         self.window.set_title(Some(&match &name {
             Some(name) => format!("{name} — {APP_TITLE}"),
             None => APP_TITLE.into(),

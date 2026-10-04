@@ -100,6 +100,23 @@ impl Toolbar {
 impl Window {
     pub(super) fn connect_toolbar(self: &Rc<Self>) {
         let toolbar = &self.toolbar;
+        // Typing again after a path that wasn't a folder.
+        toolbar
+            .entry
+            .connect_changed(|entry| entry.remove_css_class("error"));
+        // Leaving the entry (a click in the grid) puts the folder shown back.
+        // By the window's focus widget, which stays while another window has
+        // the focus, so what's typed survives a look elsewhere.
+        let weak = Rc::downgrade(self);
+        self.window.connect_focus_widget_notify(move |window| {
+            if let Some(this) = weak.upgrade()
+                && gtk::prelude::GtkWindowExt::focus(window).is_some()
+                && !this.editing_directory()
+                && *this.toolbar.entry.text() != *this.folder.directory().to_string_lossy()
+            {
+                this.reset_entry();
+            }
+        });
         let weak = Rc::downgrade(self);
         toolbar.entry.connect_activate(move |entry| {
             if let Some(this) = weak.upgrade() {
